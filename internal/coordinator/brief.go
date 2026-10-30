@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -30,7 +30,7 @@ import (
 const longestStep = 4000
 
 func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, f family, machines []machine, shared []sharedfiles.File,
-	state features.Reader, list []features.Feature) string {
+	state extensions.Reader, list []extensions.Extension) string {
 	hooks := hooksFor(list, coordinator, state)
 	var b strings.Builder
 	header(&b, coordinator, task)
@@ -60,7 +60,7 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 // task's kind, only the epic it is or is a story of: how to split it was
 // in its first brief.
 func resumedCoordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, seen int, from string, f family,
-	machines []machine, shared []sharedfiles.File, state features.Reader, list []features.Feature) string {
+	machines []machine, shared []sharedfiles.File, state extensions.Reader, list []extensions.Extension) string {
 	hooks := hooksFor(list, coordinator, state)
 	var b strings.Builder
 	trailHeading := goingOn(&b, coordinator, task, from)
@@ -90,7 +90,7 @@ func machinesSection(b *strings.Builder, task *tasks.Task, coordinator agents.Ag
 	}
 }
 
-func hookSections(b *strings.Builder, hooks []features.Feature, state features.Reader, task *tasks.Task) {
+func hookSections(b *strings.Builder, hooks []extensions.Extension, state extensions.Reader, task *tasks.Task) {
 	for _, more := range briefSections(hooks, state, task) {
 		section(b, more.Heading, more.Text)
 	}
@@ -98,7 +98,7 @@ func hookSections(b *strings.Builder, hooks []features.Feature, state features.R
 
 // yourDecision is what the coordinator's brief ends with: the actions Agentry
 // refused, what finishing waits on, and the decision to make.
-func yourDecision(b *strings.Builder, task *tasks.Task, roster agents.Roster, hooks []features.Feature) {
+func yourDecision(b *strings.Builder, task *tasks.Task, roster agents.Roster, hooks []extensions.Extension) {
 	if refused := refusedActions(task); refused != "" {
 		section(b, "Actions Agentry refused", refused)
 	}
@@ -462,7 +462,7 @@ func plan(b *strings.Builder, task *tasks.Task, agent, what string) {
 
 // basesOf are the bases of the templates in state; none without a state,
 // so built-in links still resolve.
-func basesOf(state features.Reader) agents.Bases {
+func basesOf(state extensions.Reader) agents.Bases {
 	if state == nil {
 		return agents.Bases{}
 	}

@@ -32,7 +32,7 @@ type Decision struct {
 	As           string   `json:"as,omitempty"`      // for fetch: the name to share it by; "" for its own
 	Repo         string   `json:"repo,omitempty"`    // for move: the repo the user named: a folder, a git address or an archive link
 
-	raw json.RawMessage // the decision as the coordinator wrote it, for the fields a feature reads (features.go)
+	raw json.RawMessage // the decision as the coordinator wrote it, for the fields an extension reads (extensions.go)
 }
 
 // Story is one story a split adds to the epic.

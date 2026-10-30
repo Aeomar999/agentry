@@ -127,7 +127,7 @@ const (
 const ProposalRejected Type = "proposal.rejected"
 
 // Streams that aren't tasks. Every other stream is one task's, named by its
-// ID, or one of a feature's, named by the prefix it registered.
+// ID, or one of an extension's, named by the prefix it registered.
 const (
 	AgentsStream      = "agents"      // every agent event
 	PolicyStream      = "policy"      // every policy event

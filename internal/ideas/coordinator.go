@@ -9,7 +9,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
@@ -24,12 +24,12 @@ import (
 
 // coordinatorHook is Ideas' part in the coordinator loop, for the
 // coordinators that suggest ideas.
-func coordinatorHook() *features.Coordinator {
-	return &features.Coordinator{For: suggestsIn, Brief: brief, Decision: IdeasFormat, Field: "ideas", Check: check, OnDone: onDone}
+func coordinatorHook() *extensions.Coordinator {
+	return &extensions.Coordinator{For: suggestsIn, Brief: brief, Decision: IdeasFormat, Field: "ideas", Check: check, OnDone: onDone}
 }
 
 // suggestsIn is Suggests with the bases of the templates in state.
-func suggestsIn(coordinator agents.Agent, state features.Reader) bool {
+func suggestsIn(coordinator agents.Agent, state extensions.Reader) bool {
 	return Suggests(coordinator, agents.BasesIn(state))
 }
 
@@ -69,7 +69,7 @@ func check(field json.RawMessage) error {
 }
 
 // onDone keeps the ideas of a done decision's "ideas" field (suggest).
-func onDone(c features.Core, task *tasks.Task, field json.RawMessage) string {
+func onDone(c extensions.Core, task *tasks.Task, field json.RawMessage) string {
 	var suggested []suggestion
 	if err := json.Unmarshal(field, &suggested); err != nil {
 		return "Agentry couldn't read these ideas: " + err.Error()
@@ -84,7 +84,7 @@ func onDone(c features.Core, task *tasks.Task, field json.RawMessage) string {
 // repeats one the repo doesn't have is kept as a new idea, as the rules
 // would refuse it and the done can't be redone. The ideas it keeps that the
 // Visionaries agreed on, Agentry may accept for you (acceptAgreed).
-func suggest(c features.Core, task *tasks.Task, suggested []suggestion) string {
+func suggest(c extensions.Core, task *tasks.Task, suggested []suggestion) string {
 	list := List(c.Read, task.Repo)
 	kept := map[string]bool{}
 	for _, idea := range list {
@@ -159,7 +159,7 @@ func autoAccepted(idea *Idea, roster agents.Roster, bases agents.Bases, rule str
 // the done goes on. The rule trusts backedBy and doubtedBy as the
 // Visionaries coordinator wrote them in its done; nothing checks them
 // against what each viewpoint said.
-func acceptAgreed(c features.Core, repo string, added []string) {
+func acceptAgreed(c extensions.Core, repo string, added []string) {
 	now := c.Read.Settings()
 	if !now.AutoAcceptIdeas || len(added) == 0 {
 		return
@@ -189,7 +189,7 @@ func acceptAgreed(c features.Core, repo string, added []string) {
 
 // startIdea starts a task made from an idea Agentry accepted, out of the
 // Backlog, as your Start does: moved to In progress, for its coordinator.
-func startIdea(log features.Proposer, id string) {
+func startIdea(log extensions.Proposer, id string) {
 	kind := events.TaskHeld
 	_, rejection, err := log.Propose(events.Proposal{Stream: id, Actor: agentry, Type: kind,
 		Data: map[string]any{"place": "", "note": "", "column": "in-progress", "sentBack": false}})
@@ -200,14 +200,14 @@ func startIdea(log features.Proposer, id string) {
 
 // brief names the ideas already accepted or dismissed in the task's repo,
 // so the coordinator doesn't suggest them again.
-func brief(state features.Reader, task *tasks.Task) []features.Section {
+func brief(state extensions.Reader, task *tasks.Task) []extensions.Section {
 	chosen := List(state, task.Repo)
-	var sections []features.Section
+	var sections []extensions.Section
 	if accepted := InState(chosen, Accepted); len(accepted) > 0 {
-		sections = append(sections, features.Section{Heading: "Ideas already accepted", Text: acceptedText(accepted)})
+		sections = append(sections, extensions.Section{Heading: "Ideas already accepted", Text: acceptedText(accepted)})
 	}
 	if dismissed := InState(chosen, Dismissed); len(dismissed) > 0 {
-		sections = append(sections, features.Section{Heading: "Ideas the user dismissed", Text: dismissedText(dismissed)})
+		sections = append(sections, extensions.Section{Heading: "Ideas the user dismissed", Text: dismissedText(dismissed)})
 	}
 	return sections
 }

@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -16,7 +16,7 @@ import (
 // suggested, so a new idea is news and one you accept or dismiss isn't; one
 // Agentry accepted for you was never yours to decide, so it isn't counted.
 // There is none with no idea open.
-func openIdeas(state features.Reader, repo string) []features.Waiting {
+func openIdeas(state extensions.Reader, repo string) []extensions.Waiting {
 	all := List(state, "")
 	newestSessionFirst(state, all)
 	var open []*Idea
@@ -51,6 +51,6 @@ func openIdeas(state features.Reader, repo string) []features.Waiting {
 	if len(open) == 1 {
 		what = "open idea"
 	}
-	return []features.Waiting{{Key: "ideas/" + strconv.Itoa(yours), Task: open[0].Task, Kind: "ideas",
+	return []extensions.Waiting{{Key: "ideas/" + strconv.Itoa(yours), Task: open[0].Task, Kind: "ideas",
 		Line: fmt.Sprintf("%d %s from the Visionaries: %s (%s)", len(open), what, strings.Join(titles, ", "), pointer)}}
 }

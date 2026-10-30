@@ -65,7 +65,7 @@ func onlyOnce(model *created) OrderCheck {
 	}
 }
 
-// noteWritten is the one type of a feature's streams, note-N, that the
+// noteWritten is the one type of an extension's streams, note-N, that the
 // test stores know beside the core's.
 const noteWritten events.Type = "note.written"
 

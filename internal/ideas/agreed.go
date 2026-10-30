@@ -9,7 +9,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 )
 
-// Name is the feature's name, which a team template lists to make its
+// Name is the extension's name, which a team template lists to make its
 // coordinators suggest ideas.
 const Name = "ideas"
 

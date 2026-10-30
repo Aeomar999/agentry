@@ -1,4 +1,4 @@
-package features
+package extensions
 
 import (
 	"bytes"
@@ -10,14 +10,14 @@ import (
 	"time"
 )
 
-// A job that panics logs its feature and stops; another job keeps running
+// A job that panics logs its extension and stops; another job keeps running
 // until ctx ends, and so does the process running them.
 func TestAPanickingJobStopsAloneAndSaysWhose(t *testing.T) {
 	logged := captureLog(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ticks, stopped := make(chan struct{}, 1), make(chan struct{})
-	list := []Feature{
+	list := []Extension{
 		{Name: "breaks", Jobs: func(context.Context, Core) { panic("a broken job") }},
 		{Name: "quiet"}, // no jobs
 		{Name: "steady", Jobs: func(ctx context.Context, c Core) {
@@ -31,7 +31,7 @@ func TestAPanickingJobStopsAloneAndSaysWhose(t *testing.T) {
 			}
 		}},
 	}
-	StartJobs(ctx, list, func(Feature) Core { return Core{} })
+	StartJobs(ctx, list, func(Extension) Core { return Core{} })
 	for deadline := time.Now().Add(5 * time.Second); !strings.Contains(logged.String(), "feature=breaks"); time.Sleep(10 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatalf("the panic wasn't logged:\n%s", logged.String())
@@ -53,15 +53,15 @@ func TestAPanickingJobStopsAloneAndSaysWhose(t *testing.T) {
 	}
 }
 
-// Each job is given the Core made for its own feature.
-func TestAJobIsGivenItsOwnFeaturesCore(t *testing.T) {
+// Each job is given the Core made for its own extension.
+func TestAJobIsGivenItsOwnExtensionsCore(t *testing.T) {
 	file := func() map[string]Table {
 		return map[string]Table{"a": {Values: map[string]string{"who": "a"}}, "b": {Values: map[string]string{"who": "b"}}}
 	}
 	got := make(chan string, 2)
 	job := func(_ context.Context, c Core) { who, _ := c.Settings.Setting("who"); got <- who }
-	StartJobs(context.Background(), []Feature{{Name: "a", Jobs: job}, {Name: "b", Jobs: job}},
-		func(f Feature) Core { return Core{Settings: SettingsIn(file, f.Name)} })
+	StartJobs(context.Background(), []Extension{{Name: "a", Jobs: job}, {Name: "b", Jobs: job}},
+		func(f Extension) Core { return Core{Settings: SettingsIn(file, f.Name)} })
 	seen := map[string]bool{}
 	for range 2 {
 		select {

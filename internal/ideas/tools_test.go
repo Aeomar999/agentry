@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 )
 
@@ -120,7 +120,7 @@ func (f *ideasAgentry) posts() []string {
 // session in /repo. When it can elicit, answers plays the user.
 type claude struct {
 	t         *testing.T
-	tools     []features.Tool
+	tools     []extensions.Tool
 	canElicit bool
 	answers   func(method string, params json.RawMessage) any
 }
@@ -128,7 +128,7 @@ type claude struct {
 // startOnIdeas starts the ideas' tools on the ideas fake.
 func startOnIdeas(t *testing.T, canElicit bool, answers func(string, json.RawMessage) any) (*claude, *ideasAgentry) {
 	fake, agentry := newIdeasAgentry(t)
-	return &claude{t: t, tools: ideas.Feature().Tools(agentry, "/repo"), canElicit: canElicit, answers: answers}, fake
+	return &claude{t: t, tools: ideas.Extension().Tools(agentry, "/repo"), canElicit: canElicit, answers: answers}, fake
 }
 
 // tool is a tool's reply, or "error: " and its error, as agentry mcp
@@ -137,7 +137,7 @@ func (c *claude) tool(name string, arguments any) string {
 	c.t.Helper()
 	ctx := context.Background()
 	if c.canElicit {
-		ctx = features.WithAsk(ctx, c.ask)
+		ctx = extensions.WithAsk(ctx, c.ask)
 	}
 	encoded, _ := json.Marshal(arguments)
 	for _, tool := range c.tools {

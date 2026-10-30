@@ -79,7 +79,7 @@ func aSavedTemplate(saved agents.UserTemplates, removed agents.RemovedTemplates,
 }
 
 // builtInBase refuses a template based on anything but a built-in
-// template: its teams keep that template's features, and only a built-in
+// template: its teams keep that template's extensions, and only a built-in
 // one has any. None at all is fine.
 func builtInBase(basedOn string) string {
 	if _, builtIn := agents.TemplateWithID(basedOn); basedOn != "" && !builtIn {

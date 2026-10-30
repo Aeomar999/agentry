@@ -142,9 +142,9 @@ func TemplateWithID(id string) (Template, bool) {
 	return Template{}, false
 }
 
-// Lists says whether the template turns the feature on.
-func (t Template) Lists(feature string) bool {
-	return slices.Contains(t.Features, feature)
+// Lists says whether the template turns the extension on.
+func (t Template) Lists(extension string) bool {
+	return slices.Contains(t.Features, extension)
 }
 
 // templateByName is the template a team of this name was made from, as

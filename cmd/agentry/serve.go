@@ -31,7 +31,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/desk"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/hooks"
 	"gitlab.com/dev.chempa/agentry/internal/hostaddrs"
@@ -127,7 +127,7 @@ func dropParentSession(log io.Writer) {
 }
 
 // reportSkipped says once per prefix that the log holds streams of a
-// feature this build doesn't have: skipped, not lost.
+// extension this build doesn't have: skipped, not lost.
 func reportSkipped(w io.Writer, unknown []current.Unknown) {
 	for _, u := range unknown {
 		if u.Prefix != "" {
@@ -154,8 +154,8 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		return err
 	}
 	defer release()
-	installed := installedFeatures()
-	catalogue, err := events.NewCatalogue(features.Registrations(installed...)...)
+	installed := installedExtensions()
+	catalogue, err := events.NewCatalogue(extensions.Registrations(installed...)...)
 	if err != nil {
 		return fmt.Errorf("the event catalogue: %w", err)
 	}
@@ -169,7 +169,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err := current.RemoveLeftovers(snapshot); err != nil {
 		slog.Warn("agentry: unfinished snapshot writes can't be removed", "err", err)
 	}
-	state := current.Restore(snapshot, build, catalogue, features.StreamsOf(installed...)...)
+	state := current.Restore(snapshot, build, catalogue, extensions.StreamsOf(installed...)...)
 	log, err := store.Open(filepath.Join(o.dataDir, "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue, installed...) })
 	if err != nil {
 		return err
@@ -260,19 +260,19 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	}
 	links := workerlink.NewServer(log, fleet)
 
-	// The loop and the server are given the same features. Each writes
+	// The loop and the server are given the same extensions. Each writes
 	// through its own checked proposer, made here once, never the store.
 	settings := openSettings(ctx, filepath.Join(o.dataDir, settingsFile), 2*time.Second)
-	logs := map[string]features.Proposer{}
+	logs := map[string]extensions.Proposer{}
 	for _, f := range installed {
-		logs[f.Name] = features.Checked(f, features.Registration(f), log)
+		logs[f.Name] = extensions.Checked(f, extensions.Registration(f), log)
 	}
 
 	runner := turns.NewRunner(log, state, fleet, turns.Config{HookToken: hookToken, Theme: currentTheme, NoResume: !o.resume})
 	loop := coordinator.NewLoop(log, state, runner, fleet)
 	loop.Clones = clones
 	loop.Defaults = tasks.Limits{Budget: o.budget, MaxTurns: o.maxTurns}
-	loop.Features = installed
+	loop.Extensions = installed
 	loop.Logs = logs
 	loop.Settings = settings.For
 	go loop.Run(ctx)
@@ -327,9 +327,9 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL, CA: serverCA,
 		NetworkURLs: network, LocalURL: localhostURL(listener.Addr(), scheme), Binary: self, Local: machines.Describe(), Blobs: blobs,
-		Features: installed, Logs: logs, Settings: settings.For, Worktrees: worktreeRoot, Push: push, StopSession: runner.Stop, Snapshots: snapshots,
+		Extensions: installed, Logs: logs, Settings: settings.For, Worktrees: worktreeRoot, Push: push, StopSession: runner.Stop, Snapshots: snapshots,
 		Redactions: hookHandler.Redactions()}, hooks.HTTP(hookHandler, hookToken), taskTerminal)
-	startPush(ctx, log, push, o.publicURL, func() []features.Waiting { return server.Waiting("") })
+	startPush(ctx, log, push, o.publicURL, func() []extensions.Waiting { return server.Waiting("") })
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), localURL(listener.Addr(), scheme))
 	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String(), HTTPS: o.https,
 		CA: serverCA}); err != nil {
@@ -519,30 +519,30 @@ func openSettings(ctx context.Context, path string, every time.Duration) *settin
 	return settings
 }
 
-// startJobs starts the features' jobs, each with the Core its routes get and
+// startJobs starts the extensions' jobs, each with the Core its routes get and
 // its own settings from settingsOf.
-func startJobs(ctx context.Context, settingsOf func(feature string) features.Settings, installed []features.Feature, logs map[string]features.Proposer,
+func startJobs(ctx context.Context, settingsOf func(extension string) extensions.Settings, installed []extensions.Extension, logs map[string]extensions.Proposer,
 	log *store.Store, state *current.State, defaults tasks.Limits) {
-	readOnly := features.ReadOnly(log)
-	features.StartJobs(ctx, installed, func(f features.Feature) features.Core {
-		return features.Core{Log: proposerOf(logs, f), Events: readOnly, Read: state, Defaults: defaults, Settings: settingsOf(f.Name)}
+	readOnly := extensions.ReadOnly(log)
+	extensions.StartJobs(ctx, installed, func(f extensions.Extension) extensions.Core {
+		return extensions.Core{Log: proposerOf(logs, f), Events: readOnly, Read: state, Defaults: defaults, Settings: settingsOf(f.Name)}
 	})
 }
 
 // proposerOf is f's checked proposer in logs, or one that writes nothing
 // when there is none for it.
-func proposerOf(logs map[string]features.Proposer, f features.Feature) features.Proposer {
+func proposerOf(logs map[string]extensions.Proposer, f extensions.Extension) extensions.Proposer {
 	if log, found := logs[f.Name]; found {
 		return log
 	}
-	return features.Unwritable(f.Name)
+	return extensions.Unwritable(f.Name)
 }
 
-// installedFeatures is every feature in this binary, written out here: no
-// feature registers itself. serve and agentry mcp use the same list.
-func installedFeatures() []features.Feature {
-	return []features.Feature{
-		ideas.Feature(),
-		schedules.Feature(),
+// installedExtensions is every extension in this binary, written out here: no
+// extension registers itself. serve and agentry mcp use the same list.
+func installedExtensions() []extensions.Extension {
+	return []extensions.Extension{
+		ideas.Extension(),
+		schedules.Extension(),
 	}
 }

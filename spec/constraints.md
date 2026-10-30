@@ -4,7 +4,7 @@ How Agentry is built and must stay built. Each constraint says what holds and ho
 
 ## 1. Readability and separation of concerns
 
-The code is easy to read, with each concern in its own package: one folder under `internal/` does one job, and folders only depend on the ones below them (docs/decisions.md, 2026-10-16; README.md, Work on it). Each file does one job, and names say what it does without a comment (docs/decisions.md, 2026-10-16). The leaves, `events`, `features` and `httpapi`, import no core package that could import them back.
+The code is easy to read, with each concern in its own package: one folder under `internal/` does one job, and folders only depend on the ones below them (docs/decisions.md, 2026-10-16; README.md, Work on it). Each file does one job, and names say what it does without a comment (docs/decisions.md, 2026-10-16). The leaves, `events`, `extensions` and `httpapi`, import no core package that could import them back.
 
 The packages under `internal/`, by concern, each described in its own package comment:
 
@@ -28,8 +28,8 @@ State computed from the log:
 - `settings`: your settings from the settings stream; one you never changed has its default.
 - `ideas`: an idea's state from its events, as tasks does for a task.
 - `schedules`: a schedule's state from its events; a schedule makes a task at a set time.
-- `features`: what a feature, such as ideas, adds to Agentry; a leaf the core reads as a list, never naming one.
-- `waitlist`: the core's part of what waits for you, each approval, question and stop as one entry; it names no feature.
+- `extensions`: what an extension, such as ideas, adds to Agentry; a leaf the core reads as a list, never naming one.
+- `waitlist`: the core's part of what waits for you, each approval, question and stop as one entry; it names no extension.
 
 Running the agents:
 
@@ -61,7 +61,7 @@ Reaching the machines:
 Serving the user:
 
 - `web`: the HTTP side of `agentry serve`: the UI, the API it uses, and the endpoint the hooks post to.
-- `httpapi`: how every handler of the HTTP API answers, the core's and a feature's alike; a leaf that imports only events and features.
+- `httpapi`: how every handler of the HTTP API answers, the core's and an extension's alike; a leaf that imports only events and extensions.
 - `terminal`: a task's agent session live in the browser, fanned out to every viewer, keystrokes back only from the one in control.
 - `workspace`: reads a task's worktree for its Workspace page, the way an editor's git view does; it only reads, never outside the worktree.
 - `webpush`: what Web Push needs: Agentry's key pair and the browsers subscribed, kept in a file beside the log, never in it.
@@ -74,7 +74,7 @@ The spec's own check:
 
 - `speccheck`: `spec/check`, which checks every scenario under `spec/` against the rules in spec/README.md.
 
-Checked by: the reviewer on every change, who asks of each new file and function whether it has one job and sits in the package of its concern, and whether the dependency points downward; the list above matching `ls internal` (45 packages); `go test ./internal/features ./internal/httpapi`, whose `imports_test.go` fails when a leaf imports a core package.
+Checked by: the reviewer on every change, who asks of each new file and function whether it has one job and sits in the package of its concern, and whether the dependency points downward; the list above matching `ls internal` (45 packages); `go test ./internal/extensions ./internal/httpapi`, whose `imports_test.go` fails when a leaf imports a core package.
 
 ## 2. The append-only event log is the only state
 
@@ -94,7 +94,7 @@ Credentials are kept as hashes: a worker's join code and a connected machine's i
 
 The repo holds no `.env`: `git ls-files` lists none today. `.gitignore` does not name `.env`; a task's worktree gets its repo's untracked `.env` files copied in by `internal/worktrees`, which is how they stay out of git. Local databases (`*.db`, `*.db-wal`, `*.db-shm`) and `bin/` are ignored.
 
-Checked by: `go test ./internal/workers ./internal/connections`, with `TestAMachineJoinsOnceWithItsCode`; `go test ./internal/web`, with `TestAWorkerJoinsAndTakesWork` in `workers_test.go` and `TestASigninCodeSignsInOnce`, `TestASigninCodeExpires` and `TestFailedSigninsAreLimited` in `signin_test.go`; `TestAgentrysOwnFilesAreAlwaysOffLimits` in `internal/policy/default_test.go`; `go test ./internal/settingsfile ./internal/features`, with `TestABrokenFileKeepsTheLastGoodVersionAndIsNotQuoted`, `TestAFeatureReadsOnlyItsOwnTable` and `TestSettingsReachOnlyTheirOwnFeaturesTable`; `TestARedactedSecretIsInNoByteOnDisk` in `internal/storetest/redact_test.go` and `TestRedactingASecretAcrossTheLogLeavesNoTraceOnDisk` in `internal/web/redact_log_api_test.go`; and the reviewer, who reads every commit for a token, a key or a `.env` before it is merged, since no check does.
+Checked by: `go test ./internal/workers ./internal/connections`, with `TestAMachineJoinsOnceWithItsCode`; `go test ./internal/web`, with `TestAWorkerJoinsAndTakesWork` in `workers_test.go` and `TestASigninCodeSignsInOnce`, `TestASigninCodeExpires` and `TestFailedSigninsAreLimited` in `signin_test.go`; `TestAgentrysOwnFilesAreAlwaysOffLimits` in `internal/policy/default_test.go`; `go test ./internal/settingsfile ./internal/extensions`, with `TestABrokenFileKeepsTheLastGoodVersionAndIsNotQuoted`, `TestAnExtensionReadsOnlyItsOwnTable` and `TestSettingsReachOnlyTheirOwnExtensionsTable`; `TestARedactedSecretIsInNoByteOnDisk` in `internal/storetest/redact_test.go` and `TestRedactingASecretAcrossTheLogLeavesNoTraceOnDisk` in `internal/web/redact_log_api_test.go`; and the reviewer, who reads every commit for a token, a key or a `.env` before it is merged, since no check does.
 
 ## 5. The UI from one token file, with no shadows, glows or accent stripes
 

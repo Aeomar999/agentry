@@ -7,10 +7,10 @@ import (
 	"testing"
 )
 
-// httpapi is a leaf, as features is: of Agentry's own packages it may import
-// only events, features and what features itself may import, so web and
-// every feature's routes can use it without a cycle.
-var mayImport = []string{"events", "features", "agents", "tasks", "workers", "connections", "settings", "client"}
+// httpapi is a leaf, as extensions is: of Agentry's own packages it may import
+// only events, extensions and what extensions itself may import, so web and
+// every extension's routes can use it without a cycle.
+var mayImport = []string{"events", "extensions", "agents", "tasks", "workers", "connections", "settings", "client"}
 
 func TestHTTPAPIImportsNoOtherCorePackage(t *testing.T) {
 	out, err := exec.Command("go", "list", "-deps", ".").Output()

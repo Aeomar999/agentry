@@ -45,7 +45,7 @@ func TestATeamEditKeepsWhatItDoesntTouch(t *testing.T) {
 
 // A team edit can rename the team and move its coordinator: the template
 // the team was made from goes with the coordinator, and stays through a
-// rename, so the team keeps its features.
+// rename, so the team keeps its extensions.
 func TestATeamEditMovesTheCoordinatorWithItsTemplate(t *testing.T) {
 	roster := Roster{
 		{Name: "tech-lead", Coordinates: true, Template: "software"},

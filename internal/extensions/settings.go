@@ -1,22 +1,22 @@
-package features
+package extensions
 
-// Settings are a feature's own table in the settings file, features.toml
+// Settings are an extension's own table in the settings file, features.toml
 // beside policy.toml, such as a git host's token: not the log's settings,
 // which Reader has. Each call reads the version in force, so an edit to the
 // file reaches a running job. The zero Settings has none.
 type Settings struct {
-	feature string
-	file    func() map[string]Table
+	extension string
+	file      func() map[string]Table
 }
 
-// Table is one feature's table in the settings file: its values, and its
-// secrets, from the [<feature>.secrets] table under it.
+// Table is one extension's table in the settings file: its values, and its
+// secrets, from the [<extension>.secrets] table under it.
 type Table struct{ Values, Secrets map[string]string }
 
-// SettingsIn are feature's settings in file, which returns the tables in
-// force, by feature. They reach that feature's table alone.
-func SettingsIn(file func() map[string]Table, feature string) Settings {
-	return Settings{feature: feature, file: file}
+// SettingsIn are extension's settings in file, which returns the tables in
+// force, by extension. They reach that extension's table alone.
+func SettingsIn(file func() map[string]Table, extension string) Settings {
+	return Settings{extension: extension, file: file}
 }
 
 // Setting is the value of key, and whether the file sets it.
@@ -36,5 +36,5 @@ func (s Settings) table() Table {
 	if s.file == nil {
 		return Table{}
 	}
-	return s.file()[s.feature]
+	return s.file()[s.extension]
 }

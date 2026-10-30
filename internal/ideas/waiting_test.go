@@ -13,7 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/mcp"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
@@ -72,7 +72,7 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 	tagRepos := suggestIdea(t, s, "task-8", other, "Tag the repos")
 	autoAccepted(t, s, "task-8", other, "Show the costs", "task-9")
 
-	core := []features.Waiting{
+	core := []extensions.Waiting{
 		{Key: "task-1/question//Which layout?", Task: "task-1", Kind: "needs you", Line: "task-1: tech-lead asks: Which layout?"},
 		{Key: "task-2/approval/push-1/git push origin HEAD:dev", Task: "task-2", Kind: "needs you", Line: "task-2: Waiting for you to approve the push to dev (review_approvals)"},
 		{Key: "task-3/budget//It used its budget. Raise it?", Task: "task-3", Kind: "needs you", Line: "task-3: Agentry asks: It used its budget. Raise it?"},
@@ -81,9 +81,9 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 		{Key: "task-6/question//Copy /etc/hosts into the worktree?", Task: "task-6", Kind: "needs you",
 			Line: `task-6: Copy /etc/hosts into the worktree? (answer_question with "Copy it" asks the user)`},
 	}
-	open := features.Waiting{Key: "ideas/3", Task: "task-8", Kind: "ideas",
+	open := extensions.Waiting{Key: "ideas/3", Task: "task-8", Kind: "ideas",
 		Line: "3 open ideas from the Visionaries: Tag the repos, Sort the columns, Search the board (list_ideas all)"}
-	both := func(where, repo string, want []features.Waiting) {
+	both := func(where, repo string, want []extensions.Waiting) {
 		t.Helper()
 		checkWaiting(t, where, waitingFor(t, api, repo), want)
 		checkWaiting(t, where+", from GET /api/waiting", served(t, api, repo), want)
@@ -97,7 +97,7 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 	if code, body := call(t, server, "POST", "/api/ideas/"+tagRepos+"/dismiss", `{"note":"not now"}`); code != 200 {
 		t.Fatal(code, body)
 	}
-	here := features.Waiting{Key: "ideas/3", Task: "task-7", Kind: "ideas",
+	here := extensions.Waiting{Key: "ideas/3", Task: "task-7", Kind: "ideas",
 		Line: "2 open ideas from the Visionaries: Sort the columns, Search the board (list_ideas)"}
 	both("in /src/app, its ideas all here", "/src/app", append(core, here))
 	here.Line = strings.Replace(here.Line, "(list_ideas)", "(list_ideas all)", 1)
@@ -106,7 +106,7 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 }
 
 // waitingFor is what agentry mcp says waits for a session in repo ("" outside one).
-func waitingFor(t *testing.T, api client.Client, repo string) []features.Waiting {
+func waitingFor(t *testing.T, api client.Client, repo string) []extensions.Waiting {
 	t.Helper()
 	all, err := mcp.WaitingFor(api, repo)
 	if err != nil {
@@ -119,7 +119,7 @@ func waitingFor(t *testing.T, api client.Client, repo string) []features.Waiting
 // count of want and its first five lines (here the core's, so the repo
 // isn't seen: the mcp tests check it is passed). The ideas line is past
 // the fifth, so the note can't show it; the lists above check it.
-func checkNote(t *testing.T, where string, api client.Client, dir string, want []features.Waiting) {
+func checkNote(t *testing.T, where string, api client.Client, dir string, want []extensions.Waiting) {
 	t.Helper()
 	note := fmt.Sprintf("\n\nWaiting for the user (%d):", len(want))
 	for _, w := range want[:min(5, len(want))] {
@@ -135,7 +135,7 @@ func replyIn(t *testing.T, api client.Client, dir, tool string) string {
 	t.Helper()
 	toServer, fromClaude := io.Pipe()
 	fromServer, toClaude := io.Pipe()
-	go mcp.New(api, dir, "test", []features.Feature{ideas.Feature()}).Serve(context.Background(), toServer, toClaude)
+	go mcp.New(api, dir, "test", []extensions.Extension{ideas.Extension()}).Serve(context.Background(), toServer, toClaude)
 	defer func() { fromClaude.Close(); toClaude.Close() }()
 	fmt.Fprintf(fromClaude, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":%q}}`+"\n", tool)
 	out := bufio.NewScanner(fromServer)
@@ -154,9 +154,9 @@ func replyIn(t *testing.T, api client.Client, dir, tool string) string {
 }
 
 // served is what GET /api/waiting lists for a session in repo.
-func served(t *testing.T, api client.Client, repo string) []features.Waiting {
+func served(t *testing.T, api client.Client, repo string) []extensions.Waiting {
 	t.Helper()
-	var all []features.Waiting
+	var all []extensions.Waiting
 	if err := api.Call("GET", "/api/waiting?repo="+url.QueryEscape(repo), nil, &all); err != nil {
 		t.Fatal(err)
 	}
@@ -186,9 +186,9 @@ func autoAccepted(t *testing.T, s *store.Store, task, repo, title, as string) st
 	return created.Stream
 }
 
-func checkWaiting(t *testing.T, where string, got, want []features.Waiting) {
+func checkWaiting(t *testing.T, where string, got, want []extensions.Waiting) {
 	t.Helper()
-	line := func(list []features.Waiting) string {
+	line := func(list []extensions.Waiting) string {
 		var b strings.Builder
 		for _, w := range list {
 			fmt.Fprintf(&b, "%q %s %q %q\n", w.Key, w.Task, w.Kind, w.Line)
@@ -204,7 +204,7 @@ func checkWaiting(t *testing.T, where string, got, want []features.Waiting) {
 // decided isn't, and one Agentry accepted for you isn't either.
 func TestOpenIdeasWaitForYou(t *testing.T) {
 	s, state, repo := openSeeded(t)
-	waiting := func() []features.Waiting { return ideas.Feature().Waiting(state, "") }
+	waiting := func() []extensions.Waiting { return ideas.Extension().Waiting(state, "") }
 	retry := suggest(t, s, repo, map[string]any{"title": "Retry webhooks"})
 	boot := suggest(t, s, "/other", map[string]any{"title": "Faster boot"})
 	before := waiting()
@@ -246,19 +246,19 @@ func TestOpenIdeasPointAtTheirRepo(t *testing.T) {
 	s, state, repo := openSeeded(t)
 	suggest(t, s, repo, map[string]any{"title": "Retry webhooks"})
 	boot := suggest(t, s, "/other", map[string]any{"title": "Faster boot"})
-	elsewhere := ideas.Feature().Waiting(state, repo)[0]
+	elsewhere := ideas.Extension().Waiting(state, repo)[0]
 	if want := "2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas all)"; elsewhere.Line != want {
 		t.Errorf("some in another repo: %q, want %q", elsewhere.Line, want)
 	}
 	mustPropose(t, s, events.Proposal{Stream: boot, Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": "not now"}})
-	here := ideas.Feature().Waiting(state, repo)[0]
+	here := ideas.Extension().Waiting(state, repo)[0]
 	if want := "1 open idea from the Visionaries: Retry webhooks (list_ideas)"; here.Line != want {
 		t.Errorf("all in this repo: %q, want %q", here.Line, want)
 	}
 	if here.Key != "ideas/2" || elsewhere.Key != here.Key {
 		t.Errorf("keys %q and %q, want ideas/2 for both", elsewhere.Key, here.Key)
 	}
-	unknown := ideas.Feature().Waiting(state, "")
+	unknown := ideas.Extension().Waiting(state, "")
 	if len(unknown) != 1 || !strings.HasSuffix(unknown[0].Line, "(list_ideas all)") || unknown[0].Key != here.Key {
 		t.Errorf("repo not known: %+v, want (list_ideas all) and key %q", unknown, here.Key)
 	}

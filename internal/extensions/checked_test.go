@@ -1,4 +1,4 @@
-package features_test
+package extensions_test
 
 import (
 	"path/filepath"
@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 )
 
@@ -33,19 +33,19 @@ func (r *recording) Create(prefix string, p events.Proposal) (events.Event, *eve
 
 // votes registers vote.cast in its streams and vote.counted in task streams,
 // and writes the core's task.created.
-func votes() (features.Feature, events.Registration) {
-	return features.Feature{Name: "votes", Writes: []events.Type{events.TaskCreated}},
+func votes() (extensions.Extension, events.Registration) {
+	return extensions.Extension{Name: "votes", Writes: []events.Type{events.TaskCreated}},
 		events.Registration{Prefix: "vote-", Types: map[events.Type]events.Spec{"vote.cast": {}},
 			TaskTypes: map[events.Type]events.Spec{"vote.counted": {}}}
 }
 
-// A type the feature registered, in its streams or in tasks', or listed in
+// A type the extension registered, in its streams or in tasks', or listed in
 // Writes reaches the log as it was proposed, and its answer comes back.
 func TestADeclaredTypePassesThroughUnchanged(t *testing.T) {
-	feature, registered := votes()
+	extension, registered := votes()
 	for _, kind := range []events.Type{"vote.cast", "vote.counted", events.TaskCreated} {
 		inner := &recording{event: events.Event{Position: 7, Stream: "vote-1", Type: kind}}
-		log := features.Checked(feature, registered, inner)
+		log := extensions.Checked(extension, registered, inner)
 		p := events.Proposal{Stream: "vote-1", Actor: you, Type: kind, Data: map[string]any{"n": 1}}
 		got, rejection, err := log.Propose(p)
 		if err != nil || rejection != nil || !reflect.DeepEqual(got, inner.event) {
@@ -60,13 +60,13 @@ func TestADeclaredTypePassesThroughUnchanged(t *testing.T) {
 	}
 }
 
-// A type the feature neither registered nor listed in Writes is refused with
-// the rule "features", naming the feature and the type, and never reaches
+// A type the extension neither registered nor listed in Writes is refused with
+// the rule "features", naming the extension and the type, and never reaches
 // the log.
 func TestAnUndeclaredTypeIsRefusedBeforeTheLog(t *testing.T) {
-	feature, registered := votes()
+	extension, registered := votes()
 	inner := &recording{}
-	log := features.Checked(feature, registered, inner)
+	log := extensions.Checked(extension, registered, inner)
 	p := events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "s"}}
 	for name, propose := range map[string]func() (events.Event, *events.Rejection, error){
 		"Propose": func() (events.Event, *events.Rejection, error) { return log.Propose(p) },
@@ -86,19 +86,19 @@ func TestAnUndeclaredTypeIsRefusedBeforeTheLog(t *testing.T) {
 }
 
 // Writes is read once, when Checked is made: changing the slice after
-// doesn't widen what the feature may write.
+// doesn't widen what the extension may write.
 func TestWritesIsReadWhenCheckedIsMade(t *testing.T) {
-	feature, registered := votes()
-	log := features.Checked(feature, registered, &recording{})
-	feature.Writes[0] = events.TaskDone
+	extension, registered := votes()
+	log := extensions.Checked(extension, registered, &recording{})
+	extension.Writes[0] = events.TaskDone
 	if _, rejection, _ := log.Propose(events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskDone}); rejection == nil {
 		t.Error("task.done went through after Writes was changed")
 	}
 }
 
-// Against a real log: a feature proposing a core type outside its Writes is
+// Against a real log: an extension proposing a core type outside its Writes is
 // refused with the rule "features", and the log holds nothing new, not even
-// a rejection; the same proposal from a feature that lists the type is
+// a rejection; the same proposal from an extension that lists the type is
 // stored.
 func TestARefusedProposalLeavesTheLogAsItWas(t *testing.T) {
 	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
@@ -110,7 +110,7 @@ func TestARefusedProposalLeavesTheLogAsItWas(t *testing.T) {
 		Data: map[string]any{"title": "Remove the TODOs", "repo": "/src/app", "coordinator": "tech-lead"}}
 	before := s.LastPosition()
 
-	silent := features.Checked(features.Feature{Name: "silent"}, events.Registration{}, s)
+	silent := extensions.Checked(extensions.Extension{Name: "silent"}, events.Registration{}, s)
 	_, rejection, err := silent.Create("task-", task)
 	if err != nil || rejection == nil || rejection.Check != "features" {
 		t.Fatalf("got %+v %v, want a features rejection", rejection, err)
@@ -122,17 +122,17 @@ func TestARefusedProposalLeavesTheLogAsItWas(t *testing.T) {
 		t.Errorf("task-1 holds %+v (%v), want nothing", stream, err)
 	}
 
-	feature, registered := votes()
-	created, rejection, err := features.Checked(feature, registered, s).Create("task-", task)
+	extension, registered := votes()
+	created, rejection, err := extensions.Checked(extension, registered, s).Create("task-", task)
 	if err != nil || rejection != nil || created.Stream != "task-1" || s.LastPosition() != before+1 {
 		t.Errorf("a declared task.created: got %+v %+v %v at %d", created, rejection, err, s.LastPosition())
 	}
 }
 
-// A feature with no log writes nothing: Unwritable refuses every type, even
-// one the feature lists in Writes, and the log under it refuses too.
+// An extension with no log writes nothing: Unwritable refuses every type, even
+// one the extension lists in Writes, and the log under it refuses too.
 func TestUnwritableRefusesEverything(t *testing.T) {
-	log := features.Unwritable("votes")
+	log := extensions.Unwritable("votes")
 	p := events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated}
 	for name, propose := range map[string]func() (events.Event, *events.Rejection, error){
 		"Propose": func() (events.Event, *events.Rejection, error) { return log.Propose(p) },

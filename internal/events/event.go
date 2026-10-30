@@ -106,7 +106,7 @@ func (p Proposal) Numbers(field string) []int64 {
 
 // Rejection says which check refused a proposal, and why.
 type Rejection struct {
-	Check  string `json:"check"` // shape | who | order, or features: a feature proposing a type it may not (features.Checked)
+	Check  string `json:"check"` // shape | who | order, or features: an extension proposing a type it may not (extensions.Checked)
 	Reason string `json:"reason"`
 }
 

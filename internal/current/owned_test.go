@@ -8,14 +8,14 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
-// Notes are a test feature that owns the note- streams: a note is the text
+// Notes are a test extension that owns the note- streams: a note is the text
 // of every note.written, and a note.spoiled panics, in FromEvents and Next
-// alike, as a feature's bug would.
+// alike, as an extension's bug would.
 const (
 	noteWritten events.Type = "note.written"
 	noteSpoiled events.Type = "note.spoiled"
@@ -30,7 +30,7 @@ func (n *note) apply(e events.Event) {
 	n.texts = append(n.texts, e.Text("text"))
 }
 
-var notes = &features.Streams{
+var notes = &extensions.Streams{
 	Prefix: "note-",
 	FromEvents: func(accepted []events.Event) any {
 		n := &note{}
@@ -51,7 +51,7 @@ var notes = &features.Streams{
 
 var withNotes = func() *events.Catalogue {
 	writers := []events.ActorKind{events.Human}
-	catalogue, err := events.NewCatalogue(features.Registration(ideas.Feature()), events.Registration{Prefix: notes.Prefix, Types: map[events.Type]events.Spec{
+	catalogue, err := events.NewCatalogue(extensions.Registration(ideas.Extension()), events.Registration{Prefix: notes.Prefix, Types: map[events.Type]events.Spec{
 		noteWritten: {Fields: []string{"text"}, Writers: writers},
 		noteSpoiled: {Writers: writers},
 	}})
@@ -80,7 +80,7 @@ func notesLog(more ...events.Proposal) []events.Event {
 
 func newWithNotes() *State { return New(withNotes, ideas.Streams(), notes) }
 
-func TestAFeaturesStreamsAreKeptInLogOrder(t *testing.T) {
+func TestAnExtensionsStreamsAreKeptInLogOrder(t *testing.T) {
 	log := notesLog()
 	for name, s := range map[string]*State{"applied": applyInto(newWithNotes(), log), "loaded": loadInto(newWithNotes(), log)} {
 		if order := s.OwnedIDs(notes.Prefix); !slices.Equal(order, []string{"note-2", "note-1"}) {
@@ -98,10 +98,10 @@ func TestAFeaturesStreamsAreKeptInLogOrder(t *testing.T) {
 	}
 }
 
-// A feature whose Next panics breaks only the stream it was applying: its
+// An extension whose Next panics breaks only the stream it was applying: its
 // other streams, the ideas, the tasks and the rosters read as they would
 // without the event.
-func TestAFeaturesPanicInNextBreaksOnlyItsStream(t *testing.T) {
+func TestAnExtensionsPanicInNextBreaksOnlyItsStream(t *testing.T) {
 	log := notesLog()
 	spoiled := events.Event{Position: 100, Proposal: proposal("note-1", you, noteSpoiled, nil)}
 	more := events.Event{Position: 101, Proposal: proposal("note-1", you, noteWritten, map[string]any{"text": "never applied"})}
@@ -112,9 +112,9 @@ func TestAFeaturesPanicInNextBreaksOnlyItsStream(t *testing.T) {
 	}
 }
 
-// A feature whose FromEvents panics at Load breaks only that stream, as
+// An extension whose FromEvents panics at Load breaks only that stream, as
 // its Next would.
-func TestAFeaturesPanicInFromEventsBreaksOnlyItsStream(t *testing.T) {
+func TestAnExtensionsPanicInFromEventsBreaksOnlyItsStream(t *testing.T) {
 	log := notesLog(proposal("note-1", you, noteSpoiled, nil))
 	without := notesLog()
 	s := loadInto(newWithNotes(), log)
@@ -176,9 +176,9 @@ func brokenOnly(t *testing.T, name string, s, want *State, stream string) {
 }
 
 // Equal compares what each owned stream holds with its replay, so it sees
-// a feature whose Next is subtly wrong though every stream's position and
+// an extension whose Next is subtly wrong though every stream's position and
 // the order are right.
-func TestEqualSeesAFeaturesWrongNext(t *testing.T) {
+func TestEqualSeesAnExtensionsWrongNext(t *testing.T) {
 	forgetful := *notes
 	forgetful.Next = func(prev any, e events.Event) any {
 		n := notes.Next(prev, e).(*note)
@@ -204,7 +204,7 @@ func TestEqualSeesAFeaturesWrongNext(t *testing.T) {
 }
 
 // Every log these tests make, written to a store: a state that applied it
-// event by event, and one loaded from it, equal a replay, every feature's
+// event by event, and one loaded from it, equal a replay, every extension's
 // streams and their order included. A spoiled note breaks in both and in
 // the replay alike.
 func TestEveryTestLogAppliedOrLoadedEqualsAReplay(t *testing.T) {
@@ -246,10 +246,10 @@ func TestEveryTestLogAppliedOrLoadedEqualsAReplay(t *testing.T) {
 	}
 }
 
-// A prefix no feature here owns lists no streams, a stream no feature here
+// A prefix no extension here owns lists no streams, a stream no extension here
 // owns holds nothing, though the catalogue knows it, and what OwnedIDs hands
 // out is the caller's to change.
-func TestWhatNoFeatureHereOwnsHoldsNothing(t *testing.T) {
+func TestWhatNoExtensionHereOwnsHoldsNothing(t *testing.T) {
 	log := notesLog()
 	for name, s := range map[string]*State{"applied": applyInto(New(withNotes, ideas.Streams()), log), "loaded": loadInto(New(withNotes, ideas.Streams()), log)} {
 		if order := s.OwnedIDs(notes.Prefix); len(order) != 0 {

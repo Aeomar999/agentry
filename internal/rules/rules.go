@@ -12,29 +12,29 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // State is what the rules read: the state the proposal would be appended to,
-// as a feature reads it. *current.State is one. The rules refuse what would
+// as an extension reads it. *current.State is one. The rules refuse what would
 // be checked against a broken roster.
-type State = features.Reader
+type State = extensions.Reader
 
 // Check is the store's OrderCheck, made with the state it reads, the
 // catalogue the store has, which says which streams are tasks, and the
-// features installed. Nothing goes into a foreign stream: its feature isn't
-// in this build. A feature's rules run only once the core's pass, so they
+// extensions installed. Nothing goes into a foreign stream: its extension isn't
+// in this build. An extension's rules run only once the core's pass, so they
 // can only refuse: its Streams.Check for a proposal on one of its streams,
-// and every feature's Guards for the proposal's type.
-func Check(p events.Proposal, state State, catalogue *events.Catalogue, installed ...features.Feature) *events.Rejection {
+// and every extension's Guards for the proposal's type.
+func Check(p events.Proposal, state State, catalogue *events.Catalogue, installed ...extensions.Extension) *events.Rejection {
 	if rejection := checkCore(p, state, catalogue, installed); rejection != nil {
 		return rejection
 	}
 	for _, f := range installed {
 		if guard := f.Guards[p.Type]; guard != nil {
-			if rejection := byFeature(f, guard, p, state); rejection != nil {
+			if rejection := byExtension(f, guard, p, state); rejection != nil {
 				return rejection
 			}
 		}
@@ -43,8 +43,8 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue, installe
 }
 
 // checkCore is Check without the Guards: the core's rules, and the owning
-// feature's Streams.Check once they pass.
-func checkCore(p events.Proposal, state State, catalogue *events.Catalogue, installed []features.Feature) *events.Rejection {
+// extension's Streams.Check once they pass.
+func checkCore(p events.Proposal, state State, catalogue *events.Catalogue, installed []extensions.Extension) *events.Rejection {
 	if catalogue.KindOf(p.Stream) == events.ForeignStream {
 		return refuse(events.ForeignReason(p.Stream))
 	}
@@ -185,10 +185,10 @@ func checkCore(p events.Proposal, state State, catalogue *events.Catalogue, inst
 	return nil
 }
 
-// checkOwned runs the Streams.Check of the feature that owns p's stream. The
-// catalogue registers only installed features' streams, so one with no
+// checkOwned runs the Streams.Check of the extension that owns p's stream. The
+// catalogue registers only installed extensions' streams, so one with no
 // owner here is refused rather than let through unchecked.
-func checkOwned(p events.Proposal, state State, installed []features.Feature) *events.Rejection {
+func checkOwned(p events.Proposal, state State, installed []extensions.Extension) *events.Rejection {
 	owner, found := ownerOf(installed, p.Stream)
 	switch {
 	case !found:
@@ -196,31 +196,31 @@ func checkOwned(p events.Proposal, state State, installed []features.Feature) *e
 	case owner.Streams.Check == nil:
 		return nil
 	}
-	return byFeature(owner, owner.Streams.Check, p, state)
+	return byExtension(owner, owner.Streams.Check, p, state)
 }
 
-// guarded says whether stream belongs to an installed feature with a Guard
-// for kind: the core lets Agentry make or start a task from a feature's
-// stream only when that feature checks it.
-func guarded(installed []features.Feature, stream string, kind events.Type) bool {
+// guarded says whether stream belongs to an installed extension with a Guard
+// for kind: the core lets Agentry make or start a task from an extension's
+// stream only when that extension checks it.
+func guarded(installed []extensions.Extension, stream string, kind events.Type) bool {
 	owner, found := ownerOf(installed, stream)
 	return found && owner.Guards[kind] != nil
 }
 
-// ownerOf is the installed feature whose streams stream is one of.
-func ownerOf(installed []features.Feature, stream string) (features.Feature, bool) {
+// ownerOf is the installed extension whose streams stream is one of.
+func ownerOf(installed []extensions.Extension, stream string) (extensions.Extension, bool) {
 	for _, f := range installed {
 		if f.Streams != nil && f.Streams.Prefix != "" && strings.HasPrefix(stream, f.Streams.Prefix) {
 			return f, true
 		}
 	}
-	return features.Feature{}, false
+	return extensions.Extension{}, false
 }
 
-// byFeature runs one of f's rules. One that panics refuses the proposal,
-// and is logged, so a broken feature stops only what it checks: the store
+// byExtension runs one of f's rules. One that panics refuses the proposal,
+// and is logged, so a broken extension stops only what it checks: the store
 // unlocks and goes on as after any refusal.
-func byFeature(f features.Feature, rule features.Rule, p events.Proposal, state State) (rejection *events.Rejection) {
+func byExtension(f extensions.Extension, rule extensions.Rule, p events.Proposal, state State) (rejection *events.Rejection) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			slog.Warn("rules: a feature's rule panicked", "feature", f.Name, "type", p.Type, "stream", p.Stream, "panic", recovered)

@@ -18,7 +18,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/settingsfile"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -38,8 +38,8 @@ func TestFeaturesNeedTheUIToken(t *testing.T) {
 	}
 }
 
-// The features carry what the log holds that this build skipped: the
-// streams of a feature it doesn't have, and a type it doesn't know.
+// The extensions carry what the log holds that this build skipped: the
+// streams of an extension it doesn't have, and a type it doesn't know.
 func TestFeaturesCountWhatThisBuildSkipped(t *testing.T) {
 	spec := events.Spec{Writers: []events.ActorKind{events.System}}
 	newer, err := events.NewCatalogue(
@@ -80,23 +80,23 @@ func TestFeaturesCountWhatThisBuildSkipped(t *testing.T) {
 	}
 }
 
-// votes is a feature with a route behind each Auth: a read for the page, a
+// votes is an extension with a route behind each Auth: a read for the page, a
 // read the desk may make too, two writes, one of a type it lists in Writes
 // and one it doesn't, behind a route that names no Auth, and a webhook that
 // raises an issue on task-1 saying the body it was signed with.
-func votes() features.Feature {
-	return features.Feature{Name: "votes", Writes: []events.Type{events.TaskCreated, events.IssueRaised}, Routes: func(c features.Core) []features.Route {
+func votes() extensions.Extension {
+	return extensions.Extension{Name: "votes", Writes: []events.Type{events.TaskCreated, events.IssueRaised}, Routes: func(c extensions.Core) []extensions.Route {
 		write := func(p events.Proposal) http.HandlerFunc {
 			return func(w http.ResponseWriter, r *http.Request) { httpapi.Propose(w, c.Log, p) }
 		}
-		return []features.Route{
-			{Pattern: "GET /api/votes", Auth: features.UI, Handler: func(w http.ResponseWriter, r *http.Request) { httpapi.Reply(w, "votes") }},
-			{Pattern: "GET /api/votes/count", Auth: features.Desk, Handler: func(w http.ResponseWriter, r *http.Request) { httpapi.Reply(w, 3) }},
+		return []extensions.Route{
+			{Pattern: "GET /api/votes", Auth: extensions.UI, Handler: func(w http.ResponseWriter, r *http.Request) { httpapi.Reply(w, "votes") }},
+			{Pattern: "GET /api/votes/count", Auth: extensions.Desk, Handler: func(w http.ResponseWriter, r *http.Request) { httpapi.Reply(w, 3) }},
 			{Pattern: "POST /api/votes/task", Handler: write(events.Proposal{Stream: "task-2", Actor: httpapi.You, Type: events.TaskCreated,
 				Data: map[string]any{"title": "Count the votes", "repo": "/src/app", "coordinator": "tech-lead"}})},
 			{Pattern: "POST /api/votes/close", Handler: write(events.Proposal{Stream: "task-1", Actor: httpapi.You, Type: events.TaskDone,
 				Data: map[string]any{"summary": "Counted."}})},
-			{Pattern: "POST /api/votes/hook", Auth: features.Signed(signedWith(hookSecret)), Handler: func(w http.ResponseWriter, r *http.Request) {
+			{Pattern: "POST /api/votes/hook", Auth: extensions.Signed(signedWith(hookSecret)), Handler: func(w http.ResponseWriter, r *http.Request) {
 				body, _ := io.ReadAll(r.Body)
 				httpapi.Propose(w, c.Log, events.Proposal{Stream: "task-1", Actor: httpapi.System, Type: events.IssueRaised, Data: map[string]any{"reason": string(body)}})
 			}},
@@ -105,14 +105,14 @@ func votes() features.Feature {
 }
 
 // votesServer serves votes, writing through logs, with a task-1 to write to.
-func votesServer(t *testing.T, logs func(*store.Store) map[string]features.Proposer) (*httptest.Server, *store.Store) {
+func votesServer(t *testing.T, logs func(*store.Store) map[string]extensions.Proposer) (*httptest.Server, *store.Store) {
 	t.Helper()
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
 	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DeskToken: "desk-secret", DefaultRepo: "/src/app",
-		Features: []features.Feature{votes()}, Logs: logs(s)}, http.NotFoundHandler(), nil).Handler())
+		Extensions: []extensions.Extension{votes()}, Logs: logs(s)}, http.NotFoundHandler(), nil).Handler())
 	t.Cleanup(server.Close)
 	if code, body := call(t, server, "POST", "/api/tasks", `{"title":"Vote"}`); code != 200 {
 		t.Fatalf("create task-1: %d %s", code, body)
@@ -121,8 +121,8 @@ func votesServer(t *testing.T, logs func(*store.Store) map[string]features.Propo
 }
 
 // checkedVotes is votes' log as serve makes it.
-func checkedVotes(s *store.Store) map[string]features.Proposer {
-	return map[string]features.Proposer{"votes": features.Checked(votes(), events.Registration{}, s)}
+func checkedVotes(s *store.Store) map[string]extensions.Proposer {
+	return map[string]extensions.Proposer{"votes": extensions.Checked(votes(), events.Registration{}, s)}
 }
 
 // callAs is call with bearer as the credential, none when it is "".
@@ -141,9 +141,9 @@ func callAs(t *testing.T, server *httptest.Server, bearer, method, path string) 
 	return response.StatusCode, string(content)
 }
 
-// A feature's route is behind the wrapper its Auth names: UI takes only the
+// An extension's route is behind the wrapper its Auth names: UI takes only the
 // UI token, Desk the desk's too, and a route naming no Auth is UI's.
-func TestAFeatureRouteIsBehindItsAuth(t *testing.T) {
+func TestAnExtensionRouteIsBehindItsAuth(t *testing.T) {
 	server, s := votesServer(t, checkedVotes)
 	for _, c := range []struct {
 		method, path, bearer string
@@ -167,10 +167,10 @@ func TestAFeatureRouteIsBehindItsAuth(t *testing.T) {
 	}
 }
 
-// A feature's route writes through its checked proposer, as you: a type it
+// An extension's route writes through its checked proposer, as you: a type it
 // lists in Writes is written, one it doesn't is refused with a 409 and
 // nothing is stored.
-func TestAFeatureRouteWritesOnlyWhatItDeclares(t *testing.T) {
+func TestAnExtensionRouteWritesOnlyWhatItDeclares(t *testing.T) {
 	server, s := votesServer(t, checkedVotes)
 	before := s.LastPosition()
 	code, body := call(t, server, "POST", "/api/votes/close", `{}`)
@@ -188,10 +188,10 @@ func TestAFeatureRouteWritesOnlyWhatItDeclares(t *testing.T) {
 	}
 }
 
-// A feature the server was given no log for writes nothing, even a type it
+// An extension the server was given no log for writes nothing, even a type it
 // lists in Writes; its reads still answer.
-func TestAFeatureRouteWithNoLogWritesNothing(t *testing.T) {
-	server, s := votesServer(t, func(*store.Store) map[string]features.Proposer { return nil })
+func TestAnExtensionRouteWithNoLogWritesNothing(t *testing.T) {
+	server, s := votesServer(t, func(*store.Store) map[string]extensions.Proposer { return nil })
 	before := s.LastPosition()
 	if code, body := call(t, server, "POST", "/api/votes/task", `{}`); code != http.StatusConflict || !strings.Contains(body, "votes") {
 		t.Errorf("a write with no log: %d %s, want a 409", code, body)
@@ -204,27 +204,27 @@ func TestAFeatureRouteWithNoLogWritesNothing(t *testing.T) {
 	}
 }
 
-// A feature's route whose pattern a core route or another feature's has
-// already fails to mount, naming the feature and the pattern, whether the
+// An extension's route whose pattern a core route or another extension's has
+// already fails to mount, naming the extension and the pattern, whether the
 // core route is one of the first or the last the server registers.
-func TestAFeatureRouteThatClashesNamesItsFeature(t *testing.T) {
+func TestAnExtensionRouteThatClashesNamesItsExtension(t *testing.T) {
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
-	one := func(name, pattern string) features.Feature {
-		return features.Feature{Name: name, Routes: func(features.Core) []features.Route {
-			return []features.Route{{Pattern: pattern, Handler: func(http.ResponseWriter, *http.Request) {}}}
+	one := func(name, pattern string) extensions.Extension {
+		return extensions.Extension{Name: name, Routes: func(extensions.Core) []extensions.Route {
+			return []extensions.Route{{Pattern: pattern, Handler: func(http.ResponseWriter, *http.Request) {}}}
 		}}
 	}
 	for _, step := range []struct {
-		list []features.Feature
+		list []extensions.Extension
 		want string
 	}{
-		{[]features.Feature{one("votes", "GET /api/tasks")}, `the votes feature's route "GET /api/tasks" can't be mounted`},
-		{[]features.Feature{one("votes", "DELETE /api/integrations/connections/{id}")}, `the votes feature's route "DELETE /api/integrations/connections/{id}" can't be mounted`},
-		{[]features.Feature{one("votes", "GET /api/votes"), one("polls", "GET /api/votes")}, `the polls feature's route "GET /api/votes" can't be mounted`},
+		{[]extensions.Extension{one("votes", "GET /api/tasks")}, `the votes feature's route "GET /api/tasks" can't be mounted`},
+		{[]extensions.Extension{one("votes", "DELETE /api/integrations/connections/{id}")}, `the votes feature's route "DELETE /api/integrations/connections/{id}" can't be mounted`},
+		{[]extensions.Extension{one("votes", "GET /api/votes"), one("polls", "GET /api/votes")}, `the polls feature's route "GET /api/votes" can't be mounted`},
 	} {
 		got := func() (clash any) {
 			defer func() { clash = recover() }()
-			NewServer(s, state, Config{UIToken: token, Features: step.list}, http.NotFoundHandler(), nil).Handler()
+			NewServer(s, state, Config{UIToken: token, Extensions: step.list}, http.NotFoundHandler(), nil).Handler()
 			return nil
 		}()
 		if message, _ := got.(string); !strings.HasPrefix(message, step.want) {
@@ -417,11 +417,11 @@ token = "probe-token"
 hook = "other-secret"
 `
 
-// probe is a feature whose route says what its settings hold: its host, its
+// probe is an extension whose route says what its settings hold: its host, its
 // token read as a setting and as a secret, and other's secret.
-func probe() features.Feature {
-	return features.Feature{Name: "probe", Routes: func(c features.Core) []features.Route {
-		return []features.Route{{Pattern: "GET /api/probe", Handler: func(w http.ResponseWriter, r *http.Request) {
+func probe() extensions.Extension {
+	return extensions.Extension{Name: "probe", Routes: func(c extensions.Core) []extensions.Route {
+		return []extensions.Route{{Pattern: "GET /api/probe", Handler: func(w http.ResponseWriter, r *http.Request) {
 			host, _ := c.Settings.Setting("host")
 			asSetting, _ := c.Settings.Setting("token")
 			token, _ := c.Settings.Secret("token")
@@ -432,17 +432,17 @@ func probe() features.Feature {
 }
 
 // probeServer serves probe with settings, as serve gives them.
-func probeServer(t *testing.T, settings func(feature string) features.Settings) *httptest.Server {
+func probeServer(t *testing.T, settings func(extension string) extensions.Settings) *httptest.Server {
 	t.Helper()
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
-	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, Features: []features.Feature{probe()}, Settings: settings},
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, Extensions: []extensions.Extension{probe()}, Settings: settings},
 		http.NotFoundHandler(), nil).Handler())
 	t.Cleanup(server.Close)
 	return server
 }
 
-// A feature's route reads its own setting and secret in the settings file,
-// never another feature's or a secret as a setting, and sees an edit to the
+// An extension's route reads its own setting and secret in the settings file,
+// never another extension's or a secret as a setting, and sees an edit to the
 // file with no restart.
 func TestARouteReadsItsOwnSettings(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "features.toml")

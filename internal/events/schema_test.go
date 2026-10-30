@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 )
 
@@ -21,7 +21,7 @@ var update = flag.Bool("update", false, "rewrite the schema files from the catal
 const schemas = "schemas"
 
 func TestTheCatalogueListsItsTypesAndSpecs(t *testing.T) {
-	catalogue, err := events.NewCatalogue(features.Registration(ideas.Feature()))
+	catalogue, err := events.NewCatalogue(extensions.Registration(ideas.Extension()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestASchemaHoldsWhatTheSpecSays(t *testing.T) {
 // gives now: one file per type, none missing and none left over. Run with
 // -update to write them again after a Spec changes.
 func TestTheSchemaFilesAreUpToDate(t *testing.T) {
-	catalogue, err := events.NewCatalogue(features.Registration(ideas.Feature()))
+	catalogue, err := events.NewCatalogue(extensions.Registration(ideas.Extension()))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,23 +2,23 @@ package schedules
 
 import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 )
 
-// Name is Schedules' name as a feature.
+// Name is Schedules' name as an extension.
 const Name = "schedules"
 
-// Feature is Schedules as a feature: so far only its streams, whose types
-// features.Registration adds to the catalogue.
-func Feature() features.Feature {
-	return features.Feature{Name: Name, Version: 1, Streams: Streams()}
+// Extension is Schedules as an extension: so far only its streams, whose types
+// extensions.Registration adds to the catalogue.
+func Extension() extensions.Extension {
+	return extensions.Extension{Name: Name, Version: 1, Streams: Streams()}
 }
 
 // Streams are the schedules' streams, for the catalogue to check and the
 // state to build and keep: each holds the seven schedule types, and its
 // state is its *Schedule, nil until it is created.
-func Streams() *features.Streams {
-	return &features.Streams{Prefix: Prefix, Types: types, FromEvents: fromEvents, Next: next}
+func Streams() *extensions.Streams {
+	return &extensions.Streams{Prefix: Prefix, Types: types, FromEvents: fromEvents, Next: next}
 }
 
 // fromEvents is FromEvents with no schedule as a plain nil, which the state

@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/schema"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
@@ -26,14 +26,14 @@ const instructions = `- Ideas: the Visionaries suggest features as ideas (list_i
 // session is the Agentry server and the repo a Claude Code session is in
 // ("" outside one), which the tools act on.
 type session struct {
-	agentry features.API
+	agentry extensions.API
 	repo    string
 }
 
 // tools are ideas' MCP tools for a session in repo.
-func tools(agentry features.API, repo string) []features.Tool {
+func tools(agentry extensions.API, repo string) []extensions.Tool {
 	s := session{agentry: agentry, repo: repo}
-	return []features.Tool{
+	return []extensions.Tool{
 		{Name: "list_ideas", Description: "The features the Visionaries suggest for this repo (or all repos), newest first: open ones unless state says otherwise. Relay them to the user; the user decides on each.",
 			Input: schema.Object(schema.Props{"all": schema.Boolean("every repo, not only this one"), "state": schema.Enum("which ideas: open (the default), accepted, dismissed or all", "open", "accepted", "dismissed", "all")}), Run: s.listIdeas},
 		{Name: "accept_idea", Description: "Make an idea a task in the user's Backlog, or with start, a task that starts now. An idea that looks like an open task makes none until the user sees that task and chooses to make another (anyway). Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
@@ -126,7 +126,7 @@ func (s session) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 	if a.Kind == "" {
 		a.Kind = suggestedKind(i)
 	}
-	if ask := features.AskOf(ctx); ask != nil {
+	if ask := extensions.AskOf(ctx); ask != nil {
 		answer, ok, err := ask(ctx, "Accept the idea "+i.ID+", "+i.Title+"? It becomes a task in your Backlog, or one that starts now.\n\n"+aboutIdea(i), schema.Object(schema.Props{
 			"decision": schema.Enum("Make it a task, or leave the idea open", "accept", "leave open"),
 			"kind":     withDefault(schema.Enum("A task (one change) or an epic (split into stories)", "task", "epic"), a.Kind),
@@ -198,7 +198,7 @@ func duplicateOf(err error) (openTask, bool) {
 // for you to decide.
 func (s session) makeAnyway(ctx context.Context, i listed, like openTask) (again bool, why string, err error) {
 	task := fmt.Sprintf("%s %q%s: %s", tasks.ShownID(like.ID, tasks.Kind(like.Kind)), like.Title, placeOf(like.Column), s.agentry.PageURL("/tasks/"+like.ID))
-	ask := features.AskOf(ctx)
+	ask := extensions.AskOf(ctx)
 	if ask == nil {
 		return false, i.ID + " looks like the open task " + task + "\nNothing was written. If the user wants another task anyway, call accept_idea again with anyway.", nil
 	}
@@ -223,7 +223,7 @@ func (s session) dismissIdea(ctx context.Context, arguments json.RawMessage) (st
 	if err != nil {
 		return "", err
 	}
-	if ask := features.AskOf(ctx); ask != nil {
+	if ask := extensions.AskOf(ctx); ask != nil {
 		answer, ok, err := ask(ctx, "Dismiss the idea "+i.ID+", "+i.Title+"?\n\n"+aboutIdea(i), schema.Object(schema.Props{
 			"decision": schema.Enum("Dismiss it, or leave it open", "dismiss", "leave open"),
 			"note":     withDefault(schema.Text("Optional: why, so the Visionaries don't suggest it again"), a.Note),
@@ -282,7 +282,7 @@ func (s session) find(id string) (listed, error) {
 }
 
 // fetchIdeas are the ideas about a repo, or every repo's for "", newest first.
-func fetchIdeas(agentry features.API, repo string) ([]listed, error) {
+func fetchIdeas(agentry extensions.API, repo string) ([]listed, error) {
 	path := "/api/ideas"
 	if repo != "" {
 		path += "?repo=" + url.QueryEscape(repo)

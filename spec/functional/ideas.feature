@@ -60,7 +60,7 @@ Feature: Ideas
   Scenario: Ideas shows while a Visionaries team or an idea is there, and the page says what it is otherwise
     # internal/ideas/routes_test.go TestIdeasHiddenWithNoTeamAndNoIdeas, TestIdeasOnWithTheVisionariesTeam, TestIdeasKeptForTheirIdeasWhenTheTeamIsRemoved and TestIdeasBadgeCountsOpenIdeas
     # ui/src/features/ideas/view.test.ts "is off with no ideas and no team, and on with the team", "is on with ideas and no team" and "settles when no template turns Ideas on, on with ideas"
-    # internal/ideas/feature_test.go TestIdeasIsOnByTheTeamsTemplate, for the why
+    # internal/ideas/extension_test.go TestIdeasIsOnByTheTeamsTemplate, for the why
     # not under test, checked by hand: the Ideas page's off view, which shows what Ideas is and only the button "Ask the visionaries", or with no template that turns Ideas on reads "This Agentry has no team template that turns Ideas on, so there is no team to ask." and offers no button: ui/src/features/ideas/IdeasPage.tsx lines 155 to 167; ui/src/features/ideas/AskVisionaries.tsx lines 10 to 24
     Given no Visionaries team and no ideas
     When the features are read

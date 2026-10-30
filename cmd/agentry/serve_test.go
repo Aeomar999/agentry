@@ -19,7 +19,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/hostaddrs"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -107,7 +107,7 @@ func TestNetworkURLs(t *testing.T) {
 	}
 }
 
-// A log with streams of a feature this build doesn't have says so once per
+// A log with streams of an extension this build doesn't have says so once per
 // prefix at start, not once per event; an unknown type alone says nothing.
 func TestStartingSaysOncePerSkippedPrefix(t *testing.T) {
 	var said strings.Builder
@@ -212,8 +212,8 @@ func TestAnUnhashedBuildNeverUsesASnapshot(t *testing.T) {
 	snapshot := filepath.Join(filepath.Dir(logPath), snapshotFile)
 	startedAs := func(build string) (resumed int64) {
 		t.Helper()
-		state := current.Restore(snapshot, build, storetest.WithFeatures(), features.StreamsOf(installedFeatures()...)...)
-		log, err := store.Open(logPath, storetest.WithFeatures(), state, nil)
+		state := current.Restore(snapshot, build, storetest.WithExtensions(), extensions.StreamsOf(installedExtensions()...)...)
+		log, err := store.Open(logPath, storetest.WithExtensions(), state, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -477,10 +477,10 @@ func isArchived(t *testing.T, dataDir, id string) bool {
 // openLog opens the log in dataDir as serve does, replayed from the start.
 func openLog(t *testing.T, dataDir string) (*store.Store, *current.State) {
 	t.Helper()
-	catalogue := storetest.WithFeatures()
+	catalogue := storetest.WithExtensions()
 	state := storetest.NewState(catalogue)
 	log, err := store.Open(filepath.Join(dataDir, "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection {
-		return rules.Check(p, state, catalogue, installedFeatures()...)
+		return rules.Check(p, state, catalogue, installedExtensions()...)
 	})
 	if err != nil {
 		t.Fatal(err)

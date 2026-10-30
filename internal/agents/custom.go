@@ -96,7 +96,7 @@ func checkMember(team string, agent Agent, current Roster, seen map[string]bool)
 // roster, as CheckCustomTeam allowed it: the coordinator first, as in every
 // template, so a team never has agents and no coordinator. An empty prompt
 // gets a default one. template is the built-in template the team was copied
-// from, or "": every agent is made from it, so the team keeps its features.
+// from, or "": every agent is made from it, so the team keeps its extensions.
 func CustomTeam(team, template string, members []Agent, by events.Actor) []events.Proposal {
 	team, members = trimmed(team, members)
 	slices.SortStableFunc(members, func(a, b Agent) int {

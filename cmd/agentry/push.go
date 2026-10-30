@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/webpush"
 )
@@ -20,7 +20,7 @@ const (
 // until ctx ends. Push works only at an https -public-url (the page offers
 // it only then, and phones away from here reach nothing else), so without
 // one nothing starts, even for browsers subscribed on an earlier run.
-func startPush(ctx context.Context, log *store.Store, push *webpush.Store, publicURL string, waiting func() []features.Waiting) {
+func startPush(ctx context.Context, log *store.Store, push *webpush.Store, publicURL string, waiting func() []extensions.Waiting) {
 	if available, _ := webpush.Available(publicURL); !available {
 		return
 	}

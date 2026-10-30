@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/schema"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/waitlist"
@@ -47,9 +47,9 @@ type question struct {
 	HeldAt       time.Time
 }
 
-// tools are the core's tools, then those of every feature shown.
-func (s *Server) tools() []features.Tool {
-	tools := []features.Tool{
+// tools are the core's tools, then those of every extension shown.
+func (s *Server) tools() []extensions.Tool {
+	tools := []extensions.Tool{
 		{Name: "status", Description: "What needs the user, what is running and what is planned, for this repo (or all repos). Use it when the user asks how things stand.",
 			Input: schema.Object(schema.Props{"all": schema.Boolean("every repo, not only this one")}), Run: s.status},
 		{Name: "list_tasks", Description: "Every task of this repo (or all repos), newest first, with its status, epic and what it waits for.",
@@ -88,7 +88,7 @@ func (s *Server) tools() []features.Tool {
 		{Name: "get_file", Description: "Download one of a task's shared files to this machine.",
 			Input: schema.Object(schema.Props{"task": schema.Text("its id"), "name": schema.Text("the shared file's name"), "to": schema.Text("optional: where to save it; this folder if left out")}, "task", "name"), Run: s.getFile},
 	}
-	for _, f := range s.shownFeatures() {
+	for _, f := range s.shownExtensions() {
 		if f.Tools != nil {
 			tools = append(tools, f.Tools(s.agentry, s.repo)...)
 		}

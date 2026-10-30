@@ -226,7 +226,7 @@ func TestASnapshotFromBeforeARedactionGoesOnToTheRedactedLog(t *testing.T) {
 
 	resumed := current.Restore(older, "build-1", events.Core(), ideas.Streams())
 	again, err := store.Open(path, events.Core(), resumed, func(p events.Proposal) *events.Rejection {
-		return rules.Check(p, resumed, events.Core(), ideas.Feature())
+		return rules.Check(p, resumed, events.Core(), ideas.Extension())
 	})
 	if err != nil {
 		t.Fatal(err)

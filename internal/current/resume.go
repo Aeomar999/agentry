@@ -11,7 +11,7 @@ import (
 	"slices"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
@@ -35,7 +35,7 @@ import (
 // why and returns a new state, which Open loads whole; a torn or corrupt
 // file is kept as path.bad, the last one only, for a person to look at. A
 // file that can't be opened or read is left as it is.
-func Restore(path, build string, catalogue *events.Catalogue, owned ...*features.Streams) *State {
+func Restore(path, build string, catalogue *events.Catalogue, owned ...*extensions.Streams) *State {
 	s := New(catalogue, owned...)
 	err := s.readFile(path, build)
 	if err == nil {
@@ -141,7 +141,7 @@ func (s *State) resumeFrom(at *snapshotAt, log store.Past) (why string, err erro
 
 // rebuilt is the streams a snapshot holds no state for: the broken ones,
 // which break again with their reason, and every owned one, whose state is
-// a feature's own and has no saved form.
+// an extension's own and has no saved form.
 func (s *State) rebuilt(at *snapshotAt) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

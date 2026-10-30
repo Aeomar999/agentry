@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/hooks"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
@@ -39,24 +39,24 @@ type Config struct {
 	Helper      http.Handler       // the terminal of the Claude session beside a task, started on the way; nil for none
 	SetTheme    func(theme string) // the page tells the server its theme, for the sessions it starts
 
-	Fleet       *machines.Fleet              // where tasks' work is: for their Workspace page
-	Workers     *workerlink.Server           // the server's end of the workers' links; nil for none
-	PublicURL   string                       // the address people and workers reach; "" for the one a request came to
-	CA          string                       // Agentry's own CA certificate, PEM, when the server is served with it (-https); "" for none
-	NetworkURLs []string                     // the server on each of this machine's network addresses, when it listens on every one
-	LocalURL    string                       // the server on this computer, http://localhost:port; "" when localhost doesn't reach it
-	Binary      string                       // this agentry, which a joining machine can download
-	Local       workers.Machine              // what this machine is, as a worker would say it, for the Workers page
-	Blobs       sharedfiles.Disk             // where tasks' shared files are kept
-	Features    []features.Feature           // what teams and settings can turn on, for GET /api/features; their routes are mounted too
-	Logs        map[string]features.Proposer // each feature's proposer from features.Checked, by its Name: all its routes may write through
-	Worktrees   string                       // where this machine keeps tasks' worktrees: a call tried on the Policy page runs in one there
-	Push        *webpush.Store               // the VAPID keys and the browsers subscribed to pushes; nil for none
-	StopSession func(task string)            // ends a task's agent session, wherever it runs (turns.Runner.Stop); nil for none
-	Snapshots   *current.SnapshotWriter      // writes the state's snapshot; nil for none
-	Redactions  *hooks.Redactions            // the secrets redacted from the agents' knowledge, for the turns running then; nil for none
+	Fleet       *machines.Fleet                // where tasks' work is: for their Workspace page
+	Workers     *workerlink.Server             // the server's end of the workers' links; nil for none
+	PublicURL   string                         // the address people and workers reach; "" for the one a request came to
+	CA          string                         // Agentry's own CA certificate, PEM, when the server is served with it (-https); "" for none
+	NetworkURLs []string                       // the server on each of this machine's network addresses, when it listens on every one
+	LocalURL    string                         // the server on this computer, http://localhost:port; "" when localhost doesn't reach it
+	Binary      string                         // this agentry, which a joining machine can download
+	Local       workers.Machine                // what this machine is, as a worker would say it, for the Workers page
+	Blobs       sharedfiles.Disk               // where tasks' shared files are kept
+	Extensions  []extensions.Extension         // what teams and settings can turn on, for GET /api/features; their routes are mounted too
+	Logs        map[string]extensions.Proposer // each extension's proposer from extensions.Checked, by its Name: all its routes may write through
+	Worktrees   string                         // where this machine keeps tasks' worktrees: a call tried on the Policy page runs in one there
+	Push        *webpush.Store                 // the VAPID keys and the browsers subscribed to pushes; nil for none
+	StopSession func(task string)              // ends a task's agent session, wherever it runs (turns.Runner.Stop); nil for none
+	Snapshots   *current.SnapshotWriter        // writes the state's snapshot; nil for none
+	Redactions  *hooks.Redactions              // the secrets redacted from the agents' knowledge, for the turns running then; nil for none
 
-	Settings func(feature string) features.Settings // each feature's own table in the settings file, for its routes; nil for none
+	Settings func(extension string) extensions.Settings // each extension's own table in the settings file, for its routes; nil for none
 }
 
 // PolicySource is the policy in force and any problem with the file on
@@ -69,9 +69,9 @@ type PolicySource interface {
 }
 
 type Server struct {
-	store    *store.Store      // the log: what to propose, and events to show
-	events   features.EventLog // the store, read-only: what features' routes read of the log
-	state    *current.State    // every task and roster, as of the log's last event
+	store    *store.Store        // the log: what to propose, and events to show
+	events   extensions.EventLog // the store, read-only: what extensions' routes read of the log
+	state    *current.State      // every task and roster, as of the log's last event
 	config   Config
 	hooks    http.Handler
 	terminal http.Handler // the live terminal websocket, T-018
@@ -81,7 +81,7 @@ type Server struct {
 }
 
 func NewServer(s *store.Store, state *current.State, config Config, hooks, terminal http.Handler) *Server {
-	return &Server{store: s, events: features.ReadOnly(s), state: state, config: config, hooks: hooks, terminal: terminal, signins: newSignins(time.Now),
+	return &Server{store: s, events: extensions.ReadOnly(s), state: state, config: config, hooks: hooks, terminal: terminal, signins: newSignins(time.Now),
 		archives: &archives{blobs: config.Blobs}}
 }
 
@@ -206,9 +206,9 @@ func (s *Server) Handler() http.Handler {
 	if s.config.Desk != nil {
 		mux.Handle("GET /api/desk/terminal", s.requireUI(s.config.Desk.ServeHTTP))
 	}
-	// Last, so a feature's route that clashes with any core route is
-	// the one that fails, naming its feature.
-	for _, f := range s.config.Features {
+	// Last, so an extension's route that clashes with any core route is
+	// the one that fails, naming its extension.
+	for _, f := range s.config.Extensions {
 		s.mount(f, mux)
 	}
 	return s.atPosition(mux)

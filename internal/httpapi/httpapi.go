@@ -1,7 +1,7 @@
 // Package httpapi is how every handler of Agentry's HTTP API answers, the
-// core's in web and a feature's in its own package: JSON replies, request
-// bodies, and writes to the log turned into status codes. Like features, it
-// is a leaf: it imports only events and features.
+// core's in web and an extension's in its own package: JSON replies, request
+// bodies, and writes to the log turned into status codes. Like extensions, it
+// is a leaf: it imports only events and extensions.
 package httpapi
 
 import (
@@ -9,7 +9,7 @@ import (
 	"net/http"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 )
 
 // You is who every write from the page or the desk is made as.
@@ -45,7 +45,7 @@ func Failed(w http.ResponseWriter, err error) {
 
 // Propose writes a proposal and replies with the event, or with the
 // validator's reason as a 409 when it was refused.
-func Propose(w http.ResponseWriter, log features.Proposer, p events.Proposal) {
+func Propose(w http.ResponseWriter, log extensions.Proposer, p events.Proposal) {
 	if event, ok := write(w, log, p); ok {
 		Reply(w, event)
 	}
@@ -53,14 +53,14 @@ func Propose(w http.ResponseWriter, log features.Proposer, p events.Proposal) {
 
 // ProposeOrRefuse writes a proposal that comes before another, and answers
 // for the request only if it fails.
-func ProposeOrRefuse(w http.ResponseWriter, log features.Proposer, p events.Proposal) bool {
+func ProposeOrRefuse(w http.ResponseWriter, log extensions.Proposer, p events.Proposal) bool {
 	_, ok := write(w, log, p)
 	return ok
 }
 
 // write proposes p, and answers 500 when the log fails or 409 with the
 // reason when it was refused.
-func write(w http.ResponseWriter, log features.Proposer, p events.Proposal) (events.Event, bool) {
+func write(w http.ResponseWriter, log extensions.Proposer, p events.Proposal) (events.Event, bool) {
 	event, rejection, err := log.Propose(p)
 	switch {
 	case err != nil:

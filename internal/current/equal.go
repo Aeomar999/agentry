@@ -11,7 +11,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -187,8 +187,8 @@ func replayed[T any](replay func([]events.Event) (T, error), accepted []events.E
 	return replay(accepted)
 }
 
-// equalOwned compares every stream each feature's Streams keep, and their
-// order, with a replay through that feature's FromEvents. inLog is each
+// equalOwned compares every stream each extension's Streams keep, and their
+// order, with a replay through that extension's FromEvents. inLog is each
 // prefix's streams in the order of their first events in the log.
 func equalOwned(s *store.Store, cut int64, held *State, inLog map[string][]string) error {
 	for _, prefix := range slices.Sorted(maps.Keys(held.owners)) {
@@ -312,7 +312,7 @@ func equalStreamPositions(state *State, inLog map[string]int64) error {
 // stream the log breaks from one the snapshot does. The log is opened
 // with catalogue and the state keeps owned, as the store being checked
 // does. It returns the first difference, with its cut.
-func EqualThroughSnapshots(path string, catalogue *events.Catalogue, dir string, cuts []int64, owned ...*features.Streams) error {
+func EqualThroughSnapshots(path string, catalogue *events.Catalogue, dir string, cuts []int64, owned ...*extensions.Streams) error {
 	const build = "equal"
 	log, err := store.Open(path, catalogue, nil, nil)
 	if err != nil {

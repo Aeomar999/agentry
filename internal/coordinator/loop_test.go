@@ -11,7 +11,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
@@ -240,8 +240,8 @@ func newLoopWith(s *store.Store, state *current.State, root string, config turns
 	fleet := machines.NewFleet(&machines.Local{Label: workers.Local, ServerURL: "http://x", HookCommand: "agentry hook", WorktreeRoot: root,
 		Blobs: sharedfiles.Disk{Dir: filepath.Join(root, ".files")}})
 	loop := NewLoop(s, state, turns.NewRunner(s, state, fleet, config), fleet)
-	loop.Features = []features.Feature{ideas.Feature()}
-	loop.Logs = map[string]features.Proposer{ideas.Name: features.Checked(ideas.Feature(), features.Registration(ideas.Feature()), s)}
+	loop.Extensions = []extensions.Extension{ideas.Extension()}
+	loop.Logs = map[string]extensions.Proposer{ideas.Name: extensions.Checked(ideas.Extension(), extensions.Registration(ideas.Extension()), s)}
 	return loop
 }
 

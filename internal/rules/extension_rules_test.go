@@ -11,19 +11,19 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
-// noted is the one type in a fake feature's streams. It is in the fragile.
-// namespace, so only a feature with the fragile- prefix registers it.
+// noted is the one type in a fake extension's streams. It is in the fragile.
+// namespace, so only an extension with the fragile- prefix registers it.
 const noted events.Type = "fragile.noted"
 
-// fake is a feature that owns the streams prefix starts, holding noted
+// fake is an extension that owns the streams prefix starts, holding noted
 // events, with check as its Streams.Check and guards as its Guards. Its
 // state counts a stream's events.
-func fake(name, prefix string, check features.Rule, guards map[events.Type]features.Rule) features.Feature {
-	return features.Feature{Name: name, Guards: guards, Streams: &features.Streams{
+func fake(name, prefix string, check extensions.Rule, guards map[events.Type]extensions.Rule) extensions.Extension {
+	return extensions.Extension{Name: name, Guards: guards, Streams: &extensions.Streams{
 		Prefix: prefix,
 		Types:  map[events.Type]events.Spec{noted: {Fields: []string{"note"}, Writers: []events.ActorKind{events.Human}}},
 		FromEvents: func(accepted []events.Event) any {
@@ -41,10 +41,10 @@ func fake(name, prefix string, check features.Rule, guards map[events.Type]featu
 }
 
 // openInstalled is a store with the five default agents, whose rules run
-// the installed features', as serve wires them.
-func openInstalled(t *testing.T, installed ...features.Feature) *store.Store {
+// the installed extensions', as serve wires them.
+func openInstalled(t *testing.T, installed ...extensions.Extension) *store.Store {
 	t.Helper()
-	catalogue, err := events.NewCatalogue(features.Registrations(installed...)...)
+	catalogue, err := events.NewCatalogue(extensions.Registrations(installed...)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,10 +52,10 @@ func openInstalled(t *testing.T, installed ...features.Feature) *store.Store {
 }
 
 // openChecked is openInstalled with a catalogue of its own, which may lack
-// the installed features' streams or have a feature's that isn't installed.
-func openChecked(t *testing.T, catalogue *events.Catalogue, installed ...features.Feature) *store.Store {
+// the installed extensions' streams or have an extension's that isn't installed.
+func openChecked(t *testing.T, catalogue *events.Catalogue, installed ...extensions.Extension) *store.Store {
 	t.Helper()
-	var owned []*features.Streams
+	var owned []*extensions.Streams
 	for _, f := range installed {
 		owned = append(owned, f.Streams)
 	}
@@ -94,11 +94,11 @@ func newTask(stream string, by events.Actor, more map[string]any) events.Proposa
 	return events.Proposal{Stream: stream, Actor: by, Type: events.TaskCreated, Data: data}
 }
 
-// A feature's rules can only refuse: one that lets everything through
+// An extension's rules can only refuse: one that lets everything through
 // doesn't get past a refusal of the core's.
-func TestAFeaturesRulesOnlyRefuse(t *testing.T) {
-	allow := func(events.Proposal, features.Reader) *events.Rejection { return nil }
-	lenient := fake("lenient", "lenient-", allow, map[events.Type]features.Rule{
+func TestAnExtensionsRulesOnlyRefuse(t *testing.T) {
+	allow := func(events.Proposal, extensions.Reader) *events.Rejection { return nil }
+	lenient := fake("lenient", "lenient-", allow, map[events.Type]extensions.Rule{
 		events.TaskCreated: allow, events.TaskRenamed: allow, events.TaskHeld: allow, noted: allow})
 	s := openChecked(t, events.Core(), lenient)
 	refused := []struct {
@@ -120,14 +120,14 @@ func TestAFeaturesRulesOnlyRefuse(t *testing.T) {
 	}
 }
 
-// The core lets Agentry make a task from a feature's stream only when that
-// feature guards task.created: without ideas installed, Agentry's task from
+// The core lets Agentry make a task from an extension's stream only when that
+// extension guards task.created: without ideas installed, Agentry's task from
 // an idea is refused, whether the catalogue has the ideas' streams or not.
 func TestWithoutIdeasAgentryMakesNoTaskFromAnIdea(t *testing.T) {
 	unguarded := fake("unguarded", "idea-", nil, nil)
 	fromAnIdea := newTask("task-1", agentry, map[string]any{"from": "idea-1", "idea": "idea-1", "parked": "backlog"})
 	for name, catalogue := range map[string]*events.Catalogue{"the core's catalogue": events.Core(), "a catalogue with ideas": withIdeas} {
-		for _, installed := range [][]features.Feature{nil, {unguarded}} {
+		for _, installed := range [][]extensions.Extension{nil, {unguarded}} {
 			s := openChecked(t, catalogue, installed...)
 			if _, rejection, err := s.Propose(fromAnIdea); err != nil || rejection == nil ||
 				rejection.Reason != "Agentry makes a task only about an epic you closed, or from an idea the Visionaries agreed on" {
@@ -137,12 +137,12 @@ func TestWithoutIdeasAgentryMakesNoTaskFromAnIdea(t *testing.T) {
 	}
 }
 
-// A feature's Streams.Check that panics refuses that proposal, says so once
+// An extension's Streams.Check that panics refuses that proposal, says so once
 // in the log, and the store goes on: the same stream and others take the
 // next proposals.
 func TestAPanickingStreamsCheckRefusesOnlyItsProposal(t *testing.T) {
 	said := logged(t)
-	fragile := fake("fragile", "fragile-", func(p events.Proposal, _ features.Reader) *events.Rejection {
+	fragile := fake("fragile", "fragile-", func(p events.Proposal, _ extensions.Reader) *events.Rejection {
 		if p.Text("note") == "boom" {
 			panic("the check broke")
 		}
@@ -171,8 +171,8 @@ func TestAPanickingStreamsCheckRefusesOnlyItsProposal(t *testing.T) {
 // A Guard that panics refuses that proposal the same way.
 func TestAPanickingGuardRefusesOnlyItsProposal(t *testing.T) {
 	said := logged(t)
-	fragile := fake("fragile", "fragile-", nil, map[events.Type]features.Rule{
-		events.TaskRenamed: func(p events.Proposal, _ features.Reader) *events.Rejection {
+	fragile := fake("fragile", "fragile-", nil, map[events.Type]extensions.Rule{
+		events.TaskRenamed: func(p events.Proposal, _ extensions.Reader) *events.Rejection {
 			if p.Text("title") == "boom" {
 				panic("the guard broke")
 			}

@@ -330,7 +330,7 @@ func TestRemovedTemplatesNextLeavesTheOriginal(t *testing.T) {
 	}
 }
 
-// Bases resolve a link to the built-in template its team keeps the features
+// Bases resolve a link to the built-in template its team keeps the extensions
 // of: a built-in link itself, yours, live or removed, its base, and anything
 // else none.
 func TestBasesResolveALinkToItsBuiltInTemplate(t *testing.T) {

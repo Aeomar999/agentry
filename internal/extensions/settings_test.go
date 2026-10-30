@@ -1,10 +1,10 @@
-package features
+package extensions
 
 import "testing"
 
-// A feature's Settings reach its own table alone: another feature's values
+// An extension's Settings reach its own table alone: another extension's values
 // and secrets are not found, and each call reads the file as it is now.
-func TestSettingsReachOnlyTheirOwnFeaturesTable(t *testing.T) {
+func TestSettingsReachOnlyTheirOwnExtensionsTable(t *testing.T) {
 	tables := map[string]Table{
 		"a": {Values: map[string]string{"host": "a.example"}, Secrets: map[string]string{"token": "a-secret"}},
 		"b": {Values: map[string]string{"port": "8080"}, Secrets: map[string]string{"hook": "b-secret"}},

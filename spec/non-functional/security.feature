@@ -546,7 +546,7 @@ Feature: Security
     And a table header that is not a feature name is not named in the error
     And each feature reads only its own table
     # not under test, checked by hand: no other setting changes either
-    # README.md, Features' settings and secrets; internal/settingsfile/settingsfile_test.go TestABrokenFileKeepsTheLastGoodVersionAndIsNotQuoted, TestAHeaderThatIsntAFeatureNameIsNotLogged, TestAFeatureReadsOnlyItsOwnTable
+    # README.md, Features' settings and secrets; internal/settingsfile/settingsfile_test.go TestABrokenFileKeepsTheLastGoodVersionAndIsNotQuoted, TestAHeaderThatIsntAnExtensionNameIsNotLogged, TestAnExtensionReadsOnlyItsOwnTable
 
   @SEC-61 @test
   Scenario: A secret that reached the log can be redacted without being kept

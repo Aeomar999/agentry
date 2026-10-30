@@ -62,7 +62,7 @@ func TestATemplateIsBasedOnABuiltInTemplate(t *testing.T) {
 	refusedSaying(t, unknown, "there is no built-in template dreamers")
 }
 
-// A template of yours has no features of its own to pass on, so another
+// A template of yours has no extensions of its own to pass on, so another
 // isn't based on it: SaveTemplate takes its base instead.
 func TestATemplateIsNotBasedOnOneOfYours(t *testing.T) {
 	s := openSeeded(t)

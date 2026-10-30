@@ -1,4 +1,4 @@
-package features
+package extensions
 
 import (
 	"bytes"
@@ -12,8 +12,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 )
 
-// A feature whose Manifest panics is listed hidden and disabled, saying
-// why, and logged once; the features around it keep their own lines.
+// An extension whose Manifest panics is listed hidden and disabled, saying
+// why, and logged once; the extensions around it keep their own lines.
 func TestAPanickingManifestCostsOnlyItsOwnLine(t *testing.T) {
 	var said bytes.Buffer
 	before := slog.Default()
@@ -21,7 +21,7 @@ func TestAPanickingManifestCostsOnlyItsOwnLine(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(before) })
 
 	shown := Entry{Enabled: true, Visible: true, Why: "on", Badge: 2}
-	list := []Feature{
+	list := []Extension{
 		{Name: "before", Manifest: func(Reader) Entry { return shown }},
 		{Name: "nil reader", Manifest: func(r Reader) Entry { r.Roster(); return shown }}, // a nil Reader: the call panics
 		{Name: "plain"},
@@ -45,10 +45,10 @@ func TestAPanickingManifestCostsOnlyItsOwnLine(t *testing.T) {
 	}
 }
 
-// StreamsOf lists the streams of the features that own some, in order.
-func TestStreamsOfSkipsAFeatureWithNone(t *testing.T) {
+// StreamsOf lists the streams of the extensions that own some, in order.
+func TestStreamsOfSkipsAnExtensionWithNone(t *testing.T) {
 	a, b := &Streams{Prefix: "a-"}, &Streams{Prefix: "b-"}
-	got := StreamsOf(Feature{Name: "a", Streams: a}, Feature{Name: "none"}, Feature{Name: "b", Streams: b})
+	got := StreamsOf(Extension{Name: "a", Streams: a}, Extension{Name: "none"}, Extension{Name: "b", Streams: b})
 	if len(got) != 2 || got[0] != a || got[1] != b {
 		t.Errorf("StreamsOf = %v, want a's and b's", got)
 	}
@@ -90,7 +90,7 @@ type writable struct{ appended int }
 func (w *writable) Stream(string) ([]events.Event, error) { return nil, nil }
 func (w *writable) Append(events.Event) error             { w.appended++; return nil }
 
-// What ReadOnly returns gives a feature no way back to the store under it.
+// What ReadOnly returns gives an extension no way back to the store under it.
 func TestReadOnlyHidesTheStore(t *testing.T) {
 	log := ReadOnly(&writable{})
 	if _, found := log.(*writable); found {

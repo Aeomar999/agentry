@@ -44,7 +44,7 @@ func TestReadModelBench(t *testing.T) {
 	t.Logf("  store.Open:                  %8s", median(func() { openAndClose(t, path) }))
 	t.Logf("  heap held by the state:      %8d KB", heldBy(func() any { return openAndClose(t, path) })/1024)
 
-	s, state := storetest.OpenWith(t, path, storetest.WithFeatures())
+	s, state := storetest.OpenWith(t, path, storetest.WithExtensions())
 	raw, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +114,7 @@ func TestReadModelBench(t *testing.T) {
 	t.Log("rules.Check, which every Propose runs under its lock:")
 	proposal := events.Proposal{Stream: biggest, Actor: events.Actor{Kind: events.Agent, ID: "bench"}, Type: events.ActionResult,
 		Correlation: "no-such-action", Data: map[string]any{}}
-	catalogue := storetest.WithFeatures()
+	catalogue := storetest.WithExtensions()
 	t.Logf("  on %-25s %8s", biggest+":", median(func() { rules.Check(proposal, state, catalogue, storetest.Installed()...) }))
 
 	t.Log("what replaying everything costs, as Open does once:")
@@ -205,7 +205,7 @@ func watchdogLoad(state *current.State, stop chan struct{}) {
 // it, and returns the state.
 func openAndClose(t *testing.T, path string) *current.State {
 	t.Helper()
-	catalogue := storetest.WithFeatures()
+	catalogue := storetest.WithExtensions()
 	state := storetest.NewState(catalogue)
 	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection {
 		return rules.Check(p, state, catalogue, storetest.Installed()...)

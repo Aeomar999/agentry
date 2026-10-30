@@ -25,7 +25,7 @@ import (
 // id given that one of yours has, is refused with a 409: a new save never
 // replaces a template. The rules refuse it too, for a save that came in at
 // the same time; that refusal is the same 409. Once saved, the team is
-// linked to the template, so it keeps the features of the built-in one the
+// linked to the template, so it keeps the extensions of the built-in one the
 // template is based on; a link refused leaves the template saved, and the
 // reply says why the team isn't linked (notLinked). With replacing, and no
 // name or id, it updates the team's own template instead (updateTemplate).

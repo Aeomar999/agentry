@@ -10,27 +10,27 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 )
 
 // GET /api/waiting is the core's entries oldest first, then what each
-// feature says waits about ?repo=, worked out on the server's state. A
-// feature is asked though nothing shows it, and none waiting is []. An
+// extension says waits about ?repo=, worked out on the server's state. A
+// extension is asked though nothing shows it, and none waiting is []. An
 // epic's line names it epic-N; its key and task stay task-N.
-func TestWaitingIsTheCoreThenEachFeature(t *testing.T) {
+func TestWaitingIsTheCoreThenEachExtension(t *testing.T) {
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	polls := features.Feature{Name: "polls", Waiting: func(state features.Reader, repo string) []features.Waiting {
+	polls := extensions.Extension{Name: "polls", Waiting: func(state extensions.Reader, repo string) []extensions.Waiting {
 		if len(state.TaskIDs()) == 0 {
 			return nil
 		}
-		return []features.Waiting{{Key: "polls/1", Kind: "polls", Line: fmt.Sprintf("1 poll in %q of %d tasks", repo, len(state.TaskIDs()))}}
+		return []extensions.Waiting{{Key: "polls/1", Kind: "polls", Line: fmt.Sprintf("1 poll in %q of %d tasks", repo, len(state.TaskIDs()))}}
 	}}
 	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DeskToken: "desk-secret", DefaultRepo: "/src/app",
-		Features: []features.Feature{polls}}, http.NotFoundHandler(), nil).Handler())
+		Extensions: []extensions.Extension{polls}}, http.NotFoundHandler(), nil).Handler())
 	t.Cleanup(server.Close)
 	if code, body := call(t, server, "GET", "/api/waiting", ""); code != 200 || body != "[]\n" {
 		t.Errorf("nothing waiting: %d %q", code, body)
@@ -52,11 +52,11 @@ func TestWaitingIsTheCoreThenEachFeature(t *testing.T) {
 	}
 
 	code, body := call(t, server, "GET", "/api/waiting?repo=/src/app", "")
-	var waiting []features.Waiting
+	var waiting []extensions.Waiting
 	if err := json.Unmarshal([]byte(body), &waiting); err != nil || code != 200 {
 		t.Fatal(code, err, body)
 	}
-	want := []features.Waiting{
+	want := []extensions.Waiting{
 		{Key: "task-2/approval/push-1/git push", Task: "task-2", Kind: "needs you", Line: "task-2: Waiting for you to approve a push (review_approvals)"},
 		{Key: "task-1/question//Which layout?", Task: "task-1", Kind: "needs you", Line: "epic-1: tech-lead asks: Which layout?"},
 		{Key: "polls/1", Kind: "polls", Line: `1 poll in "/src/app" of 2 tasks`},

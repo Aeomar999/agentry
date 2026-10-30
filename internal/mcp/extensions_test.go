@@ -13,23 +13,23 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/schema"
 )
 
-// votes is a feature with one tool and a line in the instructions. The
+// votes is an extension with one tool and a line in the instructions. The
 // server says one vote waits for you (votesAgentry).
-func votes() features.Feature {
-	return features.Feature{Name: "votes",
-		Tools: func(agentry features.API, repo string) []features.Tool {
-			return []features.Tool{{Name: "cast_vote", Description: "Vote.", Input: schema.Object(schema.Props{}),
+func votes() extensions.Extension {
+	return extensions.Extension{Name: "votes",
+		Tools: func(agentry extensions.API, repo string) []extensions.Tool {
+			return []extensions.Tool{{Name: "cast_vote", Description: "Vote.", Input: schema.Object(schema.Props{}),
 				Run: func(context.Context, json.RawMessage) (string, error) { return "voted in " + repo, nil }}}
 		},
 		Instructions: "- Votes: cast them with cast_vote.",
 	}
 }
 
-// votesAgentry is an Agentry whose votes feature is hidden until show is
+// votesAgentry is an Agentry whose votes extension is hidden until show is
 // called. Its log is at position 1 until then, and 2 after: a wait for a
 // change past 1 answers once show is called. One vote waits for you all
 // along, in the repo asked about, as GET /api/waiting says.
@@ -75,12 +75,12 @@ func toolNames(c *claude) []string {
 	return names
 }
 
-// A hidden feature's tools aren't listed and can't be called, and its line
-// isn't in the instructions. When the log moves and the feature shows,
+// A hidden extension's tools aren't listed and can't be called, and its line
+// isn't in the instructions. When the log moves and the extension shows,
 // Claude Code is told the tools changed, and they are there.
-func TestAFeatureBringsItsToolsWhenItShows(t *testing.T) {
+func TestAnExtensionBringsItsToolsWhenItShows(t *testing.T) {
 	agentry, show := votesAgentry(t)
-	c := startWith(t, agentry, []features.Feature{votes()}, false, nil)
+	c := startWith(t, agentry, []extensions.Extension{votes()}, false, nil)
 	var hello struct {
 		Capabilities struct{ Tools struct{ ListChanged bool } }
 		Instructions string
@@ -111,7 +111,7 @@ func TestAFeatureBringsItsToolsWhenItShows(t *testing.T) {
 		t.Errorf("notified %v, want one list_changed", c.notified)
 	}
 
-	again := startWith(t, agentry, []features.Feature{votes()}, false, nil)
+	again := startWith(t, agentry, []extensions.Extension{votes()}, false, nil)
 	if err := json.Unmarshal(again.hello, &hello); err != nil || !strings.Contains(hello.Instructions, "Votes: cast them with cast_vote.\n- Every reply ends") {
 		t.Errorf("a shown feature's instructions:\n%s", hello.Instructions)
 	}
@@ -122,7 +122,7 @@ func TestAFeatureBringsItsToolsWhenItShows(t *testing.T) {
 // no repo.
 func TestRepliesEndWithWhatTheServerSaysWaits(t *testing.T) {
 	agentry, _ := votesAgentry(t)
-	c := startWith(t, agentry, []features.Feature{votes()}, false, nil)
+	c := startWith(t, agentry, []extensions.Extension{votes()}, false, nil)
 	if text := c.tool("list_tasks", map[string]any{}); !strings.HasSuffix(text, "Waiting for the user (1):\n- 1 vote to count in [/repo] (cast_vote)") {
 		t.Errorf("reply: %s", text)
 	}

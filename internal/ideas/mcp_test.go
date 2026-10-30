@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/mcp"
 )
@@ -52,7 +52,7 @@ func TestAgentryMCPListsTheIdeasToolsOnlyWhileIdeasShows(t *testing.T) {
 	agentry := client.Client{Where: client.Where{URL: server.URL}}
 
 	session := func() (call func(method string) json.RawMessage, next func() (method string)) {
-		s := mcp.New(agentry, t.TempDir(), "test", []features.Feature{ideas.Feature()})
+		s := mcp.New(agentry, t.TempDir(), "test", []extensions.Extension{ideas.Extension()})
 		toServer, fromClaude := io.Pipe()
 		fromServer, toClaude := io.Pipe()
 		go s.Serve(context.Background(), toServer, toClaude)

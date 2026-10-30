@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 )
 
 // inbox is a fake push service that keeps every push by its path,
@@ -67,16 +67,16 @@ type device struct {
 // waitingList is a list the test changes between checks.
 type waitingList struct {
 	mu      sync.Mutex
-	entries []features.Waiting
+	entries []extensions.Waiting
 }
 
-func (l *waitingList) set(entries ...features.Waiting) {
+func (l *waitingList) set(entries ...extensions.Waiting) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.entries = entries
 }
 
-func (l *waitingList) get() []features.Waiting {
+func (l *waitingList) get() []extensions.Waiting {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.entries
@@ -113,9 +113,9 @@ func pushed(t *testing.T, in *inbox, path string, d device) []message {
 }
 
 var (
-	approval = features.Waiting{Key: "task-4/approval/a1", Task: "task-4", Line: "task-4: Waiting for you to approve the push to dev", Kind: "needs you"}
-	question = features.Waiting{Key: "task-9/question/open", Task: "task-9", Line: "task-9: tech-lead asks which store to use", Kind: "needs you"}
-	ideas    = features.Waiting{Key: "ideas/3", Line: "3 open ideas from the Visionaries", Kind: "ideas"}
+	approval = extensions.Waiting{Key: "task-4/approval/a1", Task: "task-4", Line: "task-4: Waiting for you to approve the push to dev", Kind: "needs you"}
+	question = extensions.Waiting{Key: "task-9/question/open", Task: "task-9", Line: "task-9: tech-lead asks which store to use", Kind: "needs you"}
+	ideas    = extensions.Waiting{Key: "ideas/3", Line: "3 open ideas from the Visionaries", Kind: "ideas"}
 )
 
 func TestWhatWaitsAtStartIsNotPushed(t *testing.T) {
@@ -221,7 +221,7 @@ func TestAnEntryWithALongKeyIsStillPushed(t *testing.T) {
 	sink, _, devices := newSink(t, in, list, nil, "/phone")
 	sink.start()
 	text := strings.Repeat(`which "store" <db> to use? `, 200)
-	long := features.Waiting{Key: "task-9/question/open/" + text, Task: "task-9", Line: "task-9: tech-lead asks " + text, Kind: "needs you"}
+	long := extensions.Waiting{Key: "task-9/question/open/" + text, Task: "task-9", Line: "task-9: tech-lead asks " + text, Kind: "needs you"}
 	list.set(long)
 	sink.check(context.Background())
 
@@ -240,7 +240,7 @@ func TestATagIsShortAndTheSameForTheSameKey(t *testing.T) {
 
 func TestALongLineIsCutToFitAPush(t *testing.T) {
 	long := strings.Repeat("<é>", 2000)
-	got := messageOf(features.Waiting{Key: "k", Task: "task-1", Line: long})
+	got := messageOf(extensions.Waiting{Key: "k", Task: "task-1", Line: long})
 	if len(got.Body) > lineShown || !strings.HasSuffix(got.Body, "…") || !strings.HasPrefix(long, strings.TrimSuffix(got.Body, "…")) {
 		t.Errorf("want at most %d bytes of the line and an ellipsis, got %d bytes: %q", lineShown, len(got.Body), got.Body)
 	}

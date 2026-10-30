@@ -4,11 +4,11 @@ import (
 	"slices"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 )
 
 // Source is every idea, as kept from the log (current.State), read through
-// the state's generic reads of a feature's streams.
+// the state's generic reads of an extension's streams.
 type Source interface {
 	Owned(stream string) (any, error) // nil, nil when the stream holds nothing
 	OwnedIDs(prefix string) []string  // in log order, broken ones too
@@ -66,7 +66,7 @@ func InState(list []*Idea, state State) []*Idea {
 
 // newestSessionFirst sorts list by when the task each idea came from was
 // made, newest first, keeping list's order within a task.
-func newestSessionFirst(read features.Reader, list []*Idea) {
+func newestSessionFirst(read extensions.Reader, list []*Idea) {
 	started := map[string]time.Time{}
 	for _, idea := range list {
 		if _, seen := started[idea.Task]; !seen {

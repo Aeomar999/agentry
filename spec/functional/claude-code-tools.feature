@@ -180,7 +180,7 @@ Feature: Agentry from Claude Code
     And the reply names the new task as task-N and gives a link to its page: yes
     # not under test, checked by hand: the reply says its coordinator reads it next (internal/mcp/tools.go line 319)
     And the reply ends with Waiting for the user (2) when 2 things wait
-    # internal/mcp/server_test.go TestTheBoardAndHandingOverWork; the note at the end: internal/mcp/features_test.go TestRepliesEndWithWhatTheServerSaysWaits
+    # internal/mcp/server_test.go TestTheBoardAndHandingOverWork; the note at the end: internal/mcp/extensions_test.go TestRepliesEndWithWhatTheServerSaysWaits
 
   @TOOLS-17 @claude-code @test
   Scenario: create_task makes a story of an epic, or an epic with its stories
@@ -466,7 +466,7 @@ Feature: Agentry from Claude Code
     When the Visionaries team is added, so the feature turns on
     Then the session sends notifications/tools/list_changed 1 time
     And tools/list has all 3 ideas tools: yes
-    # internal/ideas/mcp_test.go TestAgentryMCPListsTheIdeasToolsOnlyWhileIdeasShows; no tool and its name, and list_changed 1 time: internal/mcp/features_test.go TestAFeatureBringsItsToolsWhenItShows, for any feature
+    # internal/ideas/mcp_test.go TestAgentryMCPListsTheIdeasToolsOnlyWhileIdeasShows; no tool and its name, and list_changed 1 time: internal/mcp/extensions_test.go TestAnExtensionBringsItsToolsWhenItShows, for any feature
 
   # ---- Hearing from Agentry --------------------------------------------------
 
@@ -476,7 +476,7 @@ Feature: Agentry from Claude Code
     When Claude calls any tool but status
     Then the reply ends with Waiting for the user (1): and that 1 line
     # internal/mcp/tools.go waitingNote: at most 5 waiting lines are shown
-    # internal/mcp/features_test.go TestRepliesEndWithWhatTheServerSaysWaits (list_tasks)
+    # internal/mcp/extensions_test.go TestRepliesEndWithWhatTheServerSaysWaits (list_tasks)
     # not under test, checked by hand: status gets no note, since the board says it already (internal/mcp/server.go line 116)
 
   @TOOLS-44 @claude-code @test
@@ -587,7 +587,7 @@ Feature: Agentry from Claude Code
     When Claude calls one of its tools
     Then the tool fails with no tool and its name: yes
     # not under test, checked by hand: 0 calls reach the server for it (internal/mcp/server.go line 121 answers before any call)
-    # internal/mcp/features_test.go TestAFeatureBringsItsToolsWhenItShows
+    # internal/mcp/extensions_test.go TestAnExtensionBringsItsToolsWhenItShows
 
   @TOOLS-53 @claude-code @test
   Scenario: The model cannot approve, close or copy for the user

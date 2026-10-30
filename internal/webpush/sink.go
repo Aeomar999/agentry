@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"unicode/utf8"
 
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 )
 
 const lineShown = 500 // how much of an entry's line a push carries; JSON escaping can make it six times longer
@@ -17,7 +17,7 @@ const lineShown = 500 // how much of an entry's line a push carries; JSON escapi
 // Sink pushes each thing that newly waits for you to every browser in the
 // Store, once. What already waits when it starts is not news.
 type Sink struct {
-	waiting func() []features.Waiting
+	waiting func() []extensions.Waiting
 	sender  *Sender
 	wake    <-chan struct{}
 	seen    map[string]bool
@@ -26,7 +26,7 @@ type Sink struct {
 // NewSink pushes what waiting lists, with sender, rechecking it each time
 // wake fires. waiting is the server's Waiting(""), which reads the read
 // model, so wake should fire when the log changes.
-func NewSink(waiting func() []features.Waiting, sender *Sender, wake <-chan struct{}) *Sink {
+func NewSink(waiting func() []extensions.Waiting, sender *Sender, wake <-chan struct{}) *Sink {
 	return &Sink{waiting: waiting, sender: sender, wake: wake}
 }
 
@@ -65,7 +65,7 @@ func (s *Sink) check(ctx context.Context) {
 // push sends entry to every subscription. One that fails doesn't stop the
 // others; its error goes to the server's log, never the event log, since
 // it can name the device's address.
-func (s *Sink) push(ctx context.Context, entry features.Waiting) {
+func (s *Sink) push(ctx context.Context, entry extensions.Waiting) {
 	message, err := json.Marshal(messageOf(entry))
 	if err != nil {
 		slog.Warn("push: the message can't be made", "tag", tagOf(entry.Key), "error", err)
@@ -89,7 +89,7 @@ type message struct {
 	Tag   string `json:"tag"`
 }
 
-func messageOf(entry features.Waiting) message {
+func messageOf(entry extensions.Waiting) message {
 	url := "/"
 	if entry.Task != "" {
 		url = "/tasks/" + entry.Task
@@ -118,7 +118,7 @@ func shortened(text string, limit int) string {
 	return text[:cut] + "…"
 }
 
-func keys(waiting []features.Waiting) map[string]bool {
+func keys(waiting []extensions.Waiting) map[string]bool {
 	seen := map[string]bool{}
 	for _, entry := range waiting {
 		seen[entry.Key] = true

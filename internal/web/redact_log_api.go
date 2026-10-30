@@ -20,7 +20,7 @@ import (
 // that holds it is redacted as its own route redacts it, one
 // event.redacted each.
 
-// namedStreams are the streams that aren't a task's or a feature's, in the order
+// namedStreams are the streams that aren't a task's or an extension's, in the order
 // a redaction across the log lists them.
 var namedStreams = []string{events.AgentsStream, events.PolicyStream, events.WorkersStream, events.ConnectionsStream, events.SettingsStream, events.TemplatesStream}
 
@@ -279,7 +279,7 @@ func (p logPreview) failed() bool {
 
 // streamsLogged is every stream a redaction across the log reads, in the
 // order it lists them: each task's, by id, but an erased one's, of which
-// nothing is left; then the named streams; then each feature's, in log
+// nothing is left; then the named streams; then each extension's, in log
 // order.
 func (s *Server) streamsLogged() []loggedStream {
 	var streams []loggedStream
@@ -293,11 +293,11 @@ func (s *Server) streamsLogged() []loggedStream {
 	for _, name := range namedStreams {
 		streams = append(streams, loggedStream{name: name})
 	}
-	for _, feature := range s.config.Features {
-		if feature.Streams == nil {
+	for _, extension := range s.config.Extensions {
+		if extension.Streams == nil {
 			continue
 		}
-		for _, id := range s.state.OwnedIDs(feature.Streams.Prefix) {
+		for _, id := range s.state.OwnedIDs(extension.Streams.Prefix) {
 			streams = append(streams, loggedStream{name: id})
 		}
 	}

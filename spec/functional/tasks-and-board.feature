@@ -186,7 +186,7 @@ Feature: Tasks and the board
 
   @TASK-16 @user @test
   Scenario: Shipping is a column only while it means something
-    # internal/web/features_api_test.go TestTheBoardShowsShippingOnlyWhileItMeansSomething
+    # internal/web/extensions_api_test.go TestTheBoardShowsShippingOnlyWhileItMeansSomething
     Given the Software team, whose deployer ships work
     Then the board lists exactly 6 columns, Shipping among them
     When the user adds the Writing team and removes the Software team

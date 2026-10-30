@@ -38,7 +38,7 @@ func (s *Server) changeAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	agent.Name = r.PathValue("name") // the name is who the agent is; it doesn't change
 	if had, found := s.state.Roster().Get(agent.Name); found {
-		agent.Template = had.Template // what it was made from stays, so its team keeps its features
+		agent.Template = had.Template // what it was made from stays, so its team keeps its extensions
 	}
 	httpapi.Propose(w, s.store, agent.Proposal(httpapi.You, true))
 }
@@ -460,7 +460,7 @@ type templateView struct {
 	UserMade    bool         `json:"userMade"`          // one you saved, not one Agentry ships
 	SavedAt     string       `json:"savedAt,omitempty"` // yours: when you last saved it, RFC 3339
 	From        string       `json:"from,omitempty"`    // yours: the team you saved it from, if the log says
-	BasedOn     string       `json:"basedOn,omitempty"` // yours: the built-in template whose features its teams keep
+	BasedOn     string       `json:"basedOn,omitempty"` // yours: the built-in template whose extensions its teams keep
 }
 
 type memberView struct {
@@ -477,7 +477,7 @@ type memberView struct {
 }
 
 // yourView is a template you saved, with when and where from, and the
-// features of the built-in template it is based on, which its teams keep.
+// extensions of the built-in template it is based on, which its teams keep.
 func yourView(u agents.UserTemplate) templateView {
 	view := viewOf(u.Template(), true)
 	view.SavedAt, view.From, view.BasedOn = u.SavedAt.UTC().Format(time.RFC3339), u.From, u.BasedOn

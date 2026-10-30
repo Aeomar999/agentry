@@ -1,6 +1,6 @@
 // Package schema builds the JSON Schemas of MCP tools' arguments and of
 // what Claude Code asks you (elicitation), for the core's tools in mcp and
-// a feature's alike.
+// an extension's alike.
 package schema
 
 // Props are an object's properties, by name.

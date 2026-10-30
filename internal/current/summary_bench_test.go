@@ -42,7 +42,7 @@ func benchSummaries(t *testing.T, roster agents.Roster, archivable []*tasks.Task
 // summariesOnly is a state of the tasks archived: each one's stream is its
 // marker alone.
 func summariesOnly(roster agents.Roster, archivable []*tasks.Task) *current.State {
-	state := storetest.NewState(storetest.WithFeatures())
+	state := storetest.NewState(storetest.WithExtensions())
 	for i, task := range archivable {
 		created := events.Event{Position: int64(2*i + 1), Proposal: events.Proposal{Stream: task.ID}}
 		marker := events.Event{Position: int64(2*i + 2), Proposal: taskstest.Marker([]events.Event{created}, tasks.SummaryOf(task, roster))}

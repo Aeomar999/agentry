@@ -476,7 +476,7 @@ func TestATemplateKeepsItsBase(t *testing.T) {
 }
 
 // The list says which built-in template one of yours is based on and gives
-// it that template's features, which its teams keep, so the page finds them;
+// it that template's extensions, which its teams keep, so the page finds them;
 // one with no base turns nothing on. The built-in rows don't change.
 func TestYourTemplateListsItsBasesFeatures(t *testing.T) {
 	server, _ := newTestServer(t)
@@ -534,7 +534,7 @@ func TestATeamFromARemovedTemplateKeepsItsBase(t *testing.T) {
 }
 
 // GET /api/agents gives each agent the built-in template its own resolves
-// to, so the page finds a team from a removed template by its feature. An
+// to, so the page finds a team from a removed template by its extension. An
 // agent you made has none.
 func TestAnAgentFromARemovedTemplateListsItsBase(t *testing.T) {
 	server, _ := newTestServer(t)

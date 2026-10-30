@@ -1,11 +1,11 @@
 // Package settingsfile is the settings file, features.toml beside
-// policy.toml: each feature's settings and secrets, such as a git host's
+// policy.toml: each extension's settings and secrets, such as a git host's
 // token. It is watched as the policy is, and kept out of the log, which is
 // replayed, kept in snapshots and shown on the page. Nothing here writes or
 // logs what the file holds: a problem names the file and where it is, not
 // the line.
 //
-// The file holds one table per feature, of strings, and a secrets table
+// The file holds one table per extension, of strings, and a secrets table
 // under it:
 //
 //	[ideas]
@@ -30,7 +30,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 )
 
 // Live is the settings file in force. A version that doesn't load never
@@ -38,7 +38,7 @@ import (
 // No file is no settings.
 type Live struct {
 	path     string
-	current  atomic.Pointer[map[string]features.Table]
+	current  atomic.Pointer[map[string]extensions.Table]
 	lastSeen [32]byte // the content last loaded or refused, so each version is judged once
 	inForce  bool     // whether a version that loaded is in force, rather than none
 }
@@ -50,18 +50,18 @@ var unread [32]byte
 // settings, and one that doesn't load starts with none and logs why.
 func Open(path string) *Live {
 	l := &Live{path: path}
-	l.current.Store(&map[string]features.Table{})
+	l.current.Store(&map[string]extensions.Table{})
 	l.lastSeen = sha256.Sum256(nil) // so a missing file isn't reported
 	l.reload()
 	return l
 }
 
-// Tables are the tables in force, by feature. Callers must not change them.
-func (l *Live) Tables() map[string]features.Table { return *l.current.Load() }
+// Tables are the tables in force, by extension. Callers must not change them.
+func (l *Live) Tables() map[string]extensions.Table { return *l.current.Load() }
 
-// For is feature's settings, which read the version in force on every call.
-func (l *Live) For(feature string) features.Settings {
-	return features.SettingsIn(l.Tables, feature)
+// For is extension's settings, which read the version in force on every call.
+func (l *Live) For(extension string) extensions.Settings {
+	return extensions.SettingsIn(l.Tables, extension)
 }
 
 // Watch reloads the file every interval until ctx ends. Only one Watch may
@@ -127,16 +127,16 @@ func (l *Live) gone() {
 		return // never there, empty, or already said
 	}
 	l.lastSeen = none
-	l.current.Store(&map[string]features.Table{})
+	l.current.Store(&map[string]extensions.Table{})
 	l.inForce = false
 	slog.Warn("agentry: the settings file is gone; features have no settings now", "file", l.path)
 }
 
 // parse reads the file's tables. Its errors never quote the file: go-toml's
-// can, so only their position is kept. They name a feature's table, never a
-// key or a header that isn't a feature's name, where a token pasted in the
+// can, so only their position is kept. They name an extension's table, never a
+// key or a header that isn't an extension's name, where a token pasted in the
 // wrong place would be.
-func parse(text []byte) (map[string]features.Table, error) {
+func parse(text []byte) (map[string]extensions.Table, error) {
 	var file map[string]any
 	if err := toml.NewDecoder(bytes.NewReader(text)).Decode(&file); err != nil {
 		var syntax *toml.DecodeError
@@ -146,34 +146,34 @@ func parse(text []byte) (map[string]features.Table, error) {
 		}
 		return nil, errors.New("it isn't valid TOML")
 	}
-	tables := map[string]features.Table{}
-	for feature, value := range file {
+	tables := map[string]extensions.Table{}
+	for extension, value := range file {
 		table, ok := value.(map[string]any)
 		if !ok {
 			return nil, errors.New("the top of the file should hold only tables, one per feature")
 		}
-		parsed, err := parseTable(feature, table)
+		parsed, err := parseTable(extension, table)
 		if err != nil {
 			return nil, err
 		}
-		tables[feature] = parsed
+		tables[extension] = parsed
 	}
 	return tables, nil
 }
 
-// parseTable reads one feature's table: strings, and a secrets table of strings.
-func parseTable(feature string, table map[string]any) (features.Table, error) {
-	parsed := features.Table{Values: map[string]string{}, Secrets: map[string]string{}}
+// parseTable reads one extension's table: strings, and a secrets table of strings.
+func parseTable(extension string, table map[string]any) (extensions.Table, error) {
+	parsed := extensions.Table{Values: map[string]string{}, Secrets: map[string]string{}}
 	for key, value := range table {
 		if key == "secrets" {
 			secrets, ok := value.(map[string]any)
 			if !ok {
-				return parsed, fmt.Errorf("%s should be a table", header(feature, true))
+				return parsed, fmt.Errorf("%s should be a table", header(extension, true))
 			}
 			for name, secret := range secrets {
 				text, ok := secret.(string)
 				if !ok {
-					return parsed, fmt.Errorf("a secret in %s should be a string", header(feature, true))
+					return parsed, fmt.Errorf("a secret in %s should be a string", header(extension, true))
 				}
 				parsed.Secrets[name] = text
 			}
@@ -181,34 +181,34 @@ func parseTable(feature string, table map[string]any) (features.Table, error) {
 		}
 		text, ok := value.(string)
 		if !ok {
-			return parsed, fmt.Errorf("a setting in %s should be a string", header(feature, false))
+			return parsed, fmt.Errorf("a setting in %s should be a string", header(extension, false))
 		}
 		parsed.Values[key] = text
 	}
 	return parsed, nil
 }
 
-// header names feature's table, or the secrets table under it, in a problem:
-// by its header when feature looks like a feature's name, and otherwise
+// header names extension's table, or the secrets table under it, in a problem:
+// by its header when extension looks like an extension's name, and otherwise
 // without it, as a token pasted as a header would be logged.
-func header(feature string, secrets bool) string {
+func header(extension string, secrets bool) string {
 	switch {
-	case !looksLikeAFeature(feature) && secrets:
+	case !looksLikeAnExtension(extension) && secrets:
 		return "a secrets table in the file"
-	case !looksLikeAFeature(feature):
+	case !looksLikeAnExtension(extension):
 		return "a table in the file"
 	case secrets:
-		return "[" + feature + ".secrets]"
+		return "[" + extension + ".secrets]"
 	}
-	return "[" + feature + "]"
+	return "[" + extension + "]"
 }
 
-// featureName is the shape of a feature's name, such as ideas or git-host:
+// extensionName is the shape of an extension's name, such as ideas or git-host:
 // short lowercase words joined by dashes. A token rarely has it, having
 // digits or capitals.
-var featureName = regexp.MustCompile(`^[a-z]+(-[a-z]+)*$`)
+var extensionName = regexp.MustCompile(`^[a-z]+(-[a-z]+)*$`)
 
-// looksLikeAFeature is whether name has the shape of a feature's name.
-func looksLikeAFeature(name string) bool {
-	return len(name) <= 32 && featureName.MatchString(name)
+// looksLikeAnExtension is whether name has the shape of an extension's name.
+func looksLikeAnExtension(name string) bool {
+	return len(name) <= 32 && extensionName.MatchString(name)
 }

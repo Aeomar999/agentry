@@ -59,7 +59,7 @@ type eraseFixture struct {
 func newEraseFixture(t *testing.T) *eraseFixture {
 	t.Helper()
 	f := &eraseFixture{dir: t.TempDir()}
-	f.log, f.state = storetest.OpenWith(t, filepath.Join(f.dir, "agentry.db"), storetest.WithFeatures())
+	f.log, f.state = storetest.OpenWith(t, filepath.Join(f.dir, "agentry.db"), storetest.WithExtensions())
 	for _, p := range agents.SeedProposals(nil) {
 		f.log.Propose(p)
 	}
@@ -75,7 +75,7 @@ func newEraseFixture(t *testing.T) *eraseFixture {
 	}
 	f.hooks = hooks.NewHandler(f.log, f.state, nil)
 	f.web = NewServer(f.log, f.state, Config{UIToken: token, DeskToken: "desk-secret", DefaultRepo: "/r",
-		Blobs: f.blobs, Snapshots: f.snapshots, StopSession: stop, Redactions: f.hooks.Redactions(), Features: storetest.Installed()}, http.NotFoundHandler(), nil)
+		Blobs: f.blobs, Snapshots: f.snapshots, StopSession: stop, Redactions: f.hooks.Redactions(), Extensions: storetest.Installed()}, http.NotFoundHandler(), nil)
 	f.server = httptest.NewServer(f.web.Handler())
 	t.Cleanup(f.server.Close)
 

@@ -12,7 +12,7 @@ import (
 
 const policyFile = "policy.toml"
 
-// settingsFile holds features' settings and secrets, beside the policy.
+// settingsFile holds extensions' settings and secrets, beside the policy.
 const settingsFile = "features.toml"
 
 // openPolicy loads the policy agents follow, writing the default on first

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 )
 
@@ -63,7 +63,7 @@ func TestCheckShapeAndWriter(t *testing.T) {
 		{"the policy asks", events.Proposal{Stream: "task-1", Actor: events.Actor{events.Policy, "rules"}, Type: events.ActionAsked, Correlation: "toolu_1",
 			Data: map[string]any{"reason": "may reach outside the worktree"}}, ""},
 	}
-	catalogue, err := events.NewCatalogue(features.Registration(ideas.Feature()))
+	catalogue, err := events.NewCatalogue(extensions.Registration(ideas.Extension()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestNewCatalogueRefusesWhatWouldCollide(t *testing.T) {
 		registration []events.Registration
 		want         string // in the error
 	}{
-		{"a prefix ideas took", []events.Registration{features.Registration(ideas.Feature()), {Prefix: ideas.Prefix, Types: map[events.Type]events.Spec{"note.written": spec}}}, `prefix "idea-" is taken`},
+		{"a prefix ideas took", []events.Registration{extensions.Registration(ideas.Extension()), {Prefix: ideas.Prefix, Types: map[events.Type]events.Spec{"note.written": spec}}}, `prefix "idea-" is taken`},
 		{"a prefix overlapping another", []events.Registration{notes, {Prefix: "note-pad-", Types: map[events.Type]events.Spec{"pad.written": spec}}}, `prefix "note-pad-" is taken`},
 		{"a prefix a core stream starts with", []events.Registration{{Prefix: "agent", Types: map[events.Type]events.Spec{"note.written": spec}}}, `prefix "agent" is taken`},
 		{"a type in its streams and in tasks'", []events.Registration{{Prefix: "note-", Types: map[events.Type]events.Spec{"note.written": spec}, TaskTypes: map[events.Type]events.Spec{"note.written": spec}}}, "note.written is taken"},
@@ -105,7 +105,7 @@ func TestNewCatalogueRefusesWhatWouldCollide(t *testing.T) {
 			t.Errorf("%s: got %v, want an error with %q", c.name, err, c.want)
 		}
 	}
-	if _, err := events.NewCatalogue(features.Registration(ideas.Feature()), events.Registration{TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec}}); err != nil {
+	if _, err := events.NewCatalogue(extensions.Registration(ideas.Extension()), events.Registration{TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec}}); err != nil {
 		t.Errorf("a task type in a namespace of its own: %v", err)
 	}
 }
@@ -142,10 +142,10 @@ func TestNewCatalogueRefusesATypeOutsideItsNamespace(t *testing.T) {
 		}
 	}
 	accepted := [][]events.Registration{
-		{features.Registration(ideas.Feature())},
-		{features.Registration(ideas.Feature()), {}},
-		{features.Registration(ideas.Feature()), {Prefix: "note-", Types: map[events.Type]events.Spec{"note.written": spec}, TaskTypes: map[events.Type]events.Spec{"note.flagged": spec}}},
-		{features.Registration(ideas.Feature()), {TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec, "git.pr_merged": spec}}},
+		{extensions.Registration(ideas.Extension())},
+		{extensions.Registration(ideas.Extension()), {}},
+		{extensions.Registration(ideas.Extension()), {Prefix: "note-", Types: map[events.Type]events.Spec{"note.written": spec}, TaskTypes: map[events.Type]events.Spec{"note.flagged": spec}}},
+		{extensions.Registration(ideas.Extension()), {TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec, "git.pr_merged": spec}}},
 	}
 	for _, registrations := range accepted {
 		if _, err := events.NewCatalogue(registrations...); err != nil {
@@ -163,39 +163,39 @@ func TestIdeasStreamsRegisterWhatItsRegistrationDid(t *testing.T) {
 		"idea.accepted":  {Fields: []string{"task"}, Writers: []events.ActorKind{events.Human, events.System}},
 		"idea.dismissed": {Fields: []string{"note"}, Writers: []events.ActorKind{events.Human}},
 	}}
-	if got := features.Registration(ideas.Feature()); !reflect.DeepEqual(got, was) {
+	if got := extensions.Registration(ideas.Extension()); !reflect.DeepEqual(got, was) {
 		t.Errorf("ideas registers %+v, want %+v", got, was)
 	}
 }
 
-// NewCatalogue refuses a feature's Streams as it refuses any registration,
-// and a feature with no Streams adds nothing to it.
-func TestNewCatalogueRefusesFeaturesStreamsThatWouldCollide(t *testing.T) {
+// NewCatalogue refuses an extension's Streams as it refuses any registration,
+// and an extension with no Streams adds nothing to it.
+func TestNewCatalogueRefusesExtensionsStreamsThatWouldCollide(t *testing.T) {
 	spec := events.Spec{Writers: []events.ActorKind{events.System}}
-	streams := func(prefix string, kind events.Type) features.Feature {
-		return features.Feature{Name: prefix, Streams: &features.Streams{Prefix: prefix, Types: map[events.Type]events.Spec{kind: spec}}}
+	streams := func(prefix string, kind events.Type) extensions.Extension {
+		return extensions.Extension{Name: prefix, Streams: &extensions.Streams{Prefix: prefix, Types: map[events.Type]events.Spec{kind: spec}}}
 	}
 	cases := []struct {
 		name string
-		list []features.Feature
+		list []extensions.Extension
 		want string // in the error
 	}{
-		{"a prefix ideas took", []features.Feature{ideas.Feature(), streams(ideas.Prefix, "note.written")}, `prefix "idea-" is taken`},
-		{"a prefix overlapping another", []features.Feature{streams("note-", "note.written"), streams("note-pad-", "pad.written")}, `prefix "note-pad-" is taken`},
-		{"a task- prefix", []features.Feature{streams("task-notes-", "note.written")}, `prefix "task-notes-" overlaps task-`},
+		{"a prefix ideas took", []extensions.Extension{ideas.Extension(), streams(ideas.Prefix, "note.written")}, `prefix "idea-" is taken`},
+		{"a prefix overlapping another", []extensions.Extension{streams("note-", "note.written"), streams("note-pad-", "pad.written")}, `prefix "note-pad-" is taken`},
+		{"a task- prefix", []extensions.Extension{streams("task-notes-", "note.written")}, `prefix "task-notes-" overlaps task-`},
 		// The namespace check fires before the "taken" one; the
 		// Registration-level cases cover a type that is taken.
-		{"a core type", []features.Feature{streams("note-", events.TaskCreated)}, `stream type task.created is outside the note. namespace of stream prefix "note-"`},
-		{"stream types with no prefix", []features.Feature{streams("", "note.written")}, "need a stream prefix"},
+		{"a core type", []extensions.Extension{streams("note-", events.TaskCreated)}, `stream type task.created is outside the note. namespace of stream prefix "note-"`},
+		{"stream types with no prefix", []extensions.Extension{streams("", "note.written")}, "need a stream prefix"},
 	}
 	for _, c := range cases {
-		_, err := events.NewCatalogue(features.Registrations(c.list...)...)
+		_, err := events.NewCatalogue(extensions.Registrations(c.list...)...)
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: got %v, want an error with %q", c.name, err, c.want)
 		}
 	}
 
-	catalogue, err := events.NewCatalogue(features.Registrations(ideas.Feature(), features.Feature{Name: "plain"}, streams("note-", "note.written"))...)
+	catalogue, err := events.NewCatalogue(extensions.Registrations(ideas.Extension(), extensions.Extension{Name: "plain"}, streams("note-", "note.written"))...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,11 +214,11 @@ func TestNewCatalogueRefusesFeaturesStreamsThatWouldCollide(t *testing.T) {
 	}
 }
 
-// A feature's task types go in task streams; its stream types only in its
+// An extension's task types go in task streams; its stream types only in its
 // own streams, which aren't tasks.
 func TestARegisteredPrefixIsNotATask(t *testing.T) {
 	spec := events.Spec{Writers: []events.ActorKind{events.System}}
-	catalogue, err := events.NewCatalogue(features.Registration(ideas.Feature()), events.Registration{TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec}})
+	catalogue, err := events.NewCatalogue(extensions.Registration(ideas.Extension()), events.Registration{TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,9 +240,9 @@ func TestARegisteredPrefixIsNotATask(t *testing.T) {
 }
 
 // Each stream is core, owned, a task's or foreign, by its name alone: a
-// stream whose feature isn't registered is foreign, not a task.
+// stream whose extension isn't registered is foreign, not a task.
 func TestEveryStreamHasAKind(t *testing.T) {
-	withIdeas, err := events.NewCatalogue(features.Registration(ideas.Feature()))
+	withIdeas, err := events.NewCatalogue(extensions.Registration(ideas.Extension()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestEveryStreamHasAKind(t *testing.T) {
 	}
 }
 
-// Nothing goes into a foreign stream: not its feature's types, which this
+// Nothing goes into a foreign stream: not its extension's types, which this
 // build doesn't know, nor a task's.
 func TestAForeignStreamTakesNothing(t *testing.T) {
 	you := events.Actor{Kind: events.Human, ID: "you"}

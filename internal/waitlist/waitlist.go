@@ -1,14 +1,14 @@
 // Package waitlist words the core's part of what waits for you: each
 // approval, question and stop GET /api/questions lists, as one entry. The
 // server lists them in GET /api/waiting; agentry mcp words them the same.
-// It names no feature.
+// It names no extension.
 package waitlist
 
 import (
 	"fmt"
 	"slices"
 
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -26,8 +26,8 @@ type Question struct {
 }
 
 // Entry is q as one thing waiting for you. Its key lasts while q waits.
-func Entry(q Question) features.Waiting {
-	return features.Waiting{Key: q.Task + "/" + q.Kind + "/" + q.Action + "/" + q.Text, Task: q.Task, Line: Line(q), Kind: "needs you"}
+func Entry(q Question) extensions.Waiting {
+	return extensions.Waiting{Key: q.Task + "/" + q.Kind + "/" + q.Action + "/" + q.Text, Task: q.Task, Line: Line(q), Kind: "needs you"}
 }
 
 // Line is q for a person, with the tool that deals with it.

@@ -8,18 +8,18 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // routes are the ideas' HTTP API, for the page and Claude Code: list them,
 // accept one, dismiss one. Every write goes through c.Log.
-func routes(c features.Core) []features.Route {
-	return []features.Route{
-		{Pattern: "GET /api/ideas", Auth: features.UI, Handler: func(w http.ResponseWriter, r *http.Request) { listIdeas(c, w, r) }},
-		{Pattern: "POST /api/ideas/{idea}/accept", Auth: features.UI, Handler: func(w http.ResponseWriter, r *http.Request) { acceptIdea(c, w, r) }},
-		{Pattern: "POST /api/ideas/{idea}/dismiss", Auth: features.UI, Handler: func(w http.ResponseWriter, r *http.Request) { dismissIdea(c, w, r) }},
+func routes(c extensions.Core) []extensions.Route {
+	return []extensions.Route{
+		{Pattern: "GET /api/ideas", Auth: extensions.UI, Handler: func(w http.ResponseWriter, r *http.Request) { listIdeas(c, w, r) }},
+		{Pattern: "POST /api/ideas/{idea}/accept", Auth: extensions.UI, Handler: func(w http.ResponseWriter, r *http.Request) { acceptIdea(c, w, r) }},
+		{Pattern: "POST /api/ideas/{idea}/dismiss", Auth: extensions.UI, Handler: func(w http.ResponseWriter, r *http.Request) { dismissIdea(c, w, r) }},
 	}
 }
 
@@ -28,7 +28,7 @@ func routes(c features.Core) []features.Route {
 // An idea from a session after an epic closed names that epic, an open one
 // why Agentry wouldn't accept it for you, under your rule (LeftForYou), and an accepted
 // one the column its task is in now.
-func listIdeas(c features.Core, w http.ResponseWriter, r *http.Request) {
+func listIdeas(c extensions.Core, w http.ResponseWriter, r *http.Request) {
 	list := List(c.Read, r.URL.Query().Get("repo"))
 	newestSessionFirst(c.Read, list)
 	about := map[string]*tasks.Task{}
@@ -69,7 +69,7 @@ func listIdeas(c features.Core, w http.ResponseWriter, r *http.Request) {
 // 200 with what happened: the task made, the column it is in, whether the
 // idea is marked accepted, and if not, why. A task made and the idea not
 // marked is still a 200, so the page can show the task.
-func acceptIdea(c features.Core, w http.ResponseWriter, r *http.Request) {
+func acceptIdea(c extensions.Core, w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Kind, Note string
 		Start      bool
@@ -103,7 +103,7 @@ func acceptIdea(c features.Core, w http.ResponseWriter, r *http.Request) {
 
 // refuseDuplicate answers 409 naming the open task the idea looks like, so
 // the page can show it before you choose to make another.
-func refuseDuplicate(c features.Core, w http.ResponseWriter, got Acceptance) {
+func refuseDuplicate(c extensions.Core, w http.ResponseWriter, got Acceptance) {
 	like := duplicateView{ID: got.Duplicate}
 	if task, err := c.Read.Task(got.Duplicate); err == nil && task != nil {
 		like.Title, like.Column, like.Kind = task.Title, task.BoardColumn(c.Read.Roster()), task.Kind
@@ -125,7 +125,7 @@ func chosenBudget(asked int) *int {
 
 // dismissIdea dismisses an open idea with your note: 404 for no such idea,
 // 409 when the rules refuse it, else the event.
-func dismissIdea(c features.Core, w http.ResponseWriter, r *http.Request) {
+func dismissIdea(c extensions.Core, w http.ResponseWriter, r *http.Request) {
 	var request struct{ Note string }
 	if !httpapi.Decode(w, r, &request) {
 		return
@@ -138,7 +138,7 @@ func dismissIdea(c features.Core, w http.ResponseWriter, r *http.Request) {
 }
 
 // ideaExists answers 404 when there is no such idea.
-func ideaExists(c features.Core, w http.ResponseWriter, id string) bool {
+func ideaExists(c extensions.Core, w http.ResponseWriter, id string) bool {
 	if !IsStream(id) {
 		http.Error(w, "no such idea", http.StatusNotFound)
 		return false
@@ -156,10 +156,10 @@ func ideaExists(c features.Core, w http.ResponseWriter, id string) bool {
 }
 
 // logOf is what Accept writes through and reads of the log, as c gives them.
-func logOf(c features.Core) Log {
+func logOf(c extensions.Core) Log {
 	return struct {
-		features.Proposer
-		features.EventLog
+		extensions.Proposer
+		extensions.EventLog
 	}{c.Log, c.Events}
 }
 

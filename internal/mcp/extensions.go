@@ -6,18 +6,18 @@ import (
 	"maps"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 )
 
-// A session lists the tools and instructions of the features GET
+// A session lists the tools and instructions of the extensions GET
 // /api/features says are enabled or visible. It reads them at initialize,
 // then again at every change in the log, and tells Claude Code when the
 // set changes, so a team added mid-session brings its tools with it.
 
-// showFeatures reads which features are shown, and says whether that
+// showExtensions reads which extensions are shown, and says whether that
 // changed. A server that can't say leaves them as they were.
-func (s *Server) showFeatures() (changed bool) {
-	var reply struct{ Features []features.Line }
+func (s *Server) showExtensions() (changed bool) {
+	var reply struct{ Features []extensions.Line }
 	if err := s.agentry.Call("GET", "/api/features", nil, &reply); err != nil {
 		return false
 	}
@@ -34,12 +34,12 @@ func (s *Server) showFeatures() (changed bool) {
 	return changed
 }
 
-// shownFeatures are the features shown now, in s.features' order.
-func (s *Server) shownFeatures() []features.Feature {
+// shownExtensions are the extensions shown now, in s.extensions' order.
+func (s *Server) shownExtensions() []extensions.Extension {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var shown []features.Feature
-	for _, f := range s.features {
+	var shown []extensions.Extension
+	for _, f := range s.extensions {
 		if s.shown[f.Name] {
 			shown = append(shown, f)
 		}
@@ -47,11 +47,11 @@ func (s *Server) shownFeatures() []features.Feature {
 	return shown
 }
 
-// followFeatures reads the features again each time the log moves, and
+// followExtensions reads the extensions again each time the log moves, and
 // sends notifications/tools/list_changed when the ones shown changed, until
 // ctx ends. It waits on GET /api/changes itself: Watch, which waits on it
 // too, doesn't run with --quiet, and returns only with news for you.
-func (s *Server) followFeatures(ctx context.Context) {
+func (s *Server) followExtensions(ctx context.Context) {
 	agentry := s.agentry
 	agentry.Timeout = 40 * time.Second // the server answers a wait within 25 seconds
 	var position int64
@@ -68,7 +68,7 @@ func (s *Server) followFeatures(ctx context.Context) {
 			continue // the wait ran out with nothing new
 		}
 		position = changes.Position
-		if s.showFeatures() {
+		if s.showExtensions() {
 			s.conn.notify("notifications/tools/list_changed")
 		}
 	}

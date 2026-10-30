@@ -199,7 +199,7 @@ Feature: Observability
     Then before, the list is empty, "[]"
     And after, it holds exactly 3 entries in order: the approval "task-2: Waiting for you to approve a push (review_approvals)", the question "epic-1: tech-lead asks: Which layout?", then the feature's own line
     And each entry carries its key, its task, its kind, "needs you" or the feature's, and its line
-    # README.md, Use it from Claude Code; internal/web/waiting_api_test.go TestWaitingIsTheCoreThenEachFeature
+    # README.md, Use it from Claude Code; internal/web/waiting_api_test.go TestWaitingIsTheCoreThenEachExtension
 
   @OBS-21 @test
   Scenario: A push goes once to every subscribed browser for each thing that newly waits

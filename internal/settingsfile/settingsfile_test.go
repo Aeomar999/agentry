@@ -41,8 +41,8 @@ func TestAMissingFileIsNoSettings(t *testing.T) {
 	}
 }
 
-// A feature reads its own values and secrets, not another feature's.
-func TestAFeatureReadsOnlyItsOwnTable(t *testing.T) {
+// An extension reads its own values and secrets, not another extension's.
+func TestAnExtensionReadsOnlyItsOwnTable(t *testing.T) {
 	path := write(t, filepath.Join(t.TempDir(), "features.toml"), good)
 	ideas := Open(path).For("ideas")
 	if host, _ := ideas.Setting("host"); host != "gitlab.com" {
@@ -202,9 +202,9 @@ func TestABrokenFileAfterItWasGoneIsNoSettings(t *testing.T) {
 	}
 }
 
-// A header that isn't a feature's name, such as a token pasted as one, is
+// A header that isn't an extension's name, such as a token pasted as one, is
 // never named in the log: the problem says only that a table is wrong.
-func TestAHeaderThatIsntAFeatureNameIsNotLogged(t *testing.T) {
+func TestAHeaderThatIsntAnExtensionNameIsNotLogged(t *testing.T) {
 	logged := captureLog(t)
 	path := write(t, filepath.Join(t.TempDir(), "features.toml"), good)
 	live := Open(path)

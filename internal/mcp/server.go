@@ -9,33 +9,33 @@ import (
 	"sync"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 )
 
 // Server is one Claude Code session's Agentry: its tools, for the repo the
 // session runs in, on one Agentry server.
 type Server struct {
-	agentry   client.Client
-	repo      string // the repo Claude Code runs in; "" outside one
-	conn      *conn
-	canElicit bool // Claude Code can ask you a question itself
-	version   string
-	features  []features.Feature // every feature in this binary
+	agentry    client.Client
+	repo       string // the repo Claude Code runs in; "" outside one
+	conn       *conn
+	canElicit  bool // Claude Code can ask you a question itself
+	version    string
+	extensions []extensions.Extension // every extension in this binary
 
 	mu        sync.Mutex
-	shown     map[string]bool // the features whose tools are listed, by name: enabled or visible, as GET /api/features last said
+	shown     map[string]bool // the extensions whose tools are listed, by name: enabled or visible, as GET /api/features last said
 	following sync.Once       // the loop that sees when shown changes, started at initialize
 }
 
-// New is the server for Claude Code started in dir, with list the features
+// New is the server for Claude Code started in dir, with list the extensions
 // in this binary.
-func New(agentry client.Client, dir, version string, list []features.Feature) *Server {
-	return &Server{agentry: agentry, repo: repoOf(dir), version: version, features: list}
+func New(agentry client.Client, dir, version string, list []extensions.Extension) *Server {
+	return &Server{agentry: agentry, repo: repoOf(dir), version: version, extensions: list}
 }
 
 // Serve speaks MCP on in and out until in ends.
 func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
-	ctx, stop := context.WithCancel(ctx) // ends followFeatures with the session
+	ctx, stop := context.WithCancel(ctx) // ends followExtensions with the session
 	defer stop()
 	s.conn = newConn(out)
 	return s.conn.serve(ctx, in, s.handle)
@@ -60,9 +60,9 @@ func (s *Server) handle(ctx context.Context, method string, params json.RawMessa
 		if hello.ProtocolVersion != "" && hello.ProtocolVersion < latest {
 			version = hello.ProtocolVersion
 		}
-		s.showFeatures()
-		if len(s.features) > 0 {
-			s.following.Do(func() { go s.followFeatures(ctx) })
+		s.showExtensions()
+		if len(s.extensions) > 0 {
+			s.following.Do(func() { go s.followExtensions(ctx) })
 		}
 		return map[string]any{
 			"protocolVersion": version,
@@ -96,11 +96,11 @@ func (s *Server) handle(ctx context.Context, method string, params json.RawMessa
 }
 
 // call runs a tool, which may ask you through Claude Code when it can
-// (features.AskOf). Its reply ends with what waits for you, so Claude can
+// (extensions.AskOf). Its reply ends with what waits for you, so Claude can
 // tell you without being asked.
 func (s *Server) call(ctx context.Context, name string, arguments json.RawMessage) map[string]any {
 	if s.canElicit {
-		ctx = features.WithAsk(ctx, s.elicit)
+		ctx = extensions.WithAsk(ctx, s.elicit)
 	}
 	for _, t := range s.tools() {
 		if t.Name != name {
@@ -145,10 +145,10 @@ func repoOf(dir string) string {
 }
 
 // instructions tell Claude what Agentry is and how to use it well, with
-// the lines of every feature shown.
+// the lines of every extension shown.
 func (s *Server) instructions() string {
 	lines := []string{instructionsStart}
-	for _, f := range s.shownFeatures() {
+	for _, f := range s.shownExtensions() {
 		if f.Instructions != "" {
 			lines = append(lines, f.Instructions)
 		}

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/schedules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -61,7 +61,7 @@ func TestIdeasStreamsAreSkippedAndCountedWithoutIdeas(t *testing.T) {
 
 // withSchedules is the catalogue of a build with ideas and schedules.
 var withSchedules = func() *events.Catalogue {
-	catalogue, err := events.NewCatalogue(features.Registrations(ideas.Feature(), schedules.Feature())...)
+	catalogue, err := events.NewCatalogue(extensions.Registrations(ideas.Extension(), schedules.Extension())...)
 	if err != nil {
 		panic(err)
 	}

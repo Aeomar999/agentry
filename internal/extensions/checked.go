@@ -1,4 +1,4 @@
-package features
+package extensions
 
 import (
 	"fmt"
@@ -6,12 +6,12 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 )
 
-// Checked is log for the feature f, whose types are registered: it refuses,
+// Checked is log for the extension f, whose types are registered: it refuses,
 // with the rule "features", any proposal whose type f neither registered
 // (in registered's Types or TaskTypes) nor listed in its Writes. The refusal
 // comes before log is called, so nothing of it is stored, and it comes back
-// as any rejection does: a feature's mistake fails its own tests.
-func Checked(f Feature, registered events.Registration, log Proposer) Proposer {
+// as any rejection does: an extension's mistake fails its own tests.
+func Checked(f Extension, registered events.Registration, log Proposer) Proposer {
 	may := map[events.Type]bool{}
 	for t := range registered.Types {
 		may[t] = true
@@ -22,14 +22,14 @@ func Checked(f Feature, registered events.Registration, log Proposer) Proposer {
 	for _, t := range f.Writes {
 		may[t] = true
 	}
-	return checked{feature: f.Name, may: may, log: log}
+	return checked{extension: f.Name, may: may, log: log}
 }
 
 // checked is the Proposer Checked makes.
 type checked struct {
-	feature string
-	may     map[events.Type]bool // the types the feature may propose
-	log     Proposer
+	extension string
+	may       map[events.Type]bool // the types the extension may propose
+	log       Proposer
 }
 
 func (c checked) Propose(p events.Proposal) (events.Event, *events.Rejection, error) {
@@ -46,21 +46,21 @@ func (c checked) Create(prefix string, p events.Proposal) (events.Event, *events
 	return c.log.Create(prefix, p)
 }
 
-// refuse is the "features" rejection of a type the feature may not propose,
+// refuse is the "features" rejection of a type the extension may not propose,
 // or nil.
 func (c checked) refuse(t events.Type) *events.Rejection {
 	if c.may[t] {
 		return nil
 	}
 	return &events.Rejection{Check: "features",
-		Reason: fmt.Sprintf("the %s feature may not write %s: it neither registers it nor lists it in Writes", c.feature, t)}
+		Reason: fmt.Sprintf("the %s feature may not write %s: it neither registers it nor lists it in Writes", c.extension, t)}
 }
 
-// Unwritable is the log of a feature that was given none: Checked with no
+// Unwritable is the log of an extension that was given none: Checked with no
 // types to write, onto a log that refuses everything itself, so nothing it
 // proposes can reach a log that isn't there.
 func Unwritable(name string) Proposer {
-	return Checked(Feature{Name: name}, events.Registration{}, nowhere{name: name})
+	return Checked(Extension{Name: name}, events.Registration{}, nowhere{name: name})
 }
 
 // nowhere refuses every proposal, for Unwritable.

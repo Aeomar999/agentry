@@ -10,7 +10,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
@@ -33,7 +33,7 @@ func openSeeded(t *testing.T) (s *store.Store, state *current.State, repo string
 // openSeededAt is openSeeded with the log at path.
 func openSeededAt(t *testing.T, path string) (s *store.Store, state *current.State, repo string) {
 	t.Helper()
-	s, state = storetest.OpenWith(t, path, storetest.WithFeatures())
+	s, state = storetest.OpenWith(t, path, storetest.WithExtensions())
 	repo = gitRepo(t)
 	for _, p := range append(agents.SeedProposals(nil), events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Think up features", "repo": repo, "coordinator": "tech-lead"}}) {
@@ -369,7 +369,7 @@ func TestAcceptRefusesWhenTheTaskMadeFromTheIdeaIsBroken(t *testing.T) {
 	repo := gitRepo(t)
 	// The rules would refuse a worktree.moved before the worktree is
 	// ready, so the log is written without them, then opened with them.
-	unchecked, err := store.Open(path, storetest.WithFeatures(), nil, nil)
+	unchecked, err := store.Open(path, storetest.WithExtensions(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -386,7 +386,7 @@ func TestAcceptRefusesWhenTheTaskMadeFromTheIdeaIsBroken(t *testing.T) {
 			Data: map[string]any{"worker": "local", "path": "/w", "port": 7901}})
 	}
 	unchecked.Close()
-	s, state := storetest.OpenWith(t, path, storetest.WithFeatures())
+	s, state := storetest.OpenWith(t, path, storetest.WithExtensions())
 	if state.Broken("task-2") == nil || state.Broken("task-3") == nil {
 		t.Fatal("task-2 and task-3 should be broken")
 	}
@@ -410,8 +410,8 @@ func TestAcceptRefusesWhenTheTaskMadeFromTheIdeaIsBroken(t *testing.T) {
 // EventLog, two values, neither of them the store.
 func asCore(s *store.Store) ideas.Log {
 	return struct {
-		features.Proposer
-		features.EventLog
+		extensions.Proposer
+		extensions.EventLog
 	}{s, s}
 }
 

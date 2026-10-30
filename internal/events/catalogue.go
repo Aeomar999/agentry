@@ -19,7 +19,7 @@ type Spec struct {
 	Refolds     bool
 }
 
-// A Registration is what a feature adds to the catalogue: its own streams,
+// A Registration is what an extension adds to the catalogue: its own streams,
 // each named Prefix and an ID and holding only Types, and the TaskTypes it
 // writes in task streams. All of them are in one namespace of its own: the
 // Prefix without its "-" ("idea-" holds idea.suggested and the rest), or,
@@ -31,15 +31,15 @@ type Registration struct {
 }
 
 // A Catalogue is every event type a log may hold: the core's and each
-// registered feature's. Nothing changes it once it is made, so it stays
+// registered extension's. Nothing changes it once it is made, so it stays
 // the same for as long as a log is open.
 type Catalogue struct {
 	specs    map[Type]Spec
-	prefixOf map[Type]string // a feature's stream types: the prefix of the streams they go in
+	prefixOf map[Type]string // an extension's stream types: the prefix of the streams they go in
 	prefixes []string
 }
 
-// Core is the catalogue of the core's types alone, with no feature registered.
+// Core is the catalogue of the core's types alone, with no extension registered.
 func Core() *Catalogue {
 	c, err := NewCatalogue()
 	if err != nil {
@@ -296,9 +296,9 @@ type StreamKind int
 
 const (
 	CoreStream    StreamKind = iota // one of the core's fixed streams: agents, settings and the rest
-	OwnedStream                     // starts with a prefix a feature in this catalogue registered
+	OwnedStream                     // starts with a prefix an extension in this catalogue registered
 	TaskStream                      // a task's: not core, not owned, and starts with task-
-	ForeignStream                   // anything else: a feature this build doesn't have wrote it
+	ForeignStream                   // anything else: an extension this build doesn't have wrote it
 )
 
 // TaskPrefix starts every task's stream name: Store.Create("task-", ...).

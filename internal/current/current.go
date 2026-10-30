@@ -7,12 +7,12 @@
 // the log (snapshot.go).
 //
 // The catalogue the state is made with says what each stream is. A task's
-// stream makes a task, and a feature's own stream whatever that feature's
+// stream makes a task, and an extension's own stream whatever that extension's
 // Streams build from it: an idea, never a task. The agents, workers and
 // connections streams each make a roster, the settings stream your
 // settings, and the templates stream the team templates you saved. The
 // policy stream keeps no state here: its events only move the position.
-// A foreign stream, which a feature this build doesn't have wrote, is
+// A foreign stream, which an extension this build doesn't have wrote, is
 // skipped and only counted, as is an event of a type the catalogue doesn't
 // know in any other stream.
 package current
@@ -30,7 +30,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -43,17 +43,17 @@ import (
 type State struct {
 	mu          sync.RWMutex
 	catalogue   *events.Catalogue
-	position    int64                        // of the last event applied, rejections included
-	streams     map[string]int64             // each stream's last accepted event applied, by stream
-	tasks       map[string]*tasks.Task       // by stream
-	created     []created                    // every task.created applied, in the order of their positions, as the log lists them
-	tasksMade   int                          // every task.created applied, a foreign stream's too, as Store.Create counts them
-	owners      map[string]*features.Streams // by prefix: the features whose streams the state keeps
-	owned       map[string]any               // a feature's stream's state, as its Streams built it, by stream
-	ownedOrder  map[string][]created         // by prefix: each owned stream's first event applied, in the order of their positions
-	broken      map[string]error             // streams whose apply panicked: reads fail, as a replay would
-	archived    map[string]tasks.Summary     // tasks the state holds as their summary alone, by stream
-	erased      map[string]tasks.Erasure     // tasks erased for good, whose ids stay taken, by stream
+	position    int64                          // of the last event applied, rejections included
+	streams     map[string]int64               // each stream's last accepted event applied, by stream
+	tasks       map[string]*tasks.Task         // by stream
+	created     []created                      // every task.created applied, in the order of their positions, as the log lists them
+	tasksMade   int                            // every task.created applied, a foreign stream's too, as Store.Create counts them
+	owners      map[string]*extensions.Streams // by prefix: the extensions whose streams the state keeps
+	owned       map[string]any                 // an extension's stream's state, as its Streams built it, by stream
+	ownedOrder  map[string][]created           // by prefix: each owned stream's first event applied, in the order of their positions
+	broken      map[string]error               // streams whose apply panicked: reads fail, as a replay would
+	archived    map[string]tasks.Summary       // tasks the state holds as their summary alone, by stream
+	erased      map[string]tasks.Erasure       // tasks erased for good, whose ids stay taken, by stream
 	roster      agents.Roster
 	workers     workers.Roster
 	connections connections.Roster
@@ -68,10 +68,10 @@ type State struct {
 	moved    chan struct{} // sent on, if nothing waits in it, when the position moves: a SnapshotWriter's wake
 }
 
-var _ features.Reader = (*State)(nil)
+var _ extensions.Reader = (*State)(nil)
 
 // created is a task.created event's place in the log, or the first event of
-// a feature's stream. The task and owned stream orders are by these
+// an extension's stream. The task and owned stream orders are by these
 // positions, not by when the state took each event, so a state that starts
 // part way and takes the rest keeps the log's order.
 type created struct {
@@ -91,11 +91,11 @@ var ErrErased = errors.New("the task is erased")
 
 // New is an empty state that reads streams as catalogue says, which must be
 // the catalogue the store is opened with, and keeps the streams of each
-// feature in owned. A stream the catalogue doesn't give to a feature is
+// extension in owned. A stream the catalogue doesn't give to an extension is
 // never one of owned's, whatever its name: without the registration it is
 // foreign. An owned stream with no Streams here keeps no state.
-func New(catalogue *events.Catalogue, owned ...*features.Streams) *State {
-	owners := map[string]*features.Streams{}
+func New(catalogue *events.Catalogue, owned ...*extensions.Streams) *State {
+	owners := map[string]*extensions.Streams{}
 	for _, streams := range owned {
 		if owners[streams.Prefix] != nil {
 			panic("current: two features own the streams " + streams.Prefix)
@@ -125,8 +125,8 @@ func (s *State) empty() {
 }
 
 // ownerOf is the Streams that keeps a stream, or nil for a stream no
-// feature here owns.
-func (s *State) ownerOf(stream string, kind events.StreamKind) *features.Streams {
+// extension here owns.
+func (s *State) ownerOf(stream string, kind events.StreamKind) *extensions.Streams {
 	if kind != events.OwnedStream {
 		return nil
 	}
@@ -350,7 +350,7 @@ func (s *State) nextTask(task *tasks.Task, e events.Event) *tasks.Task {
 }
 
 // made notes where a task.created, or the first event of a stream a
-// feature here owns, is in the log, for the task and owned stream orders.
+// extension here owns, is in the log, for the task and owned stream orders.
 // An archived or erased task's task.created row is gone with the rest, so
 // a marker that starts its stream stands for it, at the position it names
 // (standsFor).
@@ -483,9 +483,9 @@ func (s *State) Task(id string) (*tasks.Task, error) {
 	return s.tasks[id], nil
 }
 
-// Owned is a feature's stream's state, as its Streams left it: nil, nil
+// Owned is an extension's stream's state, as its Streams left it: nil, nil
 // when the stream holds nothing, and the error when it is broken. The
-// feature's own typed read (ideas.Get) says what it is.
+// extension's own typed read (ideas.Get) says what it is.
 func (s *State) Owned(stream string) (any, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -541,7 +541,7 @@ func (s *State) NextTask() string {
 	return events.Numbered(events.TaskPrefix, s.tasksMade)
 }
 
-// OwnedIDs is every stream with prefix that a feature here owns, in the
+// OwnedIDs is every stream with prefix that an extension here owns, in the
 // order of their first events in the log, in a new slice: a broken one's
 // too, as TaskIDs lists a broken task.
 func (s *State) OwnedIDs(prefix string) []string {

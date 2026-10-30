@@ -1,4 +1,4 @@
-package features
+package extensions
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 )
 
 // A Tool is one MCP tool: one thing Claude can do with Agentry. agentry mcp
-// lists a feature's tools while GET /api/features says the feature is
+// lists an extension's tools while GET /api/features says the extension is
 // enabled or visible, and their output is the text Claude reads.
 type Tool struct {
 	Name, Description string
@@ -16,7 +16,7 @@ type Tool struct {
 
 // API is the Agentry server as agentry mcp reaches it, as client.Client
 // does: Call sends body as JSON and decodes the answer into into, and
-// PageURL is a page's address for a person. An interface, so features
+// PageURL is a page's address for a person. An interface, so extensions
 // needn't import client and what it brings.
 type API interface {
 	Call(method, path string, body, into any) error
@@ -49,5 +49,5 @@ type Waiting struct {
 	Key  string `json:"key"` // the same while it lasts: a new one has a new key
 	Task string `json:"task"`
 	Line string `json:"line"` // for a person: "task-4: Waiting for you to approve the push to dev"
-	Kind string `json:"kind"` // "needs you", "done", "said", "offline", or a feature's own, such as "ideas"
+	Kind string `json:"kind"` // "needs you", "done", "said", "offline", or an extension's own, such as "ideas"
 }

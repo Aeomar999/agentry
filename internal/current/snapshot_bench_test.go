@@ -9,7 +9,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -41,7 +41,7 @@ const benchBuild = "bench"
 // of 3.
 func benchSnapshots(t *testing.T, path string, state *current.State, archivable []*tasks.Task, tail int64) {
 	dir := t.TempDir()
-	log, err := store.Open(path, storetest.WithFeatures(), nil, nil)
+	log, err := store.Open(path, storetest.WithExtensions(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,8 +88,8 @@ func writeSnapshot(t *testing.T, path string, state *current.State, log *store.S
 // it, as serve does, and fails unless Open went on from position.
 func resumed(t *testing.T, logPath, path string, position int64) {
 	t.Helper()
-	state := current.Restore(path, benchBuild, storetest.WithFeatures(), features.StreamsOf(storetest.Installed()...)...)
-	s, err := store.Open(logPath, storetest.WithFeatures(), state, nil)
+	state := current.Restore(path, benchBuild, storetest.WithExtensions(), extensions.StreamsOf(storetest.Installed()...)...)
+	s, err := store.Open(logPath, storetest.WithExtensions(), state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,8 +122,8 @@ func stateAt(t *testing.T, path string, cut int64) *current.State {
 			t.Fatal(err)
 		}
 	}
-	state := storetest.NewState(storetest.WithFeatures())
-	s, err := store.Open(copied, storetest.WithFeatures(), state, nil)
+	state := storetest.NewState(storetest.WithExtensions())
+	s, err := store.Open(copied, storetest.WithExtensions(), state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,8 +135,8 @@ func stateAt(t *testing.T, path string, cut int64) *current.State {
 // breaks it shows without AGENTRY_BENCH_DB.
 func TestTheSnapshotBenchRunsOnASmallLog(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "small.log")
-	state := storetest.NewState(storetest.WithFeatures())
-	s, err := store.Open(path, storetest.WithFeatures(), state, nil)
+	state := storetest.NewState(storetest.WithExtensions())
+	s, err := store.Open(path, storetest.WithExtensions(), state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

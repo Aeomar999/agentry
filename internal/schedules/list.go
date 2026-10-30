@@ -1,7 +1,7 @@
 package schedules
 
 // Source is every schedule, as kept from the log (current.State), read
-// through the state's generic reads of a feature's streams.
+// through the state's generic reads of an extension's streams.
 type Source interface {
 	Owned(stream string) (any, error) // nil, nil when the stream holds nothing
 	OwnedIDs(prefix string) []string  // in log order, broken ones too

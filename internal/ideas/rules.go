@@ -7,7 +7,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -16,7 +16,7 @@ import (
 // Only you may do either, except that Agentry accepts an idea the
 // Visionaries agreed on, by your rule, when you turned that on; the
 // catalogue checks that no agent does.
-func checkIdea(p events.Proposal, state features.Reader) *events.Rejection {
+func checkIdea(p events.Proposal, state extensions.Reader) *events.Rejection {
 	idea, err := Get(state, p.Stream)
 	if err != nil {
 		return refuseFor("could not read the idea: " + err.Error())
@@ -40,7 +40,7 @@ func checkIdea(p events.Proposal, state features.Reader) *events.Rejection {
 // aGoodSuggestion has a title, a size, a kind of task, and comes from a task
 // that exists; an agent suggests only from the task it is working on. The
 // idea it says it repeats, if any, exists.
-func aGoodSuggestion(p events.Proposal, state features.Reader) string {
+func aGoodSuggestion(p events.Proposal, state extensions.Reader) string {
 	switch {
 	case strings.TrimSpace(p.Text("title")) == "":
 		return "an idea needs a title"
@@ -64,7 +64,7 @@ func aGoodSuggestion(p events.Proposal, state features.Reader) string {
 }
 
 // repeatsAnIdea: an idea said to repeat another names one that exists.
-func repeatsAnIdea(p events.Proposal, state features.Reader) string {
+func repeatsAnIdea(p events.Proposal, state extensions.Reader) string {
 	repeats := p.Text("repeats")
 	if repeats == "" {
 		return ""
@@ -81,7 +81,7 @@ func repeatsAnIdea(p events.Proposal, state features.Reader) string {
 
 // madeFromIt: an idea is accepted only once its task is made, so an accepted
 // idea always points at a task.
-func madeFromIt(idea *Idea, p events.Proposal, state features.Reader) string {
+func madeFromIt(idea *Idea, p events.Proposal, state extensions.Reader) string {
 	task, err := state.Task(p.Text("task"))
 	if err != nil {
 		return "could not read the task: " + err.Error()
@@ -99,7 +99,7 @@ func madeFromIt(idea *Idea, p events.Proposal, state features.Reader) string {
 // turned on, and only one the Visionaries agreed on by your rule that
 // repeats no other idea (NotAutoAccepted), so the log can't hold any
 // other, whoever proposes it.
-func agentryMayAccept(idea *Idea, p events.Proposal, state features.Reader) string {
+func agentryMayAccept(idea *Idea, p events.Proposal, state extensions.Reader) string {
 	now := state.Settings()
 	switch {
 	case p.Actor.Kind != events.System:
@@ -116,14 +116,14 @@ func agentryMayAccept(idea *Idea, p events.Proposal, state features.Reader) stri
 // guards are the ideas' checks on the core's types, for what Agentry does
 // with an idea it accepts for you. The core refuses Agentry either without
 // them, so a build without ideas makes and starts no such task.
-var guards = map[events.Type]features.Rule{events.TaskCreated: forAnOpenIdea, events.TaskHeld: startingAnAcceptedIdea}
+var guards = map[events.Type]extensions.Rule{events.TaskCreated: forAnOpenIdea, events.TaskHeld: startingAnAcceptedIdea}
 
 // forAnOpenIdea: besides a task about an epic you closed, Agentry makes one
 // only from an idea that is still open, to accept it for you, so one it may
 // accept, and only in your Backlog: it starts one only by moving it, while
 // you have that turned on (startingAnAcceptedIdea). It checks only such a
 // task made from an idea; the core refuses one made from no stream.
-func forAnOpenIdea(p events.Proposal, state features.Reader) *events.Rejection {
+func forAnOpenIdea(p events.Proposal, state extensions.Reader) *events.Rejection {
 	from := tasks.MadeFromOf(p)
 	if p.Actor.Kind != events.System || p.Text("about") != "" || !IsStream(from) {
 		return nil
@@ -151,7 +151,7 @@ func forAnOpenIdea(p events.Proposal, state features.Reader) *events.Rejection {
 // run. A task you parked again, or one you made, stays where you put it. It
 // checks only Agentry's moves of a task made from an idea; the core refuses
 // the rest.
-func startingAnAcceptedIdea(p events.Proposal, state features.Reader) *events.Rejection {
+func startingAnAcceptedIdea(p events.Proposal, state extensions.Reader) *events.Rejection {
 	if p.Actor.Kind != events.System {
 		return nil
 	}
@@ -166,7 +166,7 @@ func startingAnAcceptedIdea(p events.Proposal, state features.Reader) *events.Re
 }
 
 // startingIt is why Agentry may not start task, made from an idea, or "".
-func startingIt(task *tasks.Task, p events.Proposal, state features.Reader) string {
+func startingIt(task *tasks.Task, p events.Proposal, state extensions.Reader) string {
 	const only = "Agentry only starts, once, a task it made from an idea it accepted"
 	if now := state.Settings(); !now.AutoAcceptIdeas || !now.AutoStartIdeas {
 		return "Agentry starts a task from an idea it accepted only when you turn that on"

@@ -11,7 +11,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
@@ -28,7 +28,7 @@ host = "first.example"
 token = "` + jobSecret + `"
 `
 
-// A feature's job reads its secret and sees an edit to the file with no
+// An extension's job reads its secret and sees an edit to the file with no
 // restart. The secret, through a load, a reload and a broken version whose
 // bad line holds it, reaches neither the server's log nor the event log, nor
 // a start of the server with the file broken or missing.
@@ -41,8 +41,8 @@ func TestASecretReachesTheJobAndNeitherLog(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
 	defer slog.SetDefault(previous)
 
-	state := current.Restore(filepath.Join(dataDir, snapshotFile), "test", storetest.WithFeatures(), features.StreamsOf(installedFeatures()...)...)
-	log, err := store.Open(filepath.Join(dataDir, "agentry.db"), storetest.WithFeatures(), state, nil)
+	state := current.Restore(filepath.Join(dataDir, snapshotFile), "test", storetest.WithExtensions(), extensions.StreamsOf(installedExtensions()...)...)
+	log, err := store.Open(filepath.Join(dataDir, "agentry.db"), storetest.WithExtensions(), state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestASecretReachesTheJobAndNeitherLog(t *testing.T) {
 	}
 	type seen struct{ host, token string }
 	reads := make(chan seen)
-	probe := features.Feature{Name: "probe", Jobs: func(ctx context.Context, c features.Core) {
+	probe := extensions.Extension{Name: "probe", Jobs: func(ctx context.Context, c extensions.Core) {
 		for {
 			host, _ := c.Settings.Setting("host")
 			token, _ := c.Settings.Secret("token")
@@ -62,9 +62,9 @@ func TestASecretReachesTheJobAndNeitherLog(t *testing.T) {
 			}
 		}
 	}}
-	logs := map[string]features.Proposer{probe.Name: features.Checked(probe, events.Registration{}, log)}
+	logs := map[string]extensions.Proposer{probe.Name: extensions.Checked(probe, events.Registration{}, log)}
 	ctx, cancel := context.WithCancel(context.Background())
-	startJobs(ctx, openSettings(ctx, settings, 5*time.Millisecond).For, []features.Feature{probe}, logs, log, state, tasks.Limits{})
+	startJobs(ctx, openSettings(ctx, settings, 5*time.Millisecond).For, []extensions.Extension{probe}, logs, log, state, tasks.Limits{})
 	waitForRead := func(want seen) {
 		t.Helper()
 		for deadline := time.Now().Add(5 * time.Second); ; {
@@ -111,7 +111,7 @@ func TestASecretReachesTheJobAndNeitherLog(t *testing.T) {
 // No agent may touch the settings file, whatever the policy says.
 func TestTheSettingsFileIsProtected(t *testing.T) {
 	dataDir := t.TempDir()
-	log, err := store.Open(filepath.Join(dataDir, "agentry.db"), storetest.WithFeatures(), storetest.NewState(storetest.WithFeatures()), nil)
+	log, err := store.Open(filepath.Join(dataDir, "agentry.db"), storetest.WithExtensions(), storetest.NewState(storetest.WithExtensions()), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -24,7 +24,7 @@ var (
 // a restart loads.
 func TestALogWithEveryScheduleEventEqualsAReplay(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agentry.db")
-	s, state := storetest.OpenWith(t, path, storetest.WithFeatures())
+	s, state := storetest.OpenWith(t, path, storetest.WithExtensions())
 	for _, p := range agents.SeedProposals(nil) {
 		mustPropose(t, s, p)
 	}
@@ -61,7 +61,7 @@ func TestALogWithEveryScheduleEventEqualsAReplay(t *testing.T) {
 		!before[1].LastRun.Manual || before[2].State != schedules.Removed {
 		t.Fatalf("the log didn't fold as written: %+v", before)
 	}
-	_, restarted := storetest.OpenWith(t, path, storetest.WithFeatures())
+	_, restarted := storetest.OpenWith(t, path, storetest.WithExtensions())
 	if after := schedules.All(restarted); !reflect.DeepEqual(after, before) {
 		t.Errorf("after a restart the schedules are\n%+v\nbefore\n%+v", after, before)
 	}

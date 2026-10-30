@@ -13,7 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -37,7 +37,7 @@ func withTeams(t *testing.T, visionaries bool) (*store.Store, *current.State, st
 	t.Helper()
 	fakeClaudeOnPath(t)
 	repo := gitRepo(t)
-	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithFeatures())
+	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithExtensions())
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -93,7 +93,7 @@ func TestAVisionariesDoneKeepsItsIdeas(t *testing.T) {
 	s, state, repo := withVisionaries(t)
 	const id = "task-1"
 	task := startTask(t, s, id, repo, "editor")
-	if brief := readBrief(t, task, "turn-1"); !strings.Contains(brief, ideas.Feature().Coordinator.Decision) {
+	if brief := readBrief(t, task, "turn-1"); !strings.Contains(brief, ideas.Extension().Coordinator.Decision) {
 		t.Errorf("the editor's brief should say how to give ideas:\n%s", brief)
 	}
 
@@ -173,7 +173,7 @@ func TestAnIdeaRepeatingNoIdeaIsKeptAsANewOne(t *testing.T) {
 }
 
 // unclaimedIdeas is the note on a done carrying ideas from a coordinator
-// whose features don't read them.
+// whose extensions don't read them.
 const unclaimedIdeas = `Agentry couldn't keep "ideas", as no feature of this coordinator reads it.`
 
 // Only a Visionaries session suggests ideas: a Software done carrying some
@@ -194,14 +194,14 @@ func TestASoftwareDoneKeepsNoIdeas(t *testing.T) {
 	}
 }
 
-// A feature whose OnDone panics costs the done only its own note: the task
+// An extension whose OnDone panics costs the done only its own note: the task
 // is done, and the summary says the field wasn't kept and why.
 func TestAPanickingOnDoneIsANoteAndTheDoneGoesThrough(t *testing.T) {
 	s, state, repo := withTeams(t, true)
 	loop := newLoop(s, state, t.TempDir())
-	loop.Features = append(loop.Features, features.Feature{Name: "votes", Coordinator: &features.Coordinator{
-		For: func(agents.Agent, features.Reader) bool { return true }, Field: "votes",
-		OnDone: func(features.Core, *tasks.Task, json.RawMessage) string { panic("a bad hook") }}})
+	loop.Extensions = append(loop.Extensions, extensions.Extension{Name: "votes", Coordinator: &extensions.Coordinator{
+		For: func(agents.Agent, extensions.Reader) bool { return true }, Field: "votes",
+		OnDone: func(extensions.Core, *tasks.Task, json.RawMessage) string { panic("a bad hook") }}})
 	run(t, loop, state)
 	const id = "task-1"
 	startTask(t, s, id, repo, "tech-lead")
@@ -235,15 +235,15 @@ func TestADoneWithUnreadableIdeasIsSentBack(t *testing.T) {
 	}
 }
 
-// A feature whose Check panics doesn't hold up the done: it goes through,
+// An extension whose Check panics doesn't hold up the done: it goes through,
 // as if the Check had passed.
 func TestAPanickingCheckLetsTheDoneThrough(t *testing.T) {
 	s, state, repo := withTeams(t, true)
 	loop := newLoop(s, state, t.TempDir())
-	loop.Features = append(loop.Features, features.Feature{Name: "votes", Coordinator: &features.Coordinator{
-		For: func(agents.Agent, features.Reader) bool { return true }, Field: "votes",
+	loop.Extensions = append(loop.Extensions, extensions.Extension{Name: "votes", Coordinator: &extensions.Coordinator{
+		For: func(agents.Agent, extensions.Reader) bool { return true }, Field: "votes",
 		Check:  func(json.RawMessage) error { panic("a bad hook") },
-		OnDone: func(features.Core, *tasks.Task, json.RawMessage) string { return "" }}})
+		OnDone: func(extensions.Core, *tasks.Task, json.RawMessage) string { return "" }}})
 	run(t, loop, state)
 	const id = "task-1"
 	startTask(t, s, id, repo, "tech-lead")
@@ -254,15 +254,15 @@ func TestAPanickingCheckLetsTheDoneThrough(t *testing.T) {
 	}
 }
 
-// A feature the loop has no checked proposer for writes nothing: what its
+// An extension the loop has no checked proposer for writes nothing: what its
 // OnDone proposes is refused with the rule "features", and the log keeps no
 // task of it.
-func TestAFeatureWithNoLogWritesNothing(t *testing.T) {
+func TestAnExtensionWithNoLogWritesNothing(t *testing.T) {
 	s, state, repo := withTeams(t, true)
 	loop := newLoop(s, state, t.TempDir())
-	loop.Features = append(loop.Features, features.Feature{Name: "votes", Writes: []events.Type{events.TaskCreated},
-		Coordinator: &features.Coordinator{For: func(agents.Agent, features.Reader) bool { return true }, Field: "votes",
-			OnDone: func(c features.Core, task *tasks.Task, _ json.RawMessage) string {
+	loop.Extensions = append(loop.Extensions, extensions.Extension{Name: "votes", Writes: []events.Type{events.TaskCreated},
+		Coordinator: &extensions.Coordinator{For: func(agents.Agent, extensions.Reader) bool { return true }, Field: "votes",
+			OnDone: func(c extensions.Core, task *tasks.Task, _ json.RawMessage) string {
 				_, rejection, err := c.Log.Create("task-", events.Proposal{Actor: agentry, Type: events.TaskCreated,
 					Data: map[string]any{"title": "Count", "repo": task.Repo, "coordinator": "tech-lead", "about": task.ID}})
 				return fmt.Sprintf("%v %v", rejection, err)
@@ -282,14 +282,14 @@ func TestAFeatureWithNoLogWritesNothing(t *testing.T) {
 }
 
 // A hook's Core.Events only reads the log: it can't be asserted back to the
-// store to write past the feature's checked proposer.
+// store to write past the extension's checked proposer.
 func TestAHooksEventsCantPropose(t *testing.T) {
 	s, state, repo := withTeams(t, true)
 	loop := newLoop(s, state, t.TempDir())
-	loop.Features = append(loop.Features, features.Feature{Name: "votes", Coordinator: &features.Coordinator{
-		For: func(agents.Agent, features.Reader) bool { return true }, Field: "votes",
-		OnDone: func(c features.Core, _ *tasks.Task, _ json.RawMessage) string {
-			if _, writes := c.Events.(features.Proposer); writes {
+	loop.Extensions = append(loop.Extensions, extensions.Extension{Name: "votes", Coordinator: &extensions.Coordinator{
+		For: func(agents.Agent, extensions.Reader) bool { return true }, Field: "votes",
+		OnDone: func(c extensions.Core, _ *tasks.Task, _ json.RawMessage) string {
+			if _, writes := c.Events.(extensions.Proposer); writes {
 				return "Core.Events is a Proposer"
 			}
 			return ""
@@ -304,20 +304,20 @@ func TestAHooksEventsCantPropose(t *testing.T) {
 	}
 }
 
-// A hook reads its own feature's settings, not another feature's.
+// A hook reads its own extension's settings, not another extension's.
 func TestAHookReadsItsOwnSettings(t *testing.T) {
 	s, state, repo := withTeams(t, true)
 	loop := newLoop(s, state, t.TempDir())
-	file := map[string]features.Table{
+	file := map[string]extensions.Table{
 		"votes": {Values: map[string]string{"host": "votes.example"}},
 		"other": {Secrets: map[string]string{"hook": "other-secret"}},
 	}
-	loop.Settings = func(feature string) features.Settings {
-		return features.SettingsIn(func() map[string]features.Table { return file }, feature)
+	loop.Settings = func(extension string) extensions.Settings {
+		return extensions.SettingsIn(func() map[string]extensions.Table { return file }, extension)
 	}
-	loop.Features = append(loop.Features, features.Feature{Name: "votes", Coordinator: &features.Coordinator{
-		For: func(agents.Agent, features.Reader) bool { return true }, Field: "votes",
-		OnDone: func(c features.Core, _ *tasks.Task, _ json.RawMessage) string {
+	loop.Extensions = append(loop.Extensions, extensions.Extension{Name: "votes", Coordinator: &extensions.Coordinator{
+		For: func(agents.Agent, extensions.Reader) bool { return true }, Field: "votes",
+		OnDone: func(c extensions.Core, _ *tasks.Task, _ json.RawMessage) string {
 			host, _ := c.Settings.Setting("host")
 			hook, _ := c.Settings.Secret("hook")
 			return fmt.Sprintf("host %q, other's hook %q", host, hook)
@@ -436,7 +436,7 @@ func TestATeamFromYourVisionariesTemplateGetsTheIdeasHook(t *testing.T) {
 		mustPropose(t, s, p)
 	}
 	lead, _ := state.Roster().Coordinator("Dreams")
-	list := []features.Feature{ideas.Feature()}
+	list := []extensions.Extension{ideas.Extension()}
 	if hooks := hooksFor(list, lead, state); len(hooks) != 1 {
 		t.Errorf("your template's coordinator %s: hooks %v, want ideas", lead.Name, hooks)
 	}
@@ -465,19 +465,19 @@ func TestAVisionariesBriefIsAsItWasBeforeTheHook(t *testing.T) {
 	}
 }
 
-// A feature whose For or Brief panics costs the brief only its own part:
-// the brief is the one the other features make.
+// An extension whose For or Brief panics costs the brief only its own part:
+// the brief is the one the other extensions make.
 func TestAPanickingHookLeavesTheBriefToTheOthers(t *testing.T) {
 	want, err := os.ReadFile(filepath.Join("testdata", "visionaries-brief.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, broken := range map[string]*features.Coordinator{
-		"For":   {For: func(agents.Agent, features.Reader) bool { panic("a bad hook") }},
-		"Brief": {For: func(agents.Agent, features.Reader) bool { return true }, Brief: func(features.Reader, *tasks.Task) []features.Section { panic("a bad hook") }},
+	for name, broken := range map[string]*extensions.Coordinator{
+		"For":   {For: func(agents.Agent, extensions.Reader) bool { panic("a bad hook") }},
+		"Brief": {For: func(agents.Agent, extensions.Reader) bool { return true }, Brief: func(extensions.Reader, *tasks.Task) []extensions.Section { panic("a bad hook") }},
 	} {
 		t.Run(name, func(t *testing.T) {
-			brief, repo := visionariesBriefWith(t, features.Feature{Name: "votes", Coordinator: broken}, ideas.Feature())
+			brief, repo := visionariesBriefWith(t, extensions.Extension{Name: "votes", Coordinator: broken}, ideas.Extension())
 			if got := strings.ReplaceAll(brief, repo, "<repo>"); got != string(want) {
 				t.Errorf("the brief changed:\n got %q\nwant %q", got, want)
 			}
@@ -490,11 +490,11 @@ func TestAPanickingHookLeavesTheBriefToTheOthers(t *testing.T) {
 // open one is left out.
 func visionariesBrief(t *testing.T) (string, string) {
 	t.Helper()
-	return visionariesBriefWith(t, ideas.Feature())
+	return visionariesBriefWith(t, ideas.Extension())
 }
 
-// visionariesBriefWith is visionariesBrief, made with list's features.
-func visionariesBriefWith(t *testing.T, list ...features.Feature) (string, string) {
+// visionariesBriefWith is visionariesBrief, made with list's extensions.
+func visionariesBriefWith(t *testing.T, list ...extensions.Extension) (string, string) {
 	t.Helper()
 	s, state, repo := withTeams(t, true)
 	mustCreateTask(t, s, events.Proposal{Actor: you, Type: events.TaskCreated,

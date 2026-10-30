@@ -14,7 +14,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -28,9 +28,9 @@ import (
 // Next says. Its own proposals are events too, so each one wakes it again:
 // the task moves step by step, and a restart picks up where it was.
 type Loop struct {
-	store  *store.Store      // the log: what the loop reads and proposes
-	events features.EventLog // the store, read-only: what a feature's hooks read of the log
-	state  *current.State    // every task and roster, as of the log's last event
+	store  *store.Store        // the log: what the loop reads and proposes
+	events extensions.EventLog // the store, read-only: what an extension's hooks read of the log
+	state  *current.State      // every task and roster, as of the log's last event
 	runner *turns.Runner
 	fleet  *machines.Fleet
 	files  fileWork // shared files being moved (files.go)
@@ -38,12 +38,12 @@ type Loop struct {
 
 	startedAt int64 // the log's last position when the loop was made: what came before is history (followups.go)
 
-	Clones   string                       // where repos the user names by a git address are cloned, for a "move"
-	Defaults tasks.Limits                 // the server's limits, for a task Agentry makes that comes from no other task (tasks.NewLimits)
-	Features []features.Feature           // every feature in this binary: their coordinator hooks add to briefs and act on dones (features.go)
-	Logs     map[string]features.Proposer // each feature's proposer from features.Checked, by its Name: all its hooks may write through
+	Clones     string                         // where repos the user names by a git address are cloned, for a "move"
+	Defaults   tasks.Limits                   // the server's limits, for a task Agentry makes that comes from no other task (tasks.NewLimits)
+	Extensions []extensions.Extension         // every extension in this binary: their coordinator hooks add to briefs and act on dones (extensions.go)
+	Logs       map[string]extensions.Proposer // each extension's proposer from extensions.Checked, by its Name: all its hooks may write through
 
-	Settings func(feature string) features.Settings // each feature's own table in the settings file, for its hooks; nil for none
+	Settings func(extension string) extensions.Settings // each extension's own table in the settings file, for its hooks; nil for none
 }
 
 var agentry = events.Actor{Kind: events.System, ID: tasks.Loop}
@@ -51,7 +51,7 @@ var agentry = events.Actor{Kind: events.System, ID: tasks.Loop}
 // NewLoop makes the loop before the server takes requests, so a close
 // written once it does is never mistaken for history.
 func NewLoop(s *store.Store, state *current.State, runner *turns.Runner, fleet *machines.Fleet) *Loop {
-	return &Loop{store: s, events: features.ReadOnly(s), state: state, runner: runner, fleet: fleet, startedAt: s.LastPosition()}
+	return &Loop{store: s, events: extensions.ReadOnly(s), state: state, runner: runner, fleet: fleet, startedAt: s.LastPosition()}
 }
 
 // gitTimeout is how long a machine has to make, move or remove a worktree:
@@ -250,12 +250,12 @@ func (l *Loop) briefFor(task *tasks.Task, roster agents.Roster, move Move, sessi
 	agent := move.Agent
 	if session.Resumes() {
 		if agent.Coordinates {
-			return resumedCoordinatorBrief(task, agent, roster, session.Seen, session.From, l.familyOf(task), l.machines(), shared, l.state, l.Features)
+			return resumedCoordinatorBrief(task, agent, roster, session.Seen, session.From, l.familyOf(task), l.machines(), shared, l.state, l.Extensions)
 		}
 		return resumedWorkerBrief(task, agent, roster, move.Handoff, session.Seen, session.From, shared)
 	}
 	if agent.Coordinates {
-		return coordinatorBrief(task, agent, roster, l.familyOf(task), l.machines(), shared, l.state, l.Features)
+		return coordinatorBrief(task, agent, roster, l.familyOf(task), l.machines(), shared, l.state, l.Extensions)
 	}
 	if agent.Column == agents.Reviews {
 		return handoffBrief(task, agent, roster, move.Handoff, shared, l.commitsToReview(task))

@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 )
 
 // A fake Agentry: tasks, epics and a story of one, one action waiting for
@@ -86,9 +86,9 @@ func startOn(t *testing.T, agentry client.Client, canElicit bool, answers func(s
 	return startWith(t, agentry, nil, canElicit, answers)
 }
 
-// startWith is startOn with the features in list.
-func startWith(t *testing.T, agentry client.Client, list []features.Feature, canElicit bool, answers func(string, json.RawMessage) any) *claude {
-	s := &Server{agentry: agentry, repo: "/repo", version: "test", features: list}
+// startWith is startOn with the extensions in list.
+func startWith(t *testing.T, agentry client.Client, list []extensions.Extension, canElicit bool, answers func(string, json.RawMessage) any) *claude {
+	s := &Server{agentry: agentry, repo: "/repo", version: "test", extensions: list}
 	toServer, fromClaude := io.Pipe()
 	fromServer, toClaude := io.Pipe()
 	go s.Serve(context.Background(), toServer, toClaude)

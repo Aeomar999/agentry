@@ -10,7 +10,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/schedules"
@@ -25,9 +25,9 @@ func Open(t testing.TB, path string) (*store.Store, *current.State) {
 	return OpenWith(t, path, events.Core())
 }
 
-// OpenWith is Open with another catalogue, such as WithFeatures. The state
-// keeps the streams of every feature serve installs, and the rules run the
-// features' own, as serve does; under a catalogue without them, their
+// OpenWith is Open with another catalogue, such as WithExtensions. The state
+// keeps the streams of every extension serve installs, and the rules run the
+// extensions' own, as serve does; under a catalogue without them, their
 // streams are foreign.
 func OpenWith(t testing.TB, path string, catalogue *events.Catalogue) (*store.Store, *current.State) {
 	t.Helper()
@@ -56,23 +56,23 @@ func openUnchecked(t testing.TB, path string, catalogue *events.Catalogue) (*sto
 // makes it: it keeps the streams of ideas and schedules whenever the
 // catalogue registers them.
 func NewState(catalogue *events.Catalogue) *current.State {
-	return current.New(catalogue, features.StreamsOf(Installed()...)...)
+	return current.New(catalogue, extensions.StreamsOf(Installed()...)...)
 }
 
-// WithFeatures is the catalogue serve opens the log with: the core's event
+// WithExtensions is the catalogue serve opens the log with: the core's event
 // types, and those of ideas and schedules.
-func WithFeatures() *events.Catalogue {
-	catalogue, err := events.NewCatalogue(features.Registrations(Installed()...)...)
+func WithExtensions() *events.Catalogue {
+	catalogue, err := events.NewCatalogue(extensions.Registrations(Installed()...)...)
 	if err != nil {
 		panic(err)
 	}
 	return catalogue
 }
 
-// Installed are the features serve installs (cmd/agentry's
-// installedFeatures), which a test log is opened with.
-func Installed() []features.Feature {
-	return []features.Feature{ideas.Feature(), schedules.Feature()}
+// Installed are the extensions serve installs (cmd/agentry's
+// installedExtensions), which a test log is opened with.
+func Installed() []extensions.Extension {
+	return []extensions.Extension{ideas.Extension(), schedules.Extension()}
 }
 
 // snapshotCuts is how many positions CheckSnapshots takes in a longer log:
@@ -98,7 +98,7 @@ func CheckSnapshots(t testing.TB, path string, catalogue *events.Catalogue, last
 		cuts = append(cuts, last)
 		slices.Sort(cuts)
 	}
-	if err := current.EqualThroughSnapshots(path, catalogue, t.TempDir(), slices.Compact(cuts), features.StreamsOf(Installed()...)...); err != nil {
+	if err := current.EqualThroughSnapshots(path, catalogue, t.TempDir(), slices.Compact(cuts), extensions.StreamsOf(Installed()...)...); err != nil {
 		t.Errorf("a snapshot differs from a replay of the log: %v", err)
 	}
 }

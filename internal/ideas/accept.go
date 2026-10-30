@@ -8,7 +8,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
@@ -46,12 +46,12 @@ type Board interface {
 	Roster() agents.Roster
 }
 
-// Log is what Accept writes to the log and reads of it: a feature's
+// Log is what Accept writes to the log and reads of it: an extension's
 // Proposer and its read-only EventLog, as its Core gives them.
 // *store.Store is both.
 type Log interface {
-	features.Proposer
-	features.EventLog
+	extensions.Proposer
+	extensions.EventLog
 }
 
 // Accept makes an open idea a task in your Backlog, or started when you
@@ -145,7 +145,7 @@ var beforeMarking = func() {}
 // before marking it. A task the state can't hand out, such as a broken one, is
 // skipped unless its task.created names the idea: then it can't be marked,
 // and Refused says so, but no second task is made from the idea either.
-func madeFrom(log features.EventLog, board Board, id string) (Acceptance, error) {
+func madeFrom(log extensions.EventLog, board Board, id string) (Acceptance, error) {
 	for _, taskID := range board.TaskIDs() {
 		task, err := board.Task(taskID)
 		if err == nil {
@@ -168,7 +168,7 @@ func madeFrom(log features.EventLog, board Board, id string) (Acceptance, error)
 // ideaOf is the stream a task was made from, read from its task.created in
 // the log, "" for none. An archived task's task.created went with its
 // rows, so its marker's summary says.
-func ideaOf(log features.EventLog, taskID string) (string, error) {
+func ideaOf(log extensions.EventLog, taskID string) (string, error) {
 	stream, err := log.Stream(taskID)
 	if err != nil {
 		return "", err
@@ -189,7 +189,7 @@ func ideaOf(log features.EventLog, taskID string) (string, error) {
 // with no second event. The rules refuse Agentry a task that isn't parked:
 // it starts one only by moving it, as you turned on. Task is "" and Refused
 // says why when it can't.
-func makeTask(log features.Proposer, board Board, idea *Idea, kind tasks.Kind, choice Choice) (Acceptance, error) {
+func makeTask(log extensions.Proposer, board Board, idea *Idea, kind tasks.Kind, choice Choice) (Acceptance, error) {
 	if reason := worktrees.IsRepo(idea.Repo); reason != "" {
 		return Acceptance{Refused: "the idea's repo can't take a task: " + reason}, nil
 	}

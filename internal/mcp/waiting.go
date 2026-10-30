@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
-// What waits for you, from any task, as one line each (a feature's lines as
+// What waits for you, from any task, as one line each (an extension's lines as
 // it says), and the news Claude tells you of between your messages: what
 // newly waits for you, tasks that finished, what a coordinator told you (its
 // reply to you, an epic split into stories that wait for you to start
@@ -21,11 +21,11 @@ import (
 
 // Waiting is one thing waiting for you, or a task that finished: Kind is
 // "needs you", "done" (a task finished), "said" (a coordinator told you),
-// "offline" (a machine), or a feature's own.
-type Waiting = features.Waiting
+// "offline" (a machine), or an extension's own.
+type Waiting = extensions.Waiting
 
 // WaitingFor is what GET /api/waiting lists for a session in repo ("" when
-// not known): the core's entries oldest first, then each feature's.
+// not known): the core's entries oldest first, then each extension's.
 func WaitingFor(agentry client.Client, repo string) ([]Waiting, error) {
 	var all []Waiting
 	if err := agentry.Call("GET", "/api/waiting?repo="+url.QueryEscape(repo), nil, &all); err != nil {

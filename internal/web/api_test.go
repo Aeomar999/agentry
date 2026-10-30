@@ -1724,7 +1724,7 @@ func TestACustomTeamIsRefusedWhole(t *testing.T) {
 }
 
 // A team copied from a built-in template is made from it, every agent of
-// it, so it keeps the template's features: one copied from the Visionaries
+// it, so it keeps the template's extensions: one copied from the Visionaries
 // suggests ideas.
 func TestACopiedTeamIsMadeFromItsTemplate(t *testing.T) {
 	server, s, state := newTestStateChecking(t, func(events.Proposal) *events.Rejection { return nil })
@@ -2037,7 +2037,7 @@ func TestATeamIsRemovedWithItsAgents(t *testing.T) {
 	}
 }
 
-// The templates say their ID and the features they turn on, so the page can
+// The templates say their ID and the extensions they turn on, so the page can
 // find the team made from one by template, whatever it is called.
 func TestTeamTemplatesSayTheirIDAndFeatures(t *testing.T) {
 	server, _ := newTestServer(t)
@@ -2108,7 +2108,7 @@ func addedFrom(t *testing.T, template string) []agents.Agent {
 }
 
 // Editing an agent keeps the template it came from, whatever the page sends,
-// so its team keeps the features the template turns on.
+// so its team keeps the extensions the template turns on.
 func TestEditingAnAgentKeepsItsTemplate(t *testing.T) {
 	server, s := newTestServer(t)
 	if code, body := call(t, server, "POST", "/api/teams", `{"template":"Visionaries"}`); code != 200 {

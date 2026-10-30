@@ -15,7 +15,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
@@ -26,7 +26,7 @@ import (
 )
 
 // The ideas' routes, tested over HTTP through the server serve runs: web
-// mounts them from Feature, and they write through the proposer Checked
+// mounts them from Extension, and they write through the proposer Checked
 // makes, as serve.go gives it.
 
 const token = "ui-secret"
@@ -48,21 +48,21 @@ func newTestServerWith(t *testing.T, limits tasks.Limits) (*httptest.Server, *st
 // limits in limits.
 func newServer(t *testing.T, limits tasks.Limits) (*httptest.Server, *store.Store, *current.State) {
 	t.Helper()
-	return newServerLogging(t, limits, func(s *store.Store) features.Proposer {
-		return features.Checked(ideas.Feature(), features.Registration(ideas.Feature()), s)
+	return newServerLogging(t, limits, func(s *store.Store) extensions.Proposer {
+		return extensions.Checked(ideas.Extension(), extensions.Registration(ideas.Extension()), s)
 	})
 }
 
 // newServerLogging is newServer with the ideas' log made by logOf.
-func newServerLogging(t *testing.T, limits tasks.Limits, logOf func(*store.Store) features.Proposer) (*httptest.Server, *store.Store, *current.State) {
+func newServerLogging(t *testing.T, limits tasks.Limits, logOf func(*store.Store) extensions.Proposer) (*httptest.Server, *store.Store, *current.State) {
 	t.Helper()
-	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithFeatures())
+	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithExtensions())
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
 	server := httptest.NewServer(web.NewServer(s, state, web.Config{UIToken: token, DefaultRepo: "/src/app", Clones: filepath.Join(t.TempDir(), "repos"),
 		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}, Budget: limits.Budget, MaxTurns: limits.MaxTurns,
-		Features: []features.Feature{ideas.Feature()}, Logs: map[string]features.Proposer{ideas.Name: logOf(s)}}, http.NotFoundHandler(), nil).Handler())
+		Extensions: []extensions.Extension{ideas.Extension()}, Logs: map[string]extensions.Proposer{ideas.Name: logOf(s)}}, http.NotFoundHandler(), nil).Handler())
 	t.Cleanup(server.Close)
 	return server, s, state
 }
@@ -489,10 +489,10 @@ func TestATaskFromAnOldLogShowsTheIdeaItWasMadeFrom(t *testing.T) {
 }
 
 // ideasLine is Ideas' line in GET /api/features.
-func ideasLine(t *testing.T, server *httptest.Server) features.Line {
+func ideasLine(t *testing.T, server *httptest.Server) extensions.Line {
 	t.Helper()
 	code, body := call(t, server, "GET", "/api/features", "")
-	var manifest struct{ Features []features.Line }
+	var manifest struct{ Features []extensions.Line }
 	if err := json.Unmarshal([]byte(body), &manifest); code != 200 || err != nil {
 		t.Fatalf("features: %d %v %s", code, err, body)
 	}
@@ -502,7 +502,7 @@ func ideasLine(t *testing.T, server *httptest.Server) features.Line {
 		}
 	}
 	t.Fatalf("no ideas in %s", body)
-	return features.Line{}
+	return extensions.Line{}
 }
 
 func TestIdeasHiddenWithNoTeamAndNoIdeas(t *testing.T) {
@@ -564,8 +564,8 @@ func TestIdeasBadgeCountsOpenIdeas(t *testing.T) {
 // the features check and makes no task, while a dismiss, of Ideas' own
 // type, still goes through.
 func TestAcceptWritesOnlyThroughTheCheckedLog(t *testing.T) {
-	server, s, state := newServerLogging(t, tasks.Limits{}, func(s *store.Store) features.Proposer {
-		return features.Checked(features.Feature{Name: ideas.Name}, features.Registration(ideas.Feature()), s)
+	server, s, state := newServerLogging(t, tasks.Limits{}, func(s *store.Store) extensions.Proposer {
+		return extensions.Checked(extensions.Extension{Name: ideas.Name}, extensions.Registration(ideas.Extension()), s)
 	})
 	repo := gitRepo(t)
 	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)

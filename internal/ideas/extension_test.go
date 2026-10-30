@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 )
 
@@ -13,7 +13,7 @@ import (
 // with their stream broken or not, and the ideas. The rest of the Reader is
 // left nil, so reading it fails the test.
 type board struct {
-	features.Reader
+	extensions.Reader
 	roster    agents.Roster
 	templates agents.UserTemplates
 	broken    error // the templates stream's
@@ -62,7 +62,7 @@ func TestIdeasIsOnByTheTeamsTemplate(t *testing.T) {
 	for _, c := range cases {
 		state := board{roster: agents.Roster{{Name: "tech-lead", Coordinates: true}, c.lead},
 			templates: agents.UserTemplates{{ID: "dreams", Team: "Dreams", BasedOn: "visionaries"}}}
-		entry := ideas.Feature().Manifest(state)
+		entry := ideas.Extension().Manifest(state)
 		if entry.Enabled != c.enabled || entry.Visible != c.enabled || entry.Why != c.why {
 			t.Errorf("%s: %+v", c.name, entry)
 		}
@@ -74,19 +74,19 @@ func TestIdeasIsOnByTheTeamsTemplate(t *testing.T) {
 func TestIdeasIsOnForABuiltInTeamWhenYourTemplatesAreBroken(t *testing.T) {
 	dreams := board{roster: agents.Roster{{Name: "lead", Team: "Dreams", Coordinates: true, Template: "dreams"}},
 		templates: agents.UserTemplates{{ID: "dreams", Team: "Dreams", BasedOn: "visionaries"}}, broken: errors.New("a bad event")}
-	if entry := ideas.Feature().Manifest(dreams); entry.Enabled {
+	if entry := ideas.Extension().Manifest(dreams); entry.Enabled {
 		t.Errorf("your template unread: %+v", entry)
 	}
 	builtIn := dreams
 	builtIn.roster = append(builtIn.roster, agents.Agent{Name: "visionary-lead", Team: "Visionaries", Coordinates: true, Template: "visionaries"})
-	if entry := ideas.Feature().Manifest(builtIn); !entry.Enabled || entry.Why != "the Visionaries team suggests ideas" {
+	if entry := ideas.Extension().Manifest(builtIn); !entry.Enabled || entry.Why != "the Visionaries team suggests ideas" {
 		t.Errorf("the built-in team: %+v", entry)
 	}
 }
 
 func TestIdeasIsKeptForOneIdea(t *testing.T) {
 	state := board{ideas: []*ideas.Idea{{ID: "idea-1", State: ideas.Dismissed}}}
-	entry := ideas.Feature().Manifest(state)
+	entry := ideas.Extension().Manifest(state)
 	if entry.Enabled || !entry.Visible || entry.Badge != 0 || entry.Why != "kept while 1 idea remains; no team from the Visionaries template or one based on it now" {
 		t.Errorf("one dismissed idea: %+v", entry)
 	}

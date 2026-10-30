@@ -21,7 +21,7 @@ type UserTemplate struct {
 	Description string    `json:"description"`
 	Agents      []Agent   `json:"agents"`
 	From        string    `json:"from,omitempty"`    // the team it was saved from; a template saved before Agentry kept it has none
-	BasedOn     string    `json:"basedOn,omitempty"` // the built-in template its team came from, if any, whose features its teams keep
+	BasedOn     string    `json:"basedOn,omitempty"` // the built-in template its team came from, if any, whose extensions its teams keep
 	SavedAt     time.Time `json:"savedAt,omitzero"`  // when it was last saved, as the log has it
 }
 
@@ -89,7 +89,7 @@ func savedFrom(roster Roster, bases Bases, team, name, id, description string, b
 }
 
 // Bases resolve a team's template link to the built-in template whose
-// features the team keeps: a built-in link is its own base, a template of
+// extensions the team keeps: a built-in link is its own base, a template of
 // yours, live or removed, has the base it was saved with, and anything
 // else has none.
 type Bases struct {
@@ -109,7 +109,7 @@ func (b Bases) Of(template string) string {
 	return b.Removed[template]
 }
 
-// templateState is what BasesIn reads, as a features.Reader or the
+// templateState is what BasesIn reads, as an extensions.Reader or the
 // current state has it.
 type templateState interface {
 	Templates() UserTemplates
@@ -214,7 +214,7 @@ func (t UserTemplates) Clone() UserTemplates {
 
 // RemovedTemplates are the ids of the templates you removed, each with the
 // built-in template it was based on then ("" for none): the teams made
-// from one still name its id, and keep that base's features. A removed id
+// from one still name its id, and keep that base's extensions. A removed id
 // stays taken until an import saves it again.
 type RemovedTemplates map[string]string
 

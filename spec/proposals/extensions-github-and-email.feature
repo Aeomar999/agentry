@@ -16,7 +16,7 @@ Feature: Shipping through GitHub, and email
 
   @PROP-30 @user @test @to-settings
   Scenario: While git is off, the Settings page says how to turn it on, and never takes the token
-    # docs/design/t-019-shipping.md sections 7 and 9; builds on @SET-01 (internal/features/features.go Manifest) and features.toml (internal/features/settings.go Settings)
+    # docs/design/t-019-shipping.md sections 7 and 9; builds on @SET-01 (internal/extensions/extensions.go Manifest) and features.toml (internal/extensions/settings.go Settings)
     # test: ui/src/pages/SettingsPage.test.tsx and internal/githost/feature_test.go (to write)
     Given a features.toml with no git table
     When the Settings page is shown
@@ -43,7 +43,7 @@ Feature: Shipping through GitHub, and email
   @PROP-32 @agent @manual @to-agents
   Scenario: For a repo git is on for, the deployer pushes the task branch, not dev
     # docs/design/t-019-shipping.md section 4, decision 1 in section 12; changes @TURN-13 for those repos only (internal/agents/defaults/deployer.md)
-    # the brief's section comes from the feature's Coordinator.Brief (internal/features/features.go Coordinator)
+    # the brief's section comes from the feature's Coordinator.Brief (internal/extensions/extensions.go Coordinator)
     Given git on for the repo of task-121, and a reviewed and tested task handed to the deployer
     When the deployer's turn runs
     Then its brief says this repo ships through pull requests, and its push is exactly git push origin HEAD:agentry/task-121, as a command of its own: yes
@@ -205,7 +205,7 @@ Feature: Shipping through GitHub, and email
 
   @PROP-46 @claude-code @test @to-claude-code-tools
   Scenario: show_pipeline gives a task's request and pipeline from the log, with no call to GitHub
-    # docs/design/t-019-shipping.md section 5; the tool comes from the feature's Tools (internal/features/features.go), listed while the feature is enabled or visible
+    # docs/design/t-019-shipping.md section 5; the tool comes from the feature's Tools (internal/extensions/extensions.go), listed while the feature is enabled or visible
     # test: internal/githost/tools_test.go (to write), on a fixture log
     Given task-121 with request 412 open and its latest run failed on test
     When Claude Code calls show_pipeline with task "task-121"
@@ -259,7 +259,7 @@ Feature: Shipping through GitHub, and email
 
   @PROP-50 @user @test @to-settings
   Scenario: Email is off until features.toml names the user's address and the mail server
-    # docs/design/extensions.md section 3, Notifications; features.toml keeps secrets in a table under the feature's (internal/features/settings.go Secret), @SET-01
+    # docs/design/extensions.md section 3, Notifications; features.toml keeps secrets in a table under the feature's (internal/extensions/settings.go Secret), @SET-01
     # test: internal/email/feature_test.go and ui/src/pages/SettingsPage.test.tsx (to write)
     Given a features.toml with no email table
     When the Settings page is shown

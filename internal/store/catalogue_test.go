@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 )
@@ -14,7 +14,7 @@ import (
 // Each store checks proposals against the catalogue it was opened with, so
 // two logs open at once can know different types.
 func TestTwoStoresKeepTheirOwnCatalogues(t *testing.T) {
-	withIdeas, err := events.NewCatalogue(features.Registration(ideas.Feature()))
+	withIdeas, err := events.NewCatalogue(extensions.Registration(ideas.Extension()))
 	if err != nil {
 		t.Fatal(err)
 	}

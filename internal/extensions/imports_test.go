@@ -1,4 +1,4 @@
-package features
+package extensions
 
 import (
 	"os/exec"
@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-// features is a leaf: of Agentry's own packages it may import only these,
-// none of which imports anything that imports features.
+// extensions is a leaf: of Agentry's own packages it may import only these,
+// none of which imports anything that imports extensions.
 var mayImport = []string{"events", "agents", "tasks", "workers", "connections", "settings", "client"}
 
-func TestFeaturesImportsNoOtherCorePackage(t *testing.T) {
+func TestExtensionsImportsNoOtherCorePackage(t *testing.T) {
 	out, err := exec.Command("go", "list", "-deps", ".").Output()
 	if err != nil {
 		t.Fatal(err)
@@ -19,8 +19,8 @@ func TestFeaturesImportsNoOtherCorePackage(t *testing.T) {
 	const internal = "gitlab.com/dev.chempa/agentry/internal/"
 	for _, dep := range strings.Fields(string(out)) {
 		name, ours := strings.CutPrefix(dep, internal)
-		if ours && name != "features" && !slices.Contains(mayImport, name) {
-			t.Errorf("features imports %s; it may import only %v", dep, mayImport)
+		if ours && name != "extensions" && !slices.Contains(mayImport, name) {
+			t.Errorf("extensions imports %s; it may import only %v", dep, mayImport)
 		}
 	}
 }

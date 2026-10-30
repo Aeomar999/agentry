@@ -13,7 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -38,12 +38,12 @@ type step struct {
 	accepted    bool
 }
 
-// installed are the features serve installs, and withIdeas the catalogue it
+// installed are the extensions serve installs, and withIdeas the catalogue it
 // opens the log with.
 var (
-	installed = []features.Feature{ideas.Feature()}
+	installed = []extensions.Extension{ideas.Extension()}
 	withIdeas = func() *events.Catalogue {
-		catalogue, err := events.NewCatalogue(features.Registrations(installed...)...)
+		catalogue, err := events.NewCatalogue(extensions.Registrations(installed...)...)
 		if err != nil {
 			panic(err)
 		}

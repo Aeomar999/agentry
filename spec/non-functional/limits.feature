@@ -169,7 +169,7 @@ Feature: Limits
     Then the body of 1,048,576 bytes is accepted
     And the body of 1,048,577 bytes is refused with HTTP 400
     # not under test, checked by hand: a route that takes JSON has the same cap, MaxBody = 1 << 20 (internal/httpapi/httpapi.go lines 23 and 28)
-    # README.md, Features' settings and secrets; internal/web/features_api_test.go TestASignedRouteTakesABodyOfExactlyMaxBody and TestASignedRouteRefusesAnOversizedBody
+    # README.md, Features' settings and secrets; internal/web/extensions_api_test.go TestASignedRouteTakesABodyOfExactlyMaxBody and TestASignedRouteRefusesAnOversizedBody
 
   @LIM-20 @manual
   Scenario: A shared file is at most 2 GiB

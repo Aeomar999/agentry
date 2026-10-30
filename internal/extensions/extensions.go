@@ -1,7 +1,7 @@
-// Package features is what a feature, such as ideas, adds to Agentry. It is
+// Package extensions is what an extension, such as ideas, adds to Agentry. It is
 // a leaf: core packages import it, and it imports none that could import it
-// back. Core reads a list of features; it never names one.
-package features
+// back. Core reads a list of extensions; it never names one.
+package extensions
 
 import (
 	"context"
@@ -18,9 +18,9 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
-// A Feature is one capability a team or a setting turns on. Every field but
+// An Extension is one capability a team or a setting turns on. Every field but
 // Name may be left out.
-type Feature struct {
+type Extension struct {
 	Name        string               // "ideas": its manifest entry, routes and UI folder use it
 	Version     int                  // raised when its events or state change
 	Streams     *Streams             // the streams it owns, if any
@@ -32,14 +32,14 @@ type Feature struct {
 
 	// Waiting is what of it waits for you, about repo ("" when not known),
 	// worked out in the server, which lists it in GET /api/waiting after the
-	// core's entries. The server asks every feature, hidden or not: one with
+	// core's entries. The server asks every extension, hidden or not: one with
 	// something waiting (open ideas) shows anyway.
 	Waiting func(state Reader, repo string) []Waiting
 
 	// In agentry mcp, a separate process that reaches the server only over
 	// its API: Tools are its MCP tools for a session in repo ("" outside
 	// one), and Instructions its lines in the server instructions Claude
-	// Code reads, each a "- " bullet; both only while the feature is
+	// Code reads, each a "- " bullet; both only while the extension is
 	// enabled or visible.
 	Tools        func(agentry API, repo string) []Tool
 	Instructions string
@@ -49,7 +49,7 @@ type Feature struct {
 	Jobs func(ctx context.Context, c Core)
 }
 
-// Streams are a feature's own streams, each named Prefix and an ID and
+// Streams are an extension's own streams, each named Prefix and an ID and
 // holding only Types: how the state builds and keeps each one. Types are the
 // events its streams hold, with their fields and writers; Registration adds
 // them to the catalogue. FromEvents builds a stream's state from its accepted
@@ -66,15 +66,15 @@ type Streams struct {
 	Check      Rule
 }
 
-// Rule is a feature's check 3 for one proposal, given the state it would be
+// Rule is an extension's check 3 for one proposal, given the state it would be
 // appended to. It can only refuse: the core's rules run first, and a nil
 // Rejection lets through only what they let through. One that panics
 // refuses the proposal.
 type Rule func(p events.Proposal, state Reader) *events.Rejection
 
 // Registration is what f adds to the event catalogue: its streams' prefix
-// and types. A feature with no Streams adds nothing.
-func Registration(f Feature) events.Registration {
+// and types. An extension with no Streams adds nothing.
+func Registration(f Extension) events.Registration {
 	if f.Streams == nil {
 		return events.Registration{}
 	}
@@ -82,7 +82,7 @@ func Registration(f Feature) events.Registration {
 }
 
 // Registrations are list's, in its order, for events.NewCatalogue.
-func Registrations(list ...Feature) []events.Registration {
+func Registrations(list ...Extension) []events.Registration {
 	registrations := make([]events.Registration, 0, len(list))
 	for _, f := range list {
 		registrations = append(registrations, Registration(f))
@@ -90,9 +90,9 @@ func Registrations(list ...Feature) []events.Registration {
 	return registrations
 }
 
-// StreamsOf are the Streams of list's features that have any, in its order,
+// StreamsOf are the Streams of list's extensions that have any, in its order,
 // for the state to keep.
-func StreamsOf(list ...Feature) []*Streams {
+func StreamsOf(list ...Extension) []*Streams {
 	var owned []*Streams
 	for _, f := range list {
 		if f.Streams != nil {
@@ -102,8 +102,8 @@ func StreamsOf(list ...Feature) []*Streams {
 	return owned
 }
 
-// Reader is the read side of the state, for features and for the rules:
-// current.State implements it, and rules.State is this type. A feature
+// Reader is the read side of the state, for extensions and for the rules:
+// current.State implements it, and rules.State is this type. An extension
 // never holds the store. Broken is why a stream could not be built, or nil.
 // NextTask is the stream Store.Create names for the next task.
 type Reader interface {
@@ -117,11 +117,11 @@ type Reader interface {
 	Templates() agents.UserTemplates           // the team templates you saved
 	RemovedTemplates() agents.RemovedTemplates // the ids of those you removed, with the base each had
 	Broken(stream string) error
-	Owned(stream string) (any, error) // a feature's stream, as its Next left it; nil, nil when it holds nothing
+	Owned(stream string) (any, error) // an extension's stream, as its Next left it; nil, nil when it holds nothing
 	OwnedIDs(prefix string) []string  // the streams with a prefix, in log order, broken ones too
 }
 
-// Proposer writes to the log, as *store.Store does. A feature is given the
+// Proposer writes to the log, as *store.Store does. An extension is given the
 // one Checked made for it, in its Core, never the store itself.
 type Proposer interface {
 	Propose(p events.Proposal) (events.Event, *events.Rejection, error)
@@ -129,7 +129,7 @@ type Proposer interface {
 }
 
 // EventLog reads a stream's accepted events from the log, as *store.Store
-// does. It only reads: a feature writes through its Proposer.
+// does. It only reads: an extension writes through its Proposer.
 type EventLog interface {
 	Stream(name string) ([]events.Event, error)
 }
@@ -142,9 +142,9 @@ type readOnly struct{ log EventLog }
 
 func (r readOnly) Stream(name string) ([]events.Event, error) { return r.log.Stream(name) }
 
-// Core is all a feature's hooks and routes may use: it has no store. Events reads the
+// Core is all an extension's hooks and routes may use: it has no store. Events reads the
 // log and never writes to it. Defaults are the server's limits for a task
-// Agentry makes that comes from no other task. Settings are the feature's
+// Agentry makes that comes from no other task. Settings are the extension's
 // own table in the settings file.
 type Core struct {
 	Log      Proposer // from Checked
@@ -154,7 +154,7 @@ type Core struct {
 	Settings Settings
 }
 
-// Coordinator is a feature's part in the coordinator loop, for the
+// Coordinator is an extension's part in the coordinator loop, for the
 // coordinators For says. For, Brief and OnDone run on the state of the
 // moment, so For and Brief are given the Reader to read it from.
 type Coordinator struct {
@@ -166,7 +166,7 @@ type Coordinator struct {
 	OnDone   func(c Core, task *tasks.Task, field json.RawMessage) string // acts on it; returns a note for the summary
 }
 
-// A Route is one endpoint of a feature's HTTP API. Web mounts it behind the
+// A Route is one endpoint of an extension's HTTP API. Web mounts it behind the
 // wrapper its Auth names; there is no way to mount one without, and none
 // sits behind the wrapper that hands out the UI token. Its writes should be
 // made as you (httpapi.You), with your authority and no more, and a signed
@@ -210,7 +210,7 @@ func (a Auth) Verify() func(r *http.Request, body []byte) error { return a.verif
 // Section is one more part of a coordinator's brief.
 type Section struct{ Heading, Text string }
 
-// Entry is whether the page shows a feature, and why.
+// Entry is whether the page shows an extension, and why.
 type Entry struct {
 	Enabled bool   `json:"enabled"`         // its trigger is present, so it can make new data
 	Visible bool   `json:"visible"`         // the page shows it: enabled, or it has data to look at
@@ -218,16 +218,16 @@ type Entry struct {
 	Badge   int    `json:"badge,omitempty"` // a count for the sidebar, such as open ideas
 }
 
-// Line is a feature's line in GET /api/features.
+// Line is an extension's line in GET /api/features.
 type Line struct {
 	Name string `json:"name"`
 	Entry
 }
 
-// Manifest is every feature's line, in list's order, as of state. A feature
+// Manifest is every extension's line, in list's order, as of state. An extension
 // with no Manifest is listed hidden, and so is one whose Manifest panics,
-// with Why saying so: one feature's bug doesn't cost the others their lines.
-func Manifest(list []Feature, state Reader) []Line {
+// with Why saying so: one extension's bug doesn't cost the others their lines.
+func Manifest(list []Extension, state Reader) []Line {
 	lines := []Line{}
 	for _, f := range list {
 		line := Line{Name: f.Name}
@@ -241,7 +241,7 @@ func Manifest(list []Feature, state Reader) []Line {
 
 // entryOf is f's Manifest, a panic in it logged and turned into a hidden,
 // disabled entry.
-func entryOf(f Feature, state Reader) (entry Entry) {
+func entryOf(f Extension, state Reader) (entry Entry) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			slog.Warn("features: a feature's manifest panicked", "feature", f.Name, "panic", recovered)

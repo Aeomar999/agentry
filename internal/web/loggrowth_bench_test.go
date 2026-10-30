@@ -75,7 +75,7 @@ func benchReplay(t *testing.T, path string, total int) replayed {
 	ids := createdTasks(t, path)
 	whole := minOf3(func() {
 		start := time.Now()
-		s, err := store.Open(path, storetest.WithFeatures(), nil, nil)
+		s, err := store.Open(path, storetest.WithExtensions(), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -118,7 +118,7 @@ func benchReplay(t *testing.T, path string, total int) replayed {
 	// The state built from events that are then dropped, so the texts it
 	// keeps count too (readmodel_bench_test.go kept the events alive).
 	held := heldBy(func() any {
-		s, err := store.Open(path, storetest.WithFeatures(), nil, nil)
+		s, err := store.Open(path, storetest.WithExtensions(), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
