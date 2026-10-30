@@ -91,6 +91,15 @@ func NewServer(s *store.Store, state *current.State, config Config, hooks, termi
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	s.register(mux)
+	return s.atPosition(mux)
+}
+
+// register puts every route on mux: web's own, then each domain's and
+// extension's, mounted with its owner. web's own are only these; a new
+// route belongs in a domain's api package or an extension
+// (TestTheRouteTableIsUpToDate).
+func (s *Server) register(mux routeTable) {
 	mux.Handle("POST "+hookcall.Path, s.hooks) // has its own token
 
 	mux.HandleFunc("GET /", s.page) // the UI: its files, and index.html for its pages
@@ -128,7 +137,6 @@ func (s *Server) Handler() http.Handler {
 	for _, f := range s.config.Extensions {
 		s.mount("the "+f.Name+" extension", s.routesOf(f), mux)
 	}
-	return s.atPosition(mux)
 }
 
 // positionHeader is the log position an API read saw everything up to.

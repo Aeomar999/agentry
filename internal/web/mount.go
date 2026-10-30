@@ -9,34 +9,53 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 )
 
+// routeTable is what the server's routes are registered on: its
+// *http.ServeMux, or in TestTheRouteTableIsUpToDate a recorder that passes
+// them on to one.
+type routeTable interface {
+	Handle(pattern string, handler http.Handler)
+	HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request))
+}
+
+// mountNoter is a routeTable that is told whose each mounted route is and
+// its access kind: the recorder, so the table can show them. The
+// *http.ServeMux isn't one.
+type mountNoter interface {
+	mounted(owner, pattern, access string)
+}
+
 // mount puts routes on mux, each behind the wrapper its Auth names. owner
 // says whose they are, "the ideas extension" or "the settings domain", for
 // the panic when one clashes. Every extension's and domain's routes are
 // mounted here, so they all sit behind a wrapper the same way.
-func (s *Server) mount(owner string, routes []extensions.Route, mux *http.ServeMux) {
+func (s *Server) mount(owner string, routes []extensions.Route, mux routeTable) {
+	noter, notes := mux.(mountNoter)
 	for _, route := range routes {
-		wrap := s.wrapperOf(route.Auth)
+		access, wrap := s.wrapperOf(route.Auth)
 		mountRoute(owner, route, func(pattern string, handler http.HandlerFunc) { mux.Handle(pattern, wrap(handler)) })
+		if notes {
+			noter.mounted(owner, route.Pattern, access)
+		}
 	}
 }
 
-// wrapperOf is the wrapper auth names: signed for extensions.Signed,
-// requireUIOrDesk for extensions.Desk, requireWorker for extensions.Worker,
-// none for extensions.Open, whose handler checks its own code, and
-// requireUI for extensions.UI. None is requireRealUIToken, which hands out
-// the token.
-func (s *Server) wrapperOf(auth extensions.Auth) func(http.HandlerFunc) http.Handler {
+// wrapperOf is the wrapper auth names, and its access kind for the route
+// table: signed for extensions.Signed, requireUIOrDesk for extensions.Desk,
+// requireWorker for extensions.Worker, none for extensions.Open, whose
+// handler checks its own code, and requireUI for extensions.UI. None is
+// requireRealUIToken, which hands out the token.
+func (s *Server) wrapperOf(auth extensions.Auth) (access string, wrap func(http.HandlerFunc) http.Handler) {
 	switch {
 	case auth.IsOpen():
-		return func(next http.HandlerFunc) http.Handler { return next }
+		return "open", func(next http.HandlerFunc) http.Handler { return next }
 	case auth.Verify() != nil:
-		return func(next http.HandlerFunc) http.Handler { return signed(auth.Verify(), next) }
+		return "signed", func(next http.HandlerFunc) http.Handler { return signed(auth.Verify(), next) }
 	case auth.DeskToo():
-		return s.requireUIOrDesk
+		return "UI or desk", s.requireUIOrDesk
 	case auth.ForWorkers():
-		return s.requireWorker
+		return "worker", s.requireWorker
 	}
-	return s.requireUI
+	return "UI", s.requireUI
 }
 
 // requireWorker lets in a worker that shows its credential, and tells the
