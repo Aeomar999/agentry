@@ -125,7 +125,7 @@ Feature: Compatibility
     Then the worker connects, since it dials out to the server: no port is opened on the machine
     And status shows the engines found with their versions, as claude <version> or codex <version>, and lists git under missing with "(agents need it)" when it is not on the PATH
     And the Workers page shows the machine's os/arch and the same engines, or "no engines found"
-    # README.md, Add machines; internal/runtime/machines/describe.go lines 18-33; cmd/agentry/worker_manage.go lines 104-131; ui/src/pages/WorkersPage.tsx lines 39, 48; no test of the output
+    # README.md, Add machines; internal/runtime/machines/describe.go lines 18-33; cmd/agentry/worker_manage.go lines 104-131; ui/src/domains/workers/WorkersPage.tsx lines 39, 48; no test of the output
 
   # --- Engines: Claude Code and Codex ---
 

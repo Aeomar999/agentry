@@ -12,7 +12,7 @@ import { AgentPage } from "@/domains/agents/AgentPage";
 import { AgentEditPage } from "@/domains/agents/AgentEditPage";
 import { PolicyPage } from "@/pages/PolicyPage";
 import { SettingsPage } from "@/pages/SettingsPage";
-import { WorkersPage } from "@/pages/WorkersPage";
+import { WorkersPage } from "@/domains/workers/WorkersPage";
 import { NotFoundPage } from "@/shell/NotFoundPage";
 import { ErrorPage } from "@/shell/ErrorPage";
 import { WorkspacePage } from "@/domains/tasks/workspace/WorkspacePage";
