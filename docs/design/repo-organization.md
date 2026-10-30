@@ -206,12 +206,21 @@ copy it:
   naming that file at its new path, as `ideas.feature` and
   `tasks-and-board.feature` name `settingsapi.go`.
 
-What stays in `web` after that: sign-in and tokens (`signin.go`), the
-embedded page and install scripts (`page.go`, `scripts.go`), addresses,
-and the few routes that span every domain: `/api/events`, `/api/waiting`,
-`/api/config`, `/api/features` (its name stays: decision 5). What stays
-in `mcp`: the protocol, the server instructions, notices and the waiting
-list it words.
+What stays in `web` after that, as the tree in
+[web-and-mcp.md](web-and-mcp.md) has it: the server and its mounts, with
+the token wrappers (`server.go`, `mount.go`), each domain's API as web
+builds it (`domains.go`), sign-in and its one-time codes (`signin.go`,
+`signin_codes.go`), the embedded page (`page.go`), the server's addresses
+and install commands (`addresses.go`), filling an install script and the
+commands that run it (`scripts.go`; the scripts themselves are embedded in
+their domains' api packages), agentry for a machine (`binary.go`), the
+Workspace Claude's message and its token (`claude_api.go`), and the few
+routes that span every domain: `/api/features` (`extensions_api.go`; its
+name stays: decision 5), `/api/config`, `/api/theme` and `/api/changes`
+(`config_api.go`), and `/api/waiting` (`waiting_api.go`). What stays in
+`mcp`: the stdio transport, the protocol and the server instructions, the
+list of every tool, which extensions are shown, the waiting list and news
+it words, and desktop notices. `web` and `mcp` stay one package each.
 
 [web-and-mcp.md](web-and-mcp.md) lists every file left in `web` and `mcp`
 after step 12, where each goes, and the stories that take them there.
