@@ -64,7 +64,7 @@ Feature: Limits
     Then the coordinator's next move asks the user, not a turn: yes
     And the question says "24 of its 24 turns"
     And after the user's answer the next move is a turn: yes
-    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/runtime/coordinator/loop.go line 325); the question goes on " without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on." (internal/runtime/coordinator/next.go line 65); the answer sets the count of turns since it to 0 (internal/domain/tasks/apply.go line 463); the answer hands the task to the coordinator (internal/domain/tasks/apply.go line 464)
+    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/runtime/coordinator/loop.go line 325); the question goes on " without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on." (internal/runtime/coordinator/next.go line 65); the answer sets the count of turns since it to 0 (internal/domain/tasks/apply_handoffs.go line 37); the answer hands the task to the coordinator (internal/domain/tasks/apply_handoffs.go line 38)
     # README.md, Use it; internal/runtime/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
 
   @LIM-08 @test
@@ -124,7 +124,7 @@ Feature: Limits
     Then the coordinator's next move asks the user, not a turn: yes
     And the question is "3 issues in a row, the last: " followed by the issue's reason and ". Fix what's wrong and answer, and the coordinator carries on."
     And a retry still counts as an issue, so retries are bounded at 3
-    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/runtime/coordinator/loop.go line 325); a turn that ends normally, or the user's answer, sets the count of issues in a row to 0 (internal/domain/tasks/apply.go lines 386 and 463)
+    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/runtime/coordinator/loop.go line 325); a turn that ends normally, or the user's answer, sets the count of issues in a row to 0 (internal/domain/tasks/apply_turns.go line 56 and internal/domain/tasks/apply_handoffs.go line 37)
     # README.md, How a task moves; internal/runtime/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou; the retry: internal/domain/tasks/retry_fresh_test.go TestARetryFreshIssueHandsTheSameStepBack and internal/runtime/coordinator/next_test.go TestIssuesInARowEndingInARetryQuoteTheIssue
 
   @LIM-15 @test

@@ -74,7 +74,7 @@ func proposalsOf(log []events.Event) []events.Proposal {
 
 // storyNews is an epic whose story finishes while its coordinator's turn is
 // open: the epic's next reply hands the news back to the coordinator
-// (internal/domain/tasks/apply.go, StoryDone). Then the story is removed.
+// (internal/domain/tasks/apply_epics.go, StoryDone). Then the story is removed.
 func storyNews() []events.Proposal {
 	started := proposal("task-1", worker, events.TurnStarted, map[string]any{"agent": "tech-lead", "hash": "h"})
 	started.Correlation = "turn-1"

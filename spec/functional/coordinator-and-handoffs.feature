@@ -141,7 +141,7 @@ Feature: The coordinator and its handoffs
     When the loop reads the task
     Then the next turn is the coordinator's and its handoff is exactly the issue's reason
     And the task's count of issues in a row goes up by 1
-    # IssuesInARow + 1 on IssueRaised: internal/domain/tasks/apply.go
+    # IssuesInARow + 1 on IssueRaised: internal/domain/tasks/apply_turns.go
 
   @HANDOFF-15 @coordinator @test
   Scenario: A crashed agent is an issue within seconds
@@ -203,7 +203,7 @@ Feature: The coordinator and its handoffs
     And the coordinator has no turn of its own before the retry
     And the coordinator is only told
     And the retry still counts as 1 issue towards the issues in a row
-    # retryFresh: internal/runtime/watchdog/watchdog.go checkTurn; the same step handed back: internal/domain/tasks/apply.go IssueRaised
+    # retryFresh: internal/runtime/watchdog/watchdog.go checkTurn; the same step handed back: internal/domain/tasks/apply_turns.go IssueRaised
 
   @HANDOFF-22 @coordinator @manual
   Scenario: An agent's report of a blocker is a report, not an issue
@@ -212,7 +212,7 @@ Feature: The coordinator and its handoffs
     Then the 12 reports raised 0 issues, and the stop is the "turns" limit, with the words "24 of its 24 turns"
     And the issues limit is reached only by 3 issues raised with no turn ending between them
     # an issue is raised only for a failed turn or a usage limit that lasts: internal/domain/policy/hooks/handler.go, the UsageLimited and TurnFailed cases
-    # a turn that ends with a report sets IssuesInARow to 0: internal/domain/tasks/apply.go turn.ended
+    # a turn that ends with a report sets IssuesInARow to 0: internal/domain/tasks/apply_turns.go turn.ended
     # the stop on "turns" alone: internal/runtime/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou, which writes the reports to the log and runs no hook
     # Steps: on a task with Max turns 24, have the coordinator assign the engineer and the engineer end each turn with
     # the report "still broken", 12 times over. Open the task's Events tab: no issue.raised row, and the last
@@ -317,14 +317,14 @@ Feature: The coordinator and its handoffs
     When the user answers
     Then the next turn starts, no longer stopped by the limit
     # not under test, checked by hand: the turns since the answer and the issues in a row are both 0
-    # task.answered sets TurnsSinceAnswer and IssuesInARow to 0: internal/domain/tasks/apply.go
+    # task.answered sets TurnsSinceAnswer and IssuesInARow to 0: internal/domain/tasks/apply_handoffs.go
 
   @HANDOFF-32 @coordinator @manual
   Scenario: A turn that ends normally resets the issues in a row
     Given a task with 2 issues in a row
     When an agent's turn ends with a report
     Then the issues in a row are 0, and 3 more issues are needed before the user is asked
-    # turn.ended sets IssuesInARow to 0: internal/domain/tasks/apply.go
+    # turn.ended sets IssuesInARow to 0: internal/domain/tasks/apply_turns.go
     # Steps: on a task, let 2 turns crash (kill the agent's process), then let 1 turn end with a report;
     # let 2 more turns crash: the task stays in its column, the Tasks page does not list it under Needs you
     # and its page does not say Waiting for you; a 3rd crash in a row lists it under Needs you, its page says
