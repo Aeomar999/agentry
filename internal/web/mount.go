@@ -17,8 +17,8 @@ type routeTable interface {
 	HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request))
 }
 
-// mountNoter is a routeTable that is told whose each mounted route is and
-// its access kind: the recorder, so the table can show them. The
+// mountNoter is a routeTable that is told each mounted route's owner and
+// access kind: the recorder, so the table can show them. The
 // *http.ServeMux isn't one.
 type mountNoter interface {
 	mounted(owner, pattern, access string)
