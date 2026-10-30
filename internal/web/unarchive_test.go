@@ -15,6 +15,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks/tasksapi"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
 
@@ -170,13 +171,13 @@ func TestAReopenThatCantUnarchiveWritesNothing(t *testing.T) {
 		f := newArchiveFixture(t)
 		storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs.Disk)
 		var last int64
-		f.app.archives.blobs = openedThen{Disk: f.blobs.Disk, then: func() {
+		f.app.archives = tasksapi.NewArchives(openedThen{Disk: f.blobs.Disk, then: func() {
 			if _, rejection, err := f.log.Unarchive("task-2", f.blobs.Disk); rejection != nil || err != nil {
 				t.Fatal(rejection, err)
 			}
 			storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs.Disk)
 			last = f.log.LastPosition()
-		}}
+		}})
 		code, body := call(t, f.server, "POST", "/api/tasks/task-2/direct", `{"to":"in-progress"}`)
 		if code != http.StatusConflict || !strings.Contains(body, "took an event since its marker was read") {
 			t.Errorf("reopening as the marker changed: %d %s, want 409", code, body)
@@ -193,11 +194,11 @@ func TestAReopenThatCantUnarchiveWritesNothing(t *testing.T) {
 func TestAReopenFindsTheTaskUnarchivedByAnother(t *testing.T) {
 	f := newArchiveFixture(t)
 	storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs.Disk)
-	f.app.archives.blobs = openedThen{Disk: f.blobs.Disk, then: func() {
+	f.app.archives = tasksapi.NewArchives(openedThen{Disk: f.blobs.Disk, then: func() {
 		if _, rejection, err := f.log.Unarchive("task-2", f.blobs.Disk); rejection != nil || err != nil {
 			t.Fatal(rejection, err)
 		}
-	}}
+	}})
 	if code, body := call(t, f.server, "POST", "/api/tasks/task-2/direct", `{"to":"in-progress"}`); code != http.StatusOK {
 		t.Fatalf("reopening a task unarchived by another: %d %s", code, body)
 	}

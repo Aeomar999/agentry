@@ -429,7 +429,7 @@ Feature: Reliability
 
   @REL-31 @test
   Scenario: An archived task still opens as it was, and takes no new events
-    # internal/web/archives.go reads the blob and the live rows back; internal/core/rules refuse every event but task.unarchived
+    # internal/domain/tasks/tasksapi/archives.go reads the blob and the live rows back; internal/core/rules refuse every event but task.unarchived
     Given a task archived with its history
     When its page is read
     Then it reads as before archiving, marked archived with the date: yes

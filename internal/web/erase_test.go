@@ -284,15 +284,7 @@ func TestErasingForgetsTheOpenedArchivesItRedacts(t *testing.T) {
 }
 
 // opened is the streams the cache of opened archives keeps, oldest first.
-func (f *eraseFixture) opened() []string {
-	f.web.archives.mu.Lock()
-	defer f.web.archives.mu.Unlock()
-	var streams []string
-	for _, o := range f.web.archives.recent {
-		streams = append(streams, o.stream)
-	}
-	return streams
-}
+func (f *eraseFixture) opened() []string { return f.web.archives.Opened() }
 
 func markerOf(t *testing.T, f *eraseFixture, id string) string {
 	t.Helper()

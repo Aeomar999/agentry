@@ -1,4 +1,4 @@
-package web
+package tasksapi
 
 import (
 	"encoding/json"

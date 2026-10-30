@@ -124,16 +124,14 @@ func longTask(t *testing.T, s *store.Store, id string, turns, actions int) int {
 }
 
 // openArchived times GET /api/tasks/{id} for an archived task: cold, with
-// the cache of opened tasks emptied before each read, and warm, from it.
+// the cache of opened tasks emptied of it before each read, and warm, from it.
 // Each is the median of 5.
 func openArchived(t *testing.T, app *Server, id string) (cold, warm time.Duration) {
 	t.Helper()
 	server := app.Handler()
 	url := "/api/tasks/" + id
 	cold = median(func() {
-		app.archives.mu.Lock()
-		app.archives.recent = nil
-		app.archives.mu.Unlock()
+		app.archives.Forget(id)
 		if body := detailBody(t, server, url); !strings.Contains(string(body), `"archived":true`) {
 			t.Fatalf("%s isn't read as archived: %.200s", id, body)
 		}

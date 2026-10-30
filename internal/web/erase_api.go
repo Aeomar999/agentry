@@ -82,7 +82,7 @@ func (s *Server) erase(w http.ResponseWriter, r *http.Request) {
 		httpapi.Failed(w, err)
 		return
 	}
-	s.archives.forget(id)
+	s.archives.Forget(id)
 	warnings := []string{}
 	if err != nil {
 		warnings = append(warnings, err.Error())
@@ -296,7 +296,7 @@ func (s *Server) redactCopies(id string, copies map[string][]copied) []string {
 			var err error
 			if _, archived := s.task(stream); errors.Is(archived, current.ErrArchived) {
 				_, rejection, err = s.store.RedactArchivedRows(stream, kept.text, kept.rows, httpapi.You, why, s.summarise(stream), s.config.Blobs)
-				s.archives.forget(stream) // its old marker's entry still holds the words
+				s.archives.Forget(stream) // its old marker's entry still holds the words
 			} else {
 				_, rejection, err = s.store.RedactRows(stream, kept.text, kept.rows, httpapi.You, why)
 			}

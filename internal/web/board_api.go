@@ -67,7 +67,7 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, refusal, http.StatusConflict)
 			return
 		}
-		if task = s.unarchive(w, id); task == nil {
+		if task = s.tasksAPI().Unarchive(w, id); task == nil {
 			return
 		}
 	case err != nil || task == nil:
@@ -174,12 +174,12 @@ func (s *Server) archivedMove(id, to string, roster agents.Roster) (string, erro
 	if to != "shipping" {
 		return "", nil
 	}
-	archived, err := s.readArchived(id)
+	archived, err := s.tasksAPI().ArchivedTask(id)
 	if err != nil {
 		return "", err
 	}
-	if len(teammates(roster, archived.task, agents.Ships)) == 0 {
-		return noShipperIn(roster, archived.task), nil
+	if len(teammates(roster, archived, agents.Ships)) == 0 {
+		return noShipperIn(roster, archived), nil
 	}
 	return "", nil
 }

@@ -1,303 +1,27 @@
 package web
 
 import (
-	"cmp"
 	"context"
-	"errors"
-	"fmt"
 	"net/http"
-	"slices"
 	"strconv"
-	"strings"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/core/current"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/core/rules"
-	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents/agentsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/policyapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/settings/settingsapi"
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles/sharedfilesapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks/tasksapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
-	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
-	"gitlab.com/dev.chempa/agentry/internal/runtime/coordinator"
 )
-
-// listTasks lists every task's summary, an archived task's too: it is done,
-// so nothing blocks it and it waits for no slot.
-func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
-	if _, err := s.roster(); err != nil {
-		httpapi.Failed(w, err)
-		return
-	}
-	summaries := s.state.Summaries()
-	slices.SortStableFunc(summaries, tasks.SummariesInPriorityOrder)
-	done := map[string]bool{}
-	for _, summary := range summaries {
-		done[summary.ID] = summary.Status == tasks.Done
-	}
-	blocksNone := func(id string) bool {
-		if isDone, listed := done[id]; listed {
-			return isDone
-		}
-		return s.blocksNone(id)
-	}
-	slots := s.slots()
-	for i, summary := range summaries {
-		// A task archived since Summaries was read is nil here: it is listed without BlockedBy or Queued.
-		if task, _ := s.state.Task(summary.ID); task != nil {
-			summaries[i].BlockedBy = blockedBy(task, blocksNone)
-			summaries[i].Queued = slots.Queued(task.ID)
-		}
-	}
-	httpapi.Reply(w, summaries)
-}
-
-// slots are how many tasks run now and which wait for a slot, as the loop
-// holds them back.
-func (s *Server) slots() coordinator.Slots {
-	return coordinator.SlotsOf(s.state.Tasks(), s.state.Roster(), s.state.Settings().MaxRunningTasks)
-}
-
-func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
-	var request struct {
-		Title, Description, Repo string
-		NewRepo                  bool     // make Repo, a new folder, the task's own new git repo
-		Team                     string   // whose agents work on it; "" for the first team
-		Kind                     string   // "story" or "epic"; "" lets the coordinator split it if it is too big
-		Stories                  []string // for an epic: tasks there already, to file under it as its stories
-		Epic                     string   // for a story: the epic to file it under
-		Labels                   []string
-		Budget                   int // tokens; 0 takes the default, -1 is no limit
-		MaxTurns                 int // turns without your answer; 0 takes the default, -1 is no limit
-	}
-	if !httpapi.Decode(w, r, &request) {
-		return
-	}
-	request.Title, request.Repo = strings.TrimSpace(request.Title), strings.TrimSpace(request.Repo)
-	request.Description = strings.TrimSpace(request.Description)
-	if request.Title == "" && request.Description == "" {
-		http.Error(w, "describe the task", http.StatusBadRequest)
-		return
-	}
-	if len(request.Stories) > 0 {
-		request.Kind = "epic"
-	}
-	if request.Epic != "" {
-		request.Kind = "story"
-	}
-	kind := tasks.Story
-	switch request.Kind {
-	case "", "story":
-	case "epic":
-		kind = tasks.Epic
-	default:
-		http.Error(w, "a task is a story or an epic, not "+request.Kind, http.StatusBadRequest)
-		return
-	}
-	if request.Title == "" {
-		request.Title = titleFrom(request.Description) // the coordinator renames it once it has read the task
-	}
-	switch {
-	case request.NewRepo:
-		if err := worktrees.NewRepo(request.Repo, request.Title); err != nil {
-			http.Error(w, "making the new repo: "+err.Error(), http.StatusBadRequest)
-			return
-		}
-	case request.Repo == "" && request.Epic != "":
-		if epic, _ := s.task(request.Epic); epic != nil {
-			request.Repo = epic.Repo // a story works where its epic does
-		}
-		request.Repo = cmp.Or(request.Repo, s.config.DefaultRepo)
-	case request.Repo == "":
-		request.Repo = s.config.DefaultRepo
-	default:
-		repo, reason := s.tasksAPI().RepoFor(request.Repo)
-		if reason != "" {
-			http.Error(w, reason, http.StatusBadRequest)
-			return
-		}
-		request.Repo = repo
-	}
-	roster, err := s.roster()
-	if err != nil {
-		httpapi.Failed(w, err)
-		return
-	}
-	// A team you name is matched without case; one there isn't keeps its
-	// name, and has no coordinator.
-	coordinator, ok := roster.Coordinator(cmp.Or(roster.TeamNamed(request.Team), request.Team))
-	if !ok {
-		http.Error(w, "there is no coordinator in the "+cmp.Or(request.Team, "first")+" team", http.StatusConflict)
-		return
-	}
-
-	defaults := s.config.defaults()
-	parked := ""
-	if request.Epic != "" {
-		parked = "backlog" // with the epic's other stories, until you start it
-	}
-	created, rejection, err := s.store.Create("task-", events.Proposal{Actor: httpapi.You, Type: events.TaskCreated, Data: map[string]any{
-		"title": request.Title, "description": request.Description,
-		"repo": request.Repo, "coordinator": coordinator.Name, "labels": tasksapi.CleanLabels(request.Labels),
-		"budget": httpapi.LimitOf(request.Budget, defaults.Budget), "maxTurns": httpapi.LimitOf(request.MaxTurns, defaults.MaxTurns),
-		"teamChosen": request.Team != "", "kind": kind, "kindChosen": request.Kind != "", "parked": parked}})
-	switch {
-	case err != nil:
-		httpapi.Failed(w, err)
-		return
-	case rejection != nil:
-		http.Error(w, rejection.Reason, http.StatusConflict)
-		return
-	}
-	// The task is made: filing it is a second step, and what fails there
-	// is said, with the task kept.
-	id := created.Stream
-	var refused []string
-	for _, story := range request.Stories {
-		if why := s.tasksAPI().FileUnder(story, id); why != "" {
-			refused = append(refused, story+": "+why)
-		}
-	}
-	if request.Epic != "" {
-		if why := s.tasksAPI().FileUnder(id, request.Epic); why != "" {
-			refused = append(refused, why)
-		}
-	}
-	httpapi.Reply(w, map[string]any{"stream": created.Stream, "position": created.Position, "notFiled": refused})
-}
 
 // defaults are the limits a new task gets when it names none.
 func (c Config) defaults() tasks.Limits { return tasks.Limits{Budget: c.Budget, MaxTurns: c.MaxTurns} }
-
-// titleFrom stands in for a title nobody gave: the description's first
-// line, cut at a word to at most 72 characters.
-func titleFrom(description string) string {
-	line, _, _ := strings.Cut(description, "\n")
-	line = strings.Join(strings.Fields(line), " ")
-	if len(line) <= 72 {
-		return line
-	}
-	cut := strings.LastIndexByte(line[:72], ' ')
-	if cut < 40 {
-		cut = 72
-	}
-	return strings.TrimRight(line[:cut], ",.;:") + "..."
-}
-
-// showTask is a task's detail; an archived task's as it was before it
-// was archived, and when that was.
-func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
-	task, archived := s.shownTask(w, r)
-	if task == nil {
-		return
-	}
-	roster, err := s.roster()
-	if err != nil {
-		httpapi.Failed(w, err)
-		return
-	}
-	slots := s.slots()
-	detail := detailOf(task, roster)
-	detail.BlockedBy = blockedBy(task, s.blocksNone)
-	detail.Queued = slots.Queued(task.ID)
-	if epic, found := s.state.Summary(task.Epic); found {
-		detail.EpicTitle = epic.Title
-	}
-	detail.StoryList = []taskSummary{}
-	for _, id := range task.Stories {
-		summary, found := s.state.Summary(id)
-		if !found {
-			continue
-		}
-		// An archived story is done, so nothing blocks it and it waits for no slot.
-		if story, _ := s.task(id); story != nil {
-			summary.BlockedBy = blockedBy(story, s.blocksNone)
-			summary.Queued = slots.Queued(story.ID)
-		}
-		detail.StoryList = append(detail.StoryList, summary)
-	}
-	if archived != nil {
-		detail.Archived, detail.ArchivedAt = true, &archived.marker.At
-	}
-	httpapi.Reply(w, detail)
-}
-
-// answer sends your answer to the coordinator's question. Two answers are
-// approvals, which only you give, on the page (or through Claude Code, which
-// asks you itself): closing an epic, and copying a file from outside a
-// machine's worktrees. The desk passes on what you say, and approves nothing.
-func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
-	var request struct{ Answer string }
-	if !httpapi.Decode(w, r, &request) {
-		return
-	}
-	if s.isNone(r.PathValue("task")) {
-		s.noTask(w, r.PathValue("task"))
-		return
-	}
-	answer := strings.TrimSpace(request.Answer)
-	task, err := s.task(r.PathValue("task"))
-	closes := err == nil && task != nil && task.Closing != "" && strings.EqualFold(answer, coordinator.CloseEpic)
-	copies := err == nil && task != nil && task.Asked.Fetch != nil && strings.EqualFold(answer, coordinator.CopyFile)
-	switch {
-	case !closes && !copies:
-		httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.TaskAnswered, Data: map[string]any{"answer": answer}})
-	case !s.carriesUIToken(r):
-		http.Error(w, "that is approved on the page", http.StatusForbidden)
-	case closes:
-		// One event, the answer and the close together: an answer alone
-		// would start the coordinator's next turn.
-		httpapi.Propose(w, s.store, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TaskDone, Data: map[string]any{"summary": task.Closing}})
-	default:
-		s.copyApproved(w, r, task.ID, *task.Asked.Fetch)
-	}
-}
-
-// copyApproved copies the file you allowed, and answers with it.
-func (s *Server) copyApproved(w http.ResponseWriter, r *http.Request, id string, f tasks.Fetch) {
-	if s.config.Fleet == nil {
-		http.Error(w, "this server has no machines to copy from", http.StatusConflict)
-		return
-	}
-	m, online := s.config.Fleet.Get(f.Machine)
-	if !online {
-		http.Error(w, f.Machine+" is offline; answer again once it is back", http.StatusConflict)
-		return
-	}
-	files, err := m.SharedFetch(r.Context(), f.Path, f.As, true)
-	if err != nil {
-		http.Error(w, "copying "+f.Machine+":"+f.Path+": "+err.Error(), http.StatusConflict)
-		return
-	}
-	httpapi.Propose(w, s.store, events.Proposal{Stream: id, Actor: httpapi.You, Type: events.FilesFetched, Data: coordinator.Fetched(f, files, true)})
-}
-
-func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
-	s.decide(w, r, events.ActionApproved)
-}
-func (s *Server) deny(w http.ResponseWriter, r *http.Request) { s.decide(w, r, events.ActionDenied) }
-
-func (s *Server) decide(w http.ResponseWriter, r *http.Request, kind events.Type) {
-	var request struct{ Reason string }
-	if r.ContentLength != 0 && !httpapi.Decode(w, r, &request) {
-		return
-	}
-	if request.Reason == "" {
-		request.Reason = "no reason given"
-	}
-	if s.isNone(r.PathValue("task")) {
-		s.noTask(w, r.PathValue("task"))
-		return
-	}
-	httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: kind,
-		Correlation: r.PathValue("action"), Data: map[string]any{"reason": request.Reason}})
-}
 
 // showConfig is what the page needs to know about the server. policyProblem
 // says policy.toml has a mistake, and missingProfiles names the profiles
@@ -363,116 +87,6 @@ func (s *Server) waitForChanges(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) task(id string) (*tasks.Task, error) { return s.state.Task(id) }
 
-// isNone is whether there is no task id, never made or erased, as
-// tasksapi's isNone says.
-func (s *Server) isNone(id string) bool {
-	task, err := s.task(id)
-	return errors.Is(err, current.ErrErased) || err == nil && task == nil
-}
-
-// shownTask is the task a read of its own is about, or nil once it has
-// answered that there is none, or that it can't be read. The state keeps
-// an archived task as its summary alone, so it is read back from its
-// history, and archived says what it was read from. An erased task is
-// answered 410, with the day it was erased.
-func (s *Server) shownTask(w http.ResponseWriter, r *http.Request) (task *tasks.Task, archived *archivedRead) {
-	id := r.PathValue("task")
-	task, err := s.task(id)
-	if errors.Is(err, current.ErrArchived) {
-		if archived, err = s.readArchived(id); err != nil {
-			httpapi.Failed(w, err)
-			return nil, nil
-		}
-		return archived.task, archived
-	}
-	if err != nil || task == nil {
-		s.noTask(w, id)
-		return nil, nil
-	}
-	return task, nil
-}
-
-// reopenable is the task a route that may reopen it acts on, or nil once
-// it has answered that there is none, or that it can't be had. An archived
-// task is done, so the route reopens it, and it is unarchived for that
-// first: its rows come back from its blob (Store.Unarchive), and the state
-// holds it whole again (docs/design/log-growth.md section 4, "Reopening an
-// archived task"). When the store refuses, its reason is the answer, with
-// 409, and when it fails, with 500; it has written nothing either way. An
-// erased task is answered 410, as shownTask answers it.
-func (s *Server) reopenable(w http.ResponseWriter, id string) *tasks.Task {
-	task, err := s.task(id)
-	if errors.Is(err, current.ErrArchived) {
-		return s.unarchive(w, id)
-	}
-	if err != nil || task == nil {
-		s.noTask(w, id)
-		return nil
-	}
-	return task
-}
-
-// unarchive makes an archived task whole again, and returns it as the
-// state now holds it, or nil once it has answered why it can't. A refusal
-// because another request unarchived it first isn't one: the task is
-// whole.
-func (s *Server) unarchive(w http.ResponseWriter, id string) *tasks.Task {
-	_, rejection, err := s.store.Unarchive(id, s.archives.blobs)
-	if err != nil {
-		httpapi.Failed(w, err)
-		return nil
-	}
-	task, err := s.task(id)
-	switch {
-	case err == nil && task != nil:
-		return task
-	case rejection != nil:
-		http.Error(w, rejection.Reason, http.StatusConflict)
-	default:
-		httpapi.Failed(w, fmt.Errorf("%s was unarchived, but can't be read: %v", id, err))
-	}
-	return nil
-}
-
-// archivedRead is an archived task read back from its history.
-type archivedRead struct {
-	task    *tasks.Task    // as it was before it was archived
-	marker  events.Event   // its task.archived
-	history []events.Event // its whole record, rejections included
-}
-
-// readArchived reads an archived task back from its history, through the
-// cache of the last few read.
-func (s *Server) readArchived(id string) (*archivedRead, error) {
-	history, err := s.archives.history(s.store, id)
-	if err != nil {
-		return nil, err
-	}
-	marker, archived := store.MarkerOf(history)
-	if !archived { // unarchived since the state was read
-		return nil, fmt.Errorf("%s was unarchived as it was read: read it again", id)
-	}
-	task, err := s.archives.task(marker, history)
-	if err != nil {
-		return nil, fmt.Errorf("%s's archived events can't be replayed: %w", id, err)
-	}
-	if task == nil {
-		return nil, fmt.Errorf("%s's archived events have no task.created", id)
-	}
-	return &archivedRead{task: task, marker: marker, history: history}, nil
-}
-
-// blocksNone says whether a story after task id may start for it: id is
-// done, or archived, as only a done task is, or erased, which can never
-// be done and leaves nothing to wait for. A broken or unknown one blocks.
-func (s *Server) blocksNone(id string) bool {
-	task, err := s.task(id)
-	if errors.Is(err, current.ErrArchived) || errors.Is(err, current.ErrErased) {
-		return true
-	}
-	return task != nil && task.IsDone
-}
-
 func (s *Server) roster() (agents.Roster, error) {
 	return s.state.Roster(), s.state.Broken(events.AgentsStream)
 }
@@ -488,16 +102,20 @@ func (s *Server) policyAPI() policyapi.API {
 // a secret too.
 func (s *Server) settingsAPI() settingsapi.API {
 	return settingsapi.API{Log: s.store, State: s.state, Store: s.store, Blobs: s.config.Blobs, Redactions: s.config.Redactions,
-		Extensions: s.config.Extensions, Forget: s.archives.forget, WriteOverOldText: s.writeOverOldText}
+		Extensions: s.config.Extensions, Forget: s.archives.Forget, WriteOverOldText: s.writeOverOldText}
 }
 
 // tasksAPI is the tasks' routes as web mounts them, and the one way a
 // message to a task's coordinator is sent, filing a task under an epic
 // and finding a repo's folder too.
 func (s *Server) tasksAPI() tasksapi.API {
-	return tasksapi.API{Log: s.store, State: s.state, Fleet: s.config.Fleet, Clones: s.config.Clones,
-		Reopenable: s.reopenable, DropErasedStories: s.dropErasedStories, Reopen: s.reopen}
+	return tasksapi.API{Log: s.store, Store: s.store, State: s.state, Archives: s.archives, Roster: s.roster, Fleet: s.config.Fleet,
+		DefaultRepo: s.config.DefaultRepo, Defaults: s.config.defaults(), Clones: s.config.Clones, CarriesUIToken: s.carriesUIToken,
+		SharedFiles: filesShown, DropErasedStories: s.dropErasedStories, Reopen: s.reopen}
 }
+
+// filesShown is a task's shared files as its detail shows them.
+func filesShown(t *tasks.Task) any { return sharedfilesapi.FilesOf(t) }
 
 // agentsAPI is the Agents page's routes as web mounts them.
 func (s *Server) agentsAPI() agentsapi.API {

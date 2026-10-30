@@ -1,4 +1,4 @@
-package web
+package tasksapi
 
 import (
 	"fmt"
@@ -8,7 +8,6 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
-	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles/sharedfilesapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 )
 
@@ -21,27 +20,27 @@ type taskSummary = tasks.Summary
 
 type taskDetail struct {
 	taskSummary
-	Description   string                `json:"description"`
-	FirstTitle    string                `json:"firstTitle"` // when the coordinator renamed the task
-	Options       []string              `json:"options"`    // answers the open question offers
-	Page          string                `json:"page"`       // the page the open question came with
-	Coordinator   string                `json:"coordinator"`
-	TeamChosen    bool                  `json:"teamChosen"` // false: its coordinator may still pass it to the right team
-	EpicTitle     string                `json:"epicTitle"`  // a story's epic's
-	StoryList     []taskSummary         `json:"storyList"`  // an epic's stories, in the order they were planned
-	Shared        []sharedfilesapi.File `json:"shared"`     // its shared files
-	MovingTo      string                `json:"movingTo"`   // the repo it moves to when the turn in progress ends
-	Summary       string                `json:"summary"`
-	Worktree      *worktree             `json:"worktree"`
-	Trail         []step                `json:"trail"`
-	Turns         []turn                `json:"turnList"`
-	TokensUnknown string                `json:"tokensUnknown"`           // on how many turns the tokens couldn't be counted, and why; "" when every turn was
-	TokensSplit   *tokenSplit           `json:"tokensSplit,omitempty"`   // how tokensUsed splits, over the turns that said; absent when none did
-	TokensUnsplit int                   `json:"tokensUnsplit,omitempty"` // with a split: the part of tokensUsed from turns that didn't say
-	Approvals     []action              `json:"approvals"`               // waiting for you
-	Actions       []action              `json:"actions"`                 // its events are read a page at a time, at /api/tasks/{task}/events
-	Archived      bool                  `json:"archived,omitempty"`      // read back from its archive: it takes no events until it is reopened
-	ArchivedAt    *time.Time            `json:"archivedAt,omitempty"`    // when it was archived
+	Description   string        `json:"description"`
+	FirstTitle    string        `json:"firstTitle"` // when the coordinator renamed the task
+	Options       []string      `json:"options"`    // answers the open question offers
+	Page          string        `json:"page"`       // the page the open question came with
+	Coordinator   string        `json:"coordinator"`
+	TeamChosen    bool          `json:"teamChosen"` // false: its coordinator may still pass it to the right team
+	EpicTitle     string        `json:"epicTitle"`  // a story's epic's
+	StoryList     []taskSummary `json:"storyList"`  // an epic's stories, in the order they were planned
+	Shared        any           `json:"shared"`     // its shared files, as API.SharedFiles shows them
+	MovingTo      string        `json:"movingTo"`   // the repo it moves to when the turn in progress ends
+	Summary       string        `json:"summary"`
+	Worktree      *worktree     `json:"worktree"`
+	Trail         []step        `json:"trail"`
+	Turns         []turn        `json:"turnList"`
+	TokensUnknown string        `json:"tokensUnknown"`           // on how many turns the tokens couldn't be counted, and why; "" when every turn was
+	TokensSplit   *tokenSplit   `json:"tokensSplit,omitempty"`   // how tokensUsed splits, over the turns that said; absent when none did
+	TokensUnsplit int           `json:"tokensUnsplit,omitempty"` // with a split: the part of tokensUsed from turns that didn't say
+	Approvals     []action      `json:"approvals"`               // waiting for you
+	Actions       []action      `json:"actions"`                 // its events are read a page at a time, at /api/tasks/{task}/events
+	Archived      bool          `json:"archived,omitempty"`      // read back from its archive: it takes no events until it is reopened
+	ArchivedAt    *time.Time    `json:"archivedAt,omitempty"`    // when it was archived
 }
 
 type worktree struct {
@@ -157,7 +156,6 @@ func detailOf(t *tasks.Task, roster agents.Roster) taskDetail {
 	if detail.TokensSplit = splitOf(t.TokensSplit); detail.TokensSplit != nil {
 		detail.TokensUnsplit = t.Unsplit()
 	}
-	detail.Shared = sharedfilesapi.FilesOf(t)
 	if w := t.Worktree; w != nil {
 		detail.Worktree = &worktree{Worker: w.Worker, Path: w.Path, Branch: w.Branch, Base: w.Base, Port: w.Port}
 	}

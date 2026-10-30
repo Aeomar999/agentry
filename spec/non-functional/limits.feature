@@ -37,7 +37,7 @@ Feature: Limits
     And the config endpoint shows a budget of 5,000,000 and 2 turns
     And the MCP tool's create_task with no limits sends budget 0 and maxTurns 0 to the API: yes
     # not under test, checked by hand: the MCP tool sends a budget or maxTurns of -1 to the API as given (internal/mcp/tools.go line 308)
-    # README.md, Use it from Claude Code; internal/web/api_test.go TestANewTaskHasItsLimits; the MCP tool: internal/mcp/server_test.go TestTheBoardAndHandingOverWork
+    # README.md, Use it from Claude Code; internal/domain/tasks/tasksapi/tasks_api_test.go TestANewTaskHasItsLimits; the MCP tool: internal/mcp/server_test.go TestTheBoardAndHandingOverWork
 
   @LIM-05 @test
   Scenario: A task that comes from another takes that task's limits
@@ -55,7 +55,7 @@ Feature: Limits
     When the user raises the budget above what the task has used, or sets it to no limit
     Then the raised task is answered with "I raised the budget to <N> tokens. Carry on.", N being the new budget, and is working again: yes
     And the unlimited task is answered with "I made the budget unlimited. Carry on." and is working again: yes
-    # README.md, Use it; internal/web/api_test.go TestRaisingTheBudgetLetsATaskGoOn
+    # README.md, Use it; internal/domain/tasks/tasksapi/tasks_api_test.go TestRaisingTheBudgetLetsATaskGoOn
 
   @LIM-07 @test
   Scenario: A task has 24 turns without the user's answer before it asks
@@ -187,8 +187,8 @@ Feature: Limits
     Then ?limit=2000 is answered: yes
     And ?limit=2001 and ?limit=0 are refused with HTTP 400
     And 100 ?type= filters are taken, the 101st refused with HTTP 400
-    # not under test, checked by hand: a page with no limit holds at most 500 events (internal/web/events_api.go line 18), and the refusal says "limit is from 1 to 2000" (line 92)
-    # README.md, Use it; internal/web/events_api_test.go TestAnEventPageOfNoTaskOrWithBadBoundsIsRefused
+    # not under test, checked by hand: a page with no limit holds at most 500 events (internal/domain/tasks/tasksapi/events_api.go line 18), and the refusal says "limit is from 1 to 2000" (line 92)
+    # README.md, Use it; internal/domain/tasks/tasksapi/events_api_test.go TestAnEventPageOfNoTaskOrWithBadBoundsIsRefused
 
   @LIM-22 @test
   Scenario: A live terminal is sized between 20 by 5 and 500 by 200

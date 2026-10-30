@@ -22,6 +22,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/policyapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles/sharedfilesapi"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks/tasksapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
@@ -74,13 +75,13 @@ type Server struct {
 	hooks    http.Handler
 	terminal http.Handler // the live terminal websocket, T-018
 
-	signins  *signins  // the one-time codes that sign in another device
-	archives *archives // archived tasks read back from their blobs, the last few kept
+	signins  *signins           // the one-time codes that sign in another device
+	archives *tasksapi.Archives // archived tasks read back from their blobs, the last few kept
 }
 
 func NewServer(s *store.Store, state *current.State, config Config, hooks, terminal http.Handler) *Server {
 	return &Server{store: s, events: extensions.ReadOnly(s), state: state, config: config, hooks: hooks, terminal: terminal, signins: newSignins(time.Now),
-		archives: &archives{blobs: config.Blobs}}
+		archives: tasksapi.NewArchives(config.Blobs)}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -89,18 +90,9 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /", s.page) // the UI: its files, and index.html for its pages
 	api := func(pattern string, handler http.HandlerFunc) { mux.Handle(pattern, s.requireUI(handler)) }
-	// What the desk may do too: hand work to the coordinator and read it back.
-	deskToo := func(pattern string, handler http.HandlerFunc) { mux.Handle(pattern, s.requireUIOrDesk(handler)) }
-	deskToo("GET /api/tasks", s.listTasks)
-	deskToo("POST /api/tasks", s.createTask)
-	deskToo("GET /api/tasks/{task}", s.showTask)
-	deskToo("GET /api/tasks/{task}/events", s.listEvents)
-	deskToo("POST /api/tasks/{task}/answer", s.answer)
 	api("POST /api/tasks/{task}/erase", s.erase) // never the desk's: nothing undoes it
 	api("POST /api/tasks/{task}/direct", s.direct)
 	mux.Handle("POST /api/tasks/{task}/claude/message", s.requireClaude(s.claudeMessage))
-	api("POST /api/tasks/{task}/actions/{action}/approve", s.approve)
-	api("POST /api/tasks/{task}/actions/{action}/deny", s.deny)
 	api("GET /api/features", s.listFeatures)
 	api("GET /api/waiting", s.listWaiting)
 	api("GET /api/config", s.showConfig)

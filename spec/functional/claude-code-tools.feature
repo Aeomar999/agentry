@@ -177,7 +177,7 @@ Feature: Agentry from Claude Code
     Given Claude Code runs in a repo Agentry knows
     When Claude calls create_task with a title and a description and nothing else
     Then a task is made in this repo, with budget 0 and maxTurns 0 sent, which the server reads as its defaults
-    # internal/web/api.go createTask: 0 takes the server's default, -1 is no limit (internal/mcp/tools.go createTask)
+    # internal/domain/tasks/tasksapi/tasks_api.go createTask: 0 takes the server's default, -1 is no limit (internal/mcp/tools.go createTask)
     And the reply names the new task as task-N and gives a link to its page: yes
     # not under test, checked by hand: the reply says its coordinator reads it next (internal/mcp/tools.go line 319)
     And the reply ends with Waiting for the user (2) when 2 things wait
@@ -211,7 +211,7 @@ Feature: Agentry from Claude Code
     When Claude calls create_task with that address as repo
     Then the server clones the repo, and the task works in the clone: yes
     # not under test, checked by hand: the clone may take 10 minutes (internal/platform/worktrees/repo.go line 66, CloneTimeout), and create_task allows 1 minute more (internal/mcp/tools.go line 305)
-    # internal/web/api_test.go TestATaskInARepoNamedByItsAddressWorksInAClone: the task is made through the API, not create_task
+    # internal/domain/tasks/tasksapi/tasks_api_test.go TestATaskInARepoNamedByItsAddressWorksInAClone: the task is made through the API, not create_task
 
   @TOOLS-20 @claude-code @test
   Scenario: tell_coordinator sends the user's words to a task's coordinator

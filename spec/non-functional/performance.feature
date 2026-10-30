@@ -23,7 +23,7 @@ Feature: Performance
     When GET /api/tasks is requested 10 times in a row with the token as a bearer token, one after the other
     Then every answer is an empty list of 3 bytes
     And the median wall time of a request is 0.2 ms, the slowest 0.3 ms, as curl's total time measures it
-    # measured 2026-10-25 at commit 3c1976b5 with bench/tasklist.sh in the task's shared files: timeout 60 ./tasklist.sh <binary> <datadir> 7913 10; the list is built from the state's summaries in internal/web/api.go listTasks, not from the log
+    # measured 2026-10-25 at commit 3c1976b5 with bench/tasklist.sh in the task's shared files: timeout 60 ./tasklist.sh <binary> <datadir> 7913 10; the list is built from the state's summaries in internal/domain/tasks/tasksapi/tasks_api.go listTasks, not from the log
 
   @PERF-04 @test
   Scenario: Every API read says the log position it was read at

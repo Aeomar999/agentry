@@ -35,8 +35,7 @@ func (a API) setEpic(w http.ResponseWriter, r *http.Request) {
 	httpapi.Reply(w, map[string]string{"task": id, "epic": request.Epic})
 }
 
-// isNone is whether there is no task id, never made or erased, as web's
-// isNone says.
+// isNone is whether there is no task id, never made or erased.
 func (a API) isNone(id string) bool {
 	task, err := a.State.Task(id)
 	return errors.Is(err, current.ErrErased) || err == nil && task == nil

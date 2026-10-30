@@ -3,7 +3,7 @@ Feature: Tasks and the board
   running limits, search, the keys and the archive.
   # Sources: internal/domain/tasks, internal/runtime/archive, internal/domain/settings,
   # internal/runtime/coordinator/slots.go, internal/web/api.go, internal/web/board_api.go,
-  # internal/web/erase_api.go, internal/web/archives.go, internal/domain/tasks/tasksapi,
+  # internal/web/erase_api.go, internal/domain/tasks/tasksapi,
   # internal/domain/settings/settingsapi/settingsapi.go, ui/src/pages/TasksPage.tsx,
   # ui/src/pages/TaskPage.tsx, ui/src/components/organisms/TaskBoard.tsx,
   # ui/src/components/organisms/NewTaskForm.tsx,
@@ -18,7 +18,7 @@ Feature: Tasks and the board
     When the user adds a task from the page, with a description in their own words
     Then the task is shown with the team's coordinator as its coordinator
     And the path its work took shows exactly 1 handoff, from the user to the coordinator
-    # README.md, First steps; internal/web/api_test.go TestCreateListAndShowATask
+    # README.md, First steps; internal/domain/tasks/tasksapi/tasks_api_test.go TestCreateListAndShowATask
 
   @TASK-02 @user @manual
   Scenario: New task opens as a modal from the key n and the New task button
@@ -34,9 +34,9 @@ Feature: Tasks and the board
 
   @TASK-03 @user @test
   Scenario: A task needs only a description, and its first line names it
-    # internal/web/api_test.go TestATaskNeedsOnlyADescription
-    # 72 characters: internal/web/api.go line 183, titleFrom
-    # the words "describe the task": internal/web/api.go line 85; the test asserts the 400 only
+    # internal/domain/tasks/tasksapi/tasks_api_test.go TestATaskNeedsOnlyADescription
+    # 72 characters: internal/domain/tasks/tasksapi/tasks_api.go line 167, titleFrom
+    # the words "describe the task": internal/domain/tasks/tasksapi/tasks_api.go line 72; the test asserts the 400 only
     Given a server with no tasks
     When the user adds a task with the description "Fix the login redirect" followed by a second line, and no title
     Then the task is created with exactly the title "Fix the login redirect"
@@ -46,7 +46,7 @@ Feature: Tasks and the board
 
   @TASK-04 @user @test
   Scenario: The token budget and turn limit default to the server's, and Unlimited is allowed
-    # internal/web/api_test.go TestANewTaskHasItsLimits
+    # internal/domain/tasks/tasksapi/tasks_api_test.go TestANewTaskHasItsLimits
     # 5,000,000 tokens: cmd/agentry/serve.go line 102, the -budget flag's default
     # 24 turns: internal/domain/tasks/task.go line 112, DefaultMaxTurns
     Given a server whose default budget is 5,000,000 tokens
@@ -85,7 +85,7 @@ Feature: Tasks and the board
 
   @TASK-07 @user @manual
   Scenario: Adding a task opens it, and adding a story leaves it in the Backlog
-    # a story is parked in the backlog at creation: internal/web/api.go line 143
+    # a story is parked in the backlog at creation: internal/domain/tasks/tasksapi/tasks_api.go line 130
     Given the New task dialog is open
     When the user describes a task and clicks Add task
     Then a toast "Created task-N" with "The coordinator reads it next." is shown once
@@ -100,7 +100,7 @@ Feature: Tasks and the board
 
   @TASK-08 @user @test
   Scenario: Another repo named by a git address is cloned for the task
-    # internal/web/api_test.go TestATaskInARepoNamedByItsAddressWorksInAClone
+    # internal/domain/tasks/tasksapi/tasks_api_test.go TestATaskInARepoNamedByItsAddressWorksInAClone
     Given a git repository reachable by an address
     When the user adds a task with "Another repo" set to that address
     Then the task's repo is a clone under the repos folder, not the address itself
@@ -110,7 +110,7 @@ Feature: Tasks and the board
 
   @TASK-09 @user @test
   Scenario: A new repo is made at the path the user gives
-    # internal/web/api_test.go TestATaskCanStartANewRepo
+    # internal/domain/tasks/tasksapi/tasks_api_test.go TestATaskCanStartANewRepo
     Given a path where no folder exists
     When the user adds a task titled "Design market data" with "A new repo" at that path
     Then the task's repo is exactly that path
@@ -291,7 +291,7 @@ Feature: Tasks and the board
 
   @TASK-25 @user @test
   Scenario: Dragging within a column or a list row sets the priority order
-    # internal/web/api_test.go TestTasksListInPriorityOrder
+    # internal/domain/tasks/tasksapi/tasks_api_test.go TestTasksListInPriorityOrder
     Given 3 tasks added in the order first, second, third
     Then the tasks list newest first, in exactly the order third, second, first
     When the user drops the first task between the third and the second
@@ -529,10 +529,10 @@ Feature: Tasks and the board
 
   @TASK-44 @user @test
   Scenario: Events are read a page at a time, and Load earlier reads the page before
-    # internal/web/events_api_test.go TestAnEventPageIsBoundedAndSaysWhetherThereIsMore
+    # internal/domain/tasks/tasksapi/events_api_test.go TestAnEventPageIsBoundedAndSaysWhetherThereIsMore
     # ui/src/components/organisms/ActivityFeed.test.tsx "puts the way to read earlier events under the oldest row, in the scroller"
     # ui/src/live/event-pages.test.ts "load earlier reads the page before the oldest held, until there is none"; the button is hidden without earlier: ui/src/components/molecules/LoadEarlier.tsx line 12
-    # 500 events in a page, 2000 at most: internal/web/events_api.go lines 18 and 19
+    # 500 events in a page, 2000 at most: internal/domain/tasks/tasksapi/events_api.go lines 18 and 19
     Given a task with 7 events, a refused proposal among them
     When a page of 3 is read
     Then exactly 3 events come back and the page says more: yes

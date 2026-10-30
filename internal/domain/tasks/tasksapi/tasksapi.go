@@ -1,8 +1,9 @@
-// Package tasksapi is the tasks' HTTP API: what waits for you in
-// Questions, your chat with a task's coordinator, a task's Workspace, and
-// the task's settings you change on its page: its epic, labels, rank,
-// budget, limit of turns and repo. Web mounts its Routes as it mounts an
-// extension's.
+// Package tasksapi is the tasks' HTTP API: the tasks and each one's
+// detail and events, an archived task's read back from its blob, your
+// answers and approvals, what waits for you in Questions, your chat with a
+// task's coordinator, a task's Workspace, and the task's settings you
+// change on its page: its epic, labels, rank, budget, limit of turns and
+// repo. Web mounts its Routes as it mounts an extension's.
 package tasksapi
 
 import (
@@ -12,32 +13,61 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/core/store"
+	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/settings"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 )
 
 // State is what the routes read: each task, every task, and an erased or
-// archived one's erasure and summary.
+// archived one's erasure and summary; every task's summary, and the roster
+// and settings that say how many tasks may run.
 type State interface {
 	Task(id string) (*tasks.Task, error)
 	Tasks() []*tasks.Task
 	Erased(id string) (tasks.Erasure, bool)
 	Summary(id string) (tasks.Summary, bool)
+	Summaries() []tasks.Summary
+	Roster() agents.Roster
+	Settings() settings.Settings
+}
+
+// Store is the log's side of the routes beyond proposing: making a task,
+// reading a task's events a page at a time, and reading an archived task
+// back from its blob, or unarchiving it.
+type Store interface {
+	historian
+	Create(prefix string, p events.Proposal) (events.Event, *events.Rejection, error)
+	LogAfter(name string, types []events.Type, after, before int64, limit int) ([]events.Event, error)
+	LogBefore(name string, types []events.Type, after, before int64, limit int) ([]events.Event, error)
+	Unarchive(stream string, blobs store.Opener) (events.Event, *events.Rejection, error)
 }
 
 // API holds what the tasks' routes need: the log to write their changes
-// to, the state to read them back from, where tasks' work is and where a
-// repo named by its address is cloned; and, for a message that reopens a
-// done task, web's own steps.
+// to and read their events from, the state to read them back from, the
+// cache of archived tasks read, the roster, where tasks' work is, the repo
+// and limits a new task gets when it names none, where a repo named by its
+// address is cloned, and whether a request carries the UI token; and, for
+// a message that reopens a done task, web's own steps.
 type API struct {
-	Log    extensions.Proposer
-	State  State
-	Fleet  *machines.Fleet // nil for none: a Workspace is read on this machine, and a done task's repo changes without a worktree
-	Clones string
-	// Reopenable is the task a message may reopen, unarchived first if it
-	// is archived, or nil once it has answered why there is none.
-	Reopenable func(w http.ResponseWriter, id string) *tasks.Task
+	Log         extensions.Proposer
+	Store       Store
+	State       State
+	Archives    *Archives
+	Roster      func() (agents.Roster, error) // and whether the agents' stream can't be read
+	Fleet       *machines.Fleet               // nil for none: a Workspace is read on this machine, a done task's repo changes without a worktree, and no file is copied
+	DefaultRepo string
+	Defaults    tasks.Limits
+	Clones      string
+	// SharedFiles are a task's shared files as the page shows them, in its
+	// detail: the shared files domain's view.
+	SharedFiles func(t *tasks.Task) any
+	// CarriesUIToken is whether a request carries the UI token, which only
+	// the page and Claude Code connections have: the desk's answer approves
+	// nothing.
+	CarriesUIToken func(r *http.Request) bool
 	// DropErasedStories takes the erased stories a done epic still lists
 	// out of it, and is false once it has answered that it failed.
 	DropErasedStories func(w http.ResponseWriter, epic *tasks.Task) bool
@@ -49,6 +79,13 @@ type API struct {
 // those that hand work on or read what waits.
 func (a API) Routes() []extensions.Route {
 	return []extensions.Route{
+		{Pattern: "GET /api/tasks", Auth: extensions.Desk, Handler: a.listTasks},
+		{Pattern: "POST /api/tasks", Auth: extensions.Desk, Handler: a.createTask},
+		{Pattern: "GET /api/tasks/{task}", Auth: extensions.Desk, Handler: a.showTask},
+		{Pattern: "GET /api/tasks/{task}/events", Auth: extensions.Desk, Handler: a.listEvents},
+		{Pattern: "POST /api/tasks/{task}/answer", Auth: extensions.Desk, Handler: a.answer},
+		{Pattern: "POST /api/tasks/{task}/actions/{action}/approve", Auth: extensions.UI, Handler: a.approve},
+		{Pattern: "POST /api/tasks/{task}/actions/{action}/deny", Auth: extensions.UI, Handler: a.deny},
 		{Pattern: "PUT /api/tasks/{task}/epic", Auth: extensions.Desk, Handler: a.setEpic},
 		{Pattern: "GET /api/questions", Auth: extensions.Desk, Handler: a.listQuestions},
 		{Pattern: "PUT /api/tasks/{task}/labels", Auth: extensions.UI, Handler: a.label},

@@ -68,7 +68,7 @@ Feature: The coordinator and its handoffs
 
   @HANDOFF-08 @user @test
   Scenario: A message to the coordinator stops the turn in progress, and its reply says what it changed
-    # internal/web/chat_api_test.go TestAMessageStopsTheTurnForTheCoordinator and TestTheCoordinatorsReplyComesBeforeItsDecision
+    # internal/domain/tasks/tasksapi/chat_api_test.go TestAMessageStopsTheTurnForTheCoordinator and TestTheCoordinatorsReplyComesBeforeItsDecision
     # internal/domain/tasks/tasksapi/chat_api.go lines 55 to 63
     Given the engineer's turn is in progress on task-1
     When the user sends "Use Redis, not memory." in the Coordinator tab
@@ -223,7 +223,7 @@ Feature: The coordinator and its handoffs
 
   @HANDOFF-23 @user @test
   Scenario: Raising the budget or the turn limit while stopped at it is the answer
-    # internal/web/api_test.go TestRaisingTheBudgetLetsATaskGoOn and TestRaisingTheTurnLimitLetsATaskGoOn
+    # internal/domain/tasks/tasksapi/tasks_api_test.go TestRaisingTheBudgetLetsATaskGoOn and TestRaisingTheTurnLimitLetsATaskGoOn
     # internal/domain/tasks/tasksapi/limits_api.go lines 15 to 62; internal/domain/tasks/task.go lines 145 to 163, StoppedAt
     Given task-1 stopped at its budget of 200,000 tokens, with 210,000 used
     When the user sets the budget to 1,000,000
@@ -239,7 +239,7 @@ Feature: The coordinator and its handoffs
 
   @HANDOFF-24 @user @test
   Scenario: A limit answers only its own stop, and a done task's limits stay
-    # internal/web/api_test.go TestALimitAnswersOnlyItsOwnStop, TestADoneTasksLimitsStay and TestALimitIsKeptThoughItsAnswerIsRefused
+    # internal/domain/tasks/tasksapi/tasks_api_test.go TestALimitAnswersOnlyItsOwnStop, TestADoneTasksLimitsStay and TestALimitIsKeptThoughItsAnswerIsRefused
     Given task-1 stopped at its turn limit, over its budget too
     When the user raises the budget
     Then the budget is kept and the task still needs you: the turn stop is not answered
@@ -256,7 +256,7 @@ Feature: The coordinator and its handoffs
 
   @HANDOFF-25 @user @test
   Scenario: The stop's question names its limit and the numbers it stopped at
-    # internal/web/api_test.go TestQuestionsShowWhichLimitStopped
+    # internal/domain/tasks/tasksapi/tasks_api_test.go TestQuestionsShowWhichLimitStopped
     Given task-1 stopped at its 2 turns, task-2 at its budget of 200,000 with 210,000 used, and task-3 asked to copy a file
     When Questions is read
     Then task-1's question has kind turns, with exactly 2 of 2 turns

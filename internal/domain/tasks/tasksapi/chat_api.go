@@ -29,7 +29,7 @@ func (a API) Say(w http.ResponseWriter, id, text, via string) {
 		http.Error(w, "say something", http.StatusBadRequest)
 		return
 	}
-	task := a.Reopenable(w, id)
+	task := a.reopenable(w, id)
 	if task == nil {
 		return
 	}

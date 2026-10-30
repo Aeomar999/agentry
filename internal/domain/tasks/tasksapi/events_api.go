@@ -1,4 +1,4 @@
-package web
+package tasksapi
 
 import (
 	"fmt"
@@ -31,8 +31,8 @@ type eventsPage struct {
 // it isn't given. The page is the first ?limit= of them, or the last when
 // only ?before= is given, so the newest page is ?before= the position in
 // the X-Agentry-Position header of the read it goes with, plus one.
-func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
-	task, archived := s.shownTask(w, r)
+func (a API) listEvents(w http.ResponseWriter, r *http.Request) {
+	task, archived := a.shownTask(w, r)
 	if task == nil {
 		return
 	}
@@ -47,12 +47,12 @@ func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fromEnd := r.URL.Query().Has("before") && !r.URL.Query().Has("after")
-	read := s.store.LogAfter
+	read := a.Store.LogAfter
 	switch {
 	case archived != nil:
 		read = pageIn(archived.history, fromEnd)
 	case fromEnd:
-		read = s.store.LogBefore
+		read = a.Store.LogBefore
 	}
 	found, err := read(task.ID, types, after, before, limit+1) // one more, to tell whether there is more
 	if err != nil {

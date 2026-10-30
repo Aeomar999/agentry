@@ -54,8 +54,8 @@ Feature: Observability
     When the page walks GET /api/tasks/{task}/events from ?after=0, each page after the last position of the one before, with the default page and with ?limit=7
     Then the pages add up to exactly the task's record, in position order, the rejection included and no other task's event
     And each page says with "more" whether events lie beyond it, yes or no
-    # not under test, checked by hand: each entry carries its position, time, type, actor as kind:id, correlation and data (internal/web/views.go lines 122 to 129); the test builds the record it compares with through the same entryOf
-    # README.md, Use it, A task; internal/web/events_api_test.go TestTheEventPagesAddUpToTheTasksRecord; the rejection and "more": TestAnEventPageIsBoundedAndSaysWhetherThereIsMore
+    # not under test, checked by hand: each entry carries its position, time, type, actor as kind:id, correlation and data (internal/domain/tasks/tasksapi/views.go lines 121 to 128); the test builds the record it compares with through the same entryOf
+    # README.md, Use it, A task; internal/domain/tasks/tasksapi/events_api_test.go TestTheEventPagesAddUpToTheTasksRecord; the rejection and "more": TestAnEventPageIsBoundedAndSaysWhetherThereIsMore
 
   @OBS-06 @test
   Scenario: A task's event pages read the newest events first and earlier pages on request
@@ -133,7 +133,7 @@ Feature: Observability
     And both get the session's state saying 2 viewers: yes
     And what the session prints after that reaches both: yes
     But a task with no running session answers HTTP 404, with no terminal to watch
-    # not under test, checked by hand: the state, with who is in control and which viewer each is, comes first, then the screen, then the live output (internal/platform/terminal/hub.go lines 129 and 130); the page's route is GET /api/tasks/{task}/terminal (internal/web/server.go line 121)
+    # not under test, checked by hand: the state, with who is in control and which viewer each is, comes first, then the screen, then the live output (internal/platform/terminal/hub.go lines 129 and 130); the page's route is GET /api/tasks/{task}/terminal (internal/web/server.go line 113)
     # README.md, Use it, A task; internal/platform/terminal/terminal_test.go TestOnlyTheViewerInControlCanType and TestNoSessionNoWatch
 
   @OBS-14 @test
@@ -277,11 +277,11 @@ Feature: Observability
     Then turn-1 carries tokens 0 and tokensUnknown "transcript not saved", and turn-2 carries no reason
     And the task says "Tokens unknown on 1 turn: transcript not saved"; with 3 such turns of 2 reasons it says "Tokens unknown on 3 turns: transcript not saved (2), no tokens reported (1)"
     And a task every turn of which was counted says nothing of it, an empty string
-    # README.md, Use it, Budgets and turn limits; internal/web/views_test.go TestATurnSaysWhyItsTokensAreUnknown and TestTheTaskSaysWhereItsTokensAreUnknown
+    # README.md, Use it, Budgets and turn limits; internal/domain/tasks/tasksapi/views_test.go TestATurnSaysWhyItsTokensAreUnknown and TestTheTaskSaysWhereItsTokensAreUnknown
 
   @OBS-33 @test
   Scenario: Each turn says how its session started: resumed, forked, from which story, or fresh and why
-    # internal/web/split_view_test.go TestATurnSaysWhetherItResumedOnlyWhenKnown
+    # internal/domain/tasks/tasksapi/split_view_test.go TestATurnSaysWhetherItResumedOnlyWhenKnown
     Given a task whose turns started fresh as the first turn, resumed its own session, resumed a sibling story's session, and forked a sibling story's session, and one turn from a log that said none of this
     When the task's detail, as the API sends it, is made
     Then each turn carries what its log said: freshBecause "first turn"; fromSession; fromSession with sessionFrom "task-1"; and those with forked true
