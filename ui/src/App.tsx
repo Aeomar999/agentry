@@ -5,7 +5,7 @@ import { ToastProvider } from "@/shell/Toasts";
 import { LiveProvider } from "@/live/LiveProvider";
 import { TasksPage } from "@/domains/tasks/TasksPage";
 import { PlanPage } from "@/domains/tasks/PlanPage";
-import { IntegrationsPage } from "@/pages/IntegrationsPage";
+import { IntegrationsPage } from "@/domains/connections/IntegrationsPage";
 import { TaskPage } from "@/domains/tasks/TaskPage";
 import { AgentsPage } from "@/domains/agents/AgentsPage";
 import { AgentPage } from "@/domains/agents/AgentPage";
