@@ -6,76 +6,78 @@ How Agentry is built and must stay built. Each constraint says what holds and ho
 
 The code is easy to read, with each concern in its own package: one folder under `internal/` does one job, and folders only depend on the ones below them (docs/decisions.md, 2026-10-16; README.md, Work on it). Each file does one job, and names say what it does without a comment (docs/decisions.md, 2026-10-16). The leaves, `events`, `extensions` and `httpapi`, import no core package that could import them back.
 
-The packages under `internal/`, by concern, each described in its own package comment:
+The packages under `internal/`, by folder as in docs/design/repo-organization.md section 2, each described in its own package comment:
 
-What the log holds and how it is kept:
+`internal/platform`, the outside world, with no Agentry concept:
+
+- `client`: calls a running server's API, for the commands that run beside it: the desk's `agentry task`, `agentry mcp` and the status line.
+- `engines`: everything Agentry needs from an agent CLI, so the rest of Agentry never knows which engine it is running.
+- `exactgob`: gob that reads a value back exactly as it was written, nil and empty told apart, for the snapshot.
+- `hookcall`: the contract between `agentry hook` and the server, imported by both sides so they cannot disagree.
+- `hostaddrs`: the addresses other machines reach this one on: what serve prints as links and what its certificate names.
+- `launch`: what a program that opens Agentry for you does: find the server running from a data folder, or start `agentry serve`, and build the signed-in link to its page, for `agentry open` and the desktop app.
+- `pinned`: how Agentry's own clients reach a server served with Agentry's own CA: they trust that CA and nothing else.
+- `procs`: what Agentry does with processes that differs between Unix and Windows.
+- `schema`: builds the JSON Schemas of MCP tools' arguments and of what Claude Code asks you.
+- `sessions`: each task's agent in a session of its own, kept by a small host process, so it runs on when Agentry restarts.
+- `terminal`: a task's agent session live in the browser, fanned out to every viewer, keystrokes back only from the one in control.
+- `tlsca`: Agentry's own certificate authority, name constrained, its key kept in the data folder.
+- `workspace`: reads a task's worktree for its Workspace page, the way an editor's git view does; it only reads, never outside the worktree.
+- `worktrees`: each task's own git worktree, branch and port, so agents on different tasks never work on each other's code.
+
+`internal/core`, what the log holds, the log, the read model, check 3, and how every handler answers:
 
 - `events`: what the log holds: the event types, the catalogue of what each one must carry, and a JSON Schema of each.
 - `store`: the append-only event log, in SQLite; Propose is the way in for every event but the archive, erase and redact markers.
-- `rules`: check 3 of every proposal: given what happened so far, may this happen now? Run by the store inside Propose, under its lock.
 - `current`: the state of every stream in memory, as of the last event the log committed; built from the log at every start, or from a snapshot that is only a cache.
-- `exactgob`: gob that reads a value back exactly as it was written, nil and empty told apart, for the snapshot.
-- `storetest`: opens stores for tests the way serve does, and grows synthetic logs from a copy of a real one for benchmarks.
-- `deeptest`: checks copies of state by reflection, finding memory two values share.
-- `archive`: moves done tasks out of the live log, at start and then hourly, and gives the space back.
+- `rules`: check 3 of every proposal: given what happened so far, may this happen now? Run by the store inside Propose, under its lock.
+- `httpapi`: how every handler of the HTTP API answers, the core's and an extension's alike; a leaf that imports only events and extensions.
 
-State computed from the log:
+`internal/domain`, one folder per spec area, its root the model and its subfolders its routes, tools and background work:
 
-- `tasks`: a task's state from its events.
 - `agents`: who can be handed work: each agent's name, prompt, engine and the machines it may run on; the defaults are only what a new install starts with.
-- `workers`: the machines, besides the one Agentry runs on, that agents can run on: who has joined, how they prove it, and who is online.
-- `connections`: the machines whose Claude Code has Agentry's tools, connected from the Integrations page: who they are, and how they prove it.
-- `settings`: your settings from the settings stream; one you never changed has its default.
-- `ideas`: an idea's state from its events, as tasks does for a task.
-- `schedules`: a schedule's state from its events; a schedule makes a task at a set time.
-- `extensions`: what an extension, such as ideas, adds to Agentry; a leaf the core reads as a list, never naming one.
+- `tasks`: a task's state from its events.
 - `waitlist`: the core's part of what waits for you, each approval, question and stop as one entry; it names no extension.
-
-Running the agents:
-
-- `policy`: decides one tool call: allow it, deny it, or ask the user; the rules are in policy.toml, not here.
-- `hooks`: the server side of `agentry hook`: each hook call becomes events, and a gate call is decided, or waits for the user.
-- `hookcall`: the contract between `agentry hook` and the server, imported by both sides so they cannot disagree.
-- `engines`: everything Agentry needs from an agent CLI, so the rest of Agentry never knows which engine it is running.
-- `worktrees`: each task's own git worktree, branch and port, so agents on different tasks never work on each other's code.
-- `sessions`: each task's agent in a session of its own, kept by a small host process, so it runs on when Agentry restarts.
-- `sharedfiles`: a task's shared files, kept once on the server by hash and filled into `.agentry/files` before a turn.
-- `turns`: starts and stops agent turns: one agent working once in the task's worktree, from a brief.
-- `procs`: what Agentry does with processes that differs between Unix and Windows.
-
-Moving tasks along:
-
-- `coordinator`: the loop: every task goes to its coordinator, its decision starts the next agent, and every report or issue goes back to it.
-- `watchdog`: catches agents that go quiet, on a clock; every problem it finds is an issue, which goes back to the coordinator.
-
-Reaching the machines:
-
-- `machines`: where agents work: the machine Agentry runs on, or a worker; everything done to a worktree, session or terminal goes through a Machine.
+- `workers`: the machines, besides the one Agentry runs on, that agents can run on: who has joined, how they prove it, and who is online.
 - `workerlink`: connects a worker to the server: the worker dials out and keeps one websocket open.
 - `workerservice`: keeps `agentry worker run` running in the background on a worker machine, started at login.
-- `hostaddrs`: the addresses other machines reach this one on: what serve prints as links and what its certificate names.
-- `tlsca`: Agentry's own certificate authority, name constrained, its key kept in the data folder.
-- `pinned`: how Agentry's own clients reach a server served with Agentry's own CA: they trust that CA and nothing else.
-- `client`: calls a running server's API, for the commands that run beside it: the desk's `agentry task`, `agentry mcp` and the status line.
-- `launch`: what a program that opens Agentry for you does: find the server running from a data folder, or start `agentry serve`, and build the signed-in link to its page, for `agentry open` and the desktop app.
+- `connections`: the machines whose Claude Code has Agentry's tools, connected from the Integrations page: who they are, and how they prove it.
+- `policy`: decides one tool call: allow it, deny it, or ask the user; the rules are in policy.toml, not here.
+- `hooks`: the server side of `agentry hook`: each hook call becomes events, and a gate call is decided, or waits for the user.
+- `settings`: your settings from the settings stream; one you never changed has its default.
+- `settingsfile`: the settings file, features.toml beside policy.toml: each feature's settings and secrets, watched as the policy is and kept out of the log.
+- `sharedfiles`: a task's shared files, kept once on the server by hash and filled into `.agentry/files` before a turn.
+- `webpush`: what Web Push needs: Agentry's key pair and the browsers subscribed, kept in a file beside the log, never in it.
 
-Serving the user:
+`internal/extensions`, the extension framework and each extension:
+
+- `extensions`: what an extension, such as ideas, adds to Agentry; a leaf the core reads as a list, never naming one.
+- `ideas`: an idea's state from its events, as tasks does for a task.
+- `schedules`: a schedule's state from its events; a schedule makes a task at a set time.
+
+`internal/runtime`, what runs:
+
+- `coordinator`: the loop: every task goes to its coordinator, its decision starts the next agent, and every report or issue goes back to it.
+- `turns`: starts and stops agent turns: one agent working once in the task's worktree, from a brief.
+- `watchdog`: catches agents that go quiet, on a clock; every problem it finds is an issue, which goes back to the coordinator.
+- `archive`: moves done tasks out of the live log, at start and then hourly, and gives the space back.
+- `machines`: where agents work: the machine Agentry runs on, or a worker; everything done to a worktree, session or terminal goes through a Machine.
+- `desk`: runs Claude, the session you talk to in the dock; it never gets the UI token.
+
+`internal/web` and `internal/mcp`, serving the user:
 
 - `web`: the HTTP side of `agentry serve`: the UI, the API it uses, and the endpoint the hooks post to.
-- `httpapi`: how every handler of the HTTP API answers, the core's and an extension's alike; a leaf that imports only events and extensions.
-- `terminal`: a task's agent session live in the browser, fanned out to every viewer, keystrokes back only from the one in control.
-- `workspace`: reads a task's worktree for its Workspace page, the way an editor's git view does; it only reads, never outside the worktree.
-- `webpush`: what Web Push needs: Agentry's key pair and the browsers subscribed, kept in a file beside the log, never in it.
-- `settingsfile`: the settings file, features.toml beside policy.toml: each feature's settings and secrets, watched as the policy is and kept out of the log.
-- `desk`: runs Claude, the session you talk to in the dock; it never gets the UI token.
 - `mcp`: Agentry as a Model Context Protocol server, so Claude Code in any repo has Agentry's tools; an approval is asked of you through Claude Code, never of the model.
-- `schema`: builds the JSON Schemas of MCP tools' arguments and of what Claude Code asks you.
 
-The spec's own check:
+`internal/testkit`, what tests share, never imported by code:
+
+- `storetest`: opens stores for tests the way serve does, and grows synthetic logs from a copy of a real one for benchmarks.
+- `deeptest`: checks copies of state by reflection, finding memory two values share.
+
+Outside `internal/`, under `tools/`, the spec's own check:
 
 - `speccheck`: `spec/check`, which checks every scenario under `spec/` against the rules in spec/README.md.
-
-Checked by: the reviewer on every change, who asks of each new file and function whether it has one job and sits in the package of its concern, and whether the dependency points downward; the list above matching the last element of each path `go list ./internal/...` prints, leaving out a `<name>test` package beside its `<name>` package (46 packages); `go test ./tools/importrules`, with `TestEveryImportPointsDown`, `TestEveryPackageHasALayer` and `TestTestkitIsOnlyForTests` in `rules_test.go`, which fail when an import points up the layers of docs/design/repo-organization.md section 3 (so `extensions` and `httpapi` never import `store`, `current` or `rules`), when a package has no layer, and when code that isn't a test imports `storetest` or `deeptest`.
+Checked by: the reviewer on every change, who asks of each new file and function whether it has one job and sits in the package of its concern, and whether the dependency points downward; the `internal/` list above matching the last element of each path `go list ./internal/...` prints, leaving out a `<name>test` package beside its `<name>` package (45 packages); `go test ./tools/importrules`, with `TestEveryImportPointsDown`, `TestEveryPackageHasALayer` and `TestTestkitIsOnlyForTests` in `rules_test.go`, which fail when an import points up the layers of docs/design/repo-organization.md section 3 (so `extensions` and `httpapi` never import `store`, `current` or `rules`), when a package has no layer, and when code that isn't a test imports `storetest` or `deeptest`.
 
 ## 2. The append-only event log is the only state
 
