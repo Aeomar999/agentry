@@ -141,6 +141,35 @@ func unlistedFolder(token string) (folder string, ok bool) {
 	return folder, true
 }
 
+// nearRootFolder is true when a name that isn't a top folder is one in
+// the wrong case, such as Internal, or, for a top folder of four letters or
+// more, one letter off, such as intenal. Shorter ones are left out, so a
+// word such as gui/ isn't taken for ui/.
+func nearRootFolder(name string) bool {
+	return slices.ContainsFunc(rootFolders, func(folder string) bool {
+		return strings.EqualFold(name, folder) || len(folder) >= 4 && oneEditApart(strings.ToLower(name), folder)
+	})
+}
+
+// oneEditApart is true when b is a with one letter added, dropped or
+// changed.
+func oneEditApart(a, b string) bool {
+	if len(a) > len(b) {
+		a, b = b, a
+	}
+	if len(b)-len(a) > 1 {
+		return false
+	}
+	i := 0
+	for i < len(a) && a[i] == b[i] {
+		i++
+	}
+	if len(a) == len(b) {
+		return i < len(a) && a[i+1:] == b[i+1:]
+	}
+	return a[i:] == b[i+1:]
+}
+
 func isGoTestFile(path string) bool { return strings.HasSuffix(path, "_test.go") }
 
 // A citer judges citations against the repo, reading each test file once.
@@ -177,6 +206,9 @@ func (c *citer) problems(s scenario) []Problem {
 // check says what is wrong with one citation, or "".
 func (c *citer) check(cite citation) string {
 	if cite.folder != "" {
+		if nearRootFolder(cite.folder) {
+			return fmt.Sprintf("cited path %s does not exist", cite.path)
+		}
 		if !c.isRepoFolder(cite.folder) {
 			return "" // a word such as and/or, or a folder git leaves out
 		}
@@ -185,6 +217,9 @@ func (c *citer) check(cite citation) string {
 	}
 	if cite.test == "" {
 		c.paths++
+		if !inRepo(cite.path) {
+			return fmt.Sprintf("cited path %s isn't a path into the repo; name it from the repo root, with no empty, . or .. part", cite.path)
+		}
 		if !existsExactly(c.root, cite.path) {
 			return fmt.Sprintf("cited path %s does not exist", cite.path)
 		}

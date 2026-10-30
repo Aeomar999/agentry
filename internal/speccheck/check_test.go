@@ -299,6 +299,8 @@ func TestATestScenarioCitesPathsAndTestsThatExist(t *testing.T) {
 		"a missing UI path":          {"@TASK-01 @user @test", "# ui/src/Gone.test.tsx", "tasks-and-board.feature:10: cited path ui/src/Gone.test.tsx does not exist"},
 		"a glob":                     {"@TASK-01 @user @test", "# every page: ui/src/**/*.tsx", ""},
 		"a root file":                {"@TASK-01 @user @test", "# README.md, Use it; NOTICE, the licences", "tasks-and-board.feature:10: cited path NOTICE does not exist"},
+		"a path with a .. part":      {"@TASK-01 @user @test", "# internal/../internal/web/api.go", "tasks-and-board.feature:10: cited path internal/../internal/web/api.go isn't a path into the repo; name it from the repo root, with no empty, . or .. part"},
+		"a path with an empty part":  {"@TASK-01 @user @test", "# internal//web/api.go", "tasks-and-board.feature:10: cited path internal//web/api.go isn't a path into the repo"},
 		"a manual scenario":          {"@TASK-01 @user @manual", "# internal/web/gone_test.go TestGone", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -333,6 +335,20 @@ func TestATestCitationInTheWrongCaseFails(t *testing.T) {
 			})
 			expectProblems(t, got, c.want)
 		})
+	}
+}
+
+func TestATestFileInTheWrongCaseIsNotRead(t *testing.T) {
+	dir := writeSpec(t, map[string]string{
+		"../" + goodTestFile:                 "package web\n\nfunc TestCreate(t *testing.T) {}\n",
+		"functional/tasks-and-board.feature": strings.Replace(goodScenario, "# internal/web/api_test.go", "# internal/web/Api_test.go TestCreate", 1),
+	})
+	result, err := Check(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Tests != 0 {
+		t.Errorf("counted %d Go tests, want 0: a wrong-case file is not read", result.Tests)
 	}
 }
 
@@ -404,8 +420,15 @@ func TestACitationUnderAnUnlistedTopFolderFails(t *testing.T) {
 	for name, c := range map[string]struct{ comment, want string }{
 		"an unlisted folder":  {"# internal/web/api_test.go; scripts/build.sh", "tasks-and-board.feature:10: cited path scripts/build.sh is under scripts/, a top folder rootFolders does not list; add scripts to rootFolders"},
 		"a word with a slash": {"# internal/web/api_test.go, read and/or write", ""},
-		"an ignored folder":   {"# internal/web/api_test.go; built to bin/agentry", ""},
-		"a dot folder":        {"# internal/web/api_test.go; .agentry/files", ""},
+		"a top folder in the wrong case": {
+			"# internal/web/api_test.go; Internal/web/api_test.go",
+			"tasks-and-board.feature:10: cited path Internal/web/api_test.go does not exist"},
+		"a misspelt top folder": {
+			"# internal/web/api_test.go; intenal/web/api_test.go",
+			"tasks-and-board.feature:10: cited path intenal/web/api_test.go does not exist"},
+		"a word one letter off a short top folder": {"# internal/web/api_test.go, the gui/cli split", ""},
+		"an ignored folder":                        {"# internal/web/api_test.go; built to bin/agentry", ""},
+		"a dot folder":                             {"# internal/web/api_test.go; .agentry/files", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			files := maps.Clone(repo)
