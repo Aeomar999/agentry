@@ -14,12 +14,12 @@ this page is the short version.
 | 3 | `domain/<area>` | One folder per spec area. Its root package is the model. |
 | 4 | `extensions` | The extension framework itself. |
 | 5 | `core/httpapi` | How every handler answers. A leaf: it never imports `store`, `current` or `rules`. |
-| 5 | `core/store`, `core/current`, `core/rules` | The log (`store`), the read model (`current`) and check 3 (`rules`). |
+| 5 | `core/store`, `core/current`, `core/rules` | The log (`store`), the read model (`current`) and whether a proposed event may happen now (`rules`). |
 | 6 | `runtime/*` | What runs: the coordinator loop, turns, the watchdog, machines, the desk. |
 | 7 | `domain/<area>/<sub>`, `extensions/<name>` | Surfaces: a domain's routes, tools and background work (such as its `*api` package), and each extension. |
 | 8 | `web`, `mcp` | `agentry serve`'s HTTP side and `agentry mcp`. Never each other. |
 | 9 | `cmd/*`, `tools/*` | The binary and the programs that build or check the repo. They may import everything. |
-| – | `testkit/*` | What tests share across packages. Only tests may import them. |
+| – | `testkit/*` | What tests share across packages. Only tests may import them. A `testkit` package may import anything, since it is test-only. |
 
 ## The rule
 
