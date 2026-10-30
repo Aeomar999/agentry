@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
-	"gitlab.com/dev.chempa/agentry/internal/webpush"
+	"gitlab.com/dev.chempa/agentry/internal/domain/notifications/webpush"
 )
 
 // pushView is whether this device can ask for pushes, as the page shows it.

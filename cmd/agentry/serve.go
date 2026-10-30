@@ -31,6 +31,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/desk"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/notifications/webpush"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/hooks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/settings/settingsfile"
@@ -51,7 +52,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/turns"
 	"gitlab.com/dev.chempa/agentry/internal/watchdog"
 	"gitlab.com/dev.chempa/agentry/internal/web"
-	"gitlab.com/dev.chempa/agentry/internal/webpush"
 )
 
 type serveOptions struct {

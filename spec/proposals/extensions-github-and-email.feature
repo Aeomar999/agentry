@@ -216,7 +216,7 @@ Feature: Shipping through GitHub, and email
 
   @PROP-47 @user @test @to-new-pull-requests
   Scenario: A failed pipeline waits for the user, once per run, until a later one passes or the request closes
-    # docs/design/t-019-shipping.md section 6: the key git/<task>/pipeline/<id>/<attempt>; builds on @TOOLS-44 and @NOTIFY-03 (internal/webpush/sink.go)
+    # docs/design/t-019-shipping.md section 6: the key git/<task>/pipeline/<id>/<attempt>; builds on @TOOLS-44 and @NOTIFY-03 (internal/domain/notifications/webpush/sink.go)
     # test: internal/githost/waiting_test.go (to write)
     Given task-121's latest run on its request's head failed on test and lint
     When the waiting list is read
@@ -246,7 +246,7 @@ Feature: Shipping through GitHub, and email
 
   @PROP-49 @user @test @to-notifications
   Scenario: With email on, each thing that newly waits is sent once to the user's address
-    # the old build plan, "notification and email extensions"; the same list and the same once-only rule as Web Push: @NOTIFY-03 (internal/webpush/sink.go Sink, which reads the server's waiting list)
+    # the old build plan, "notification and email extensions"; the same list and the same once-only rule as Web Push: @NOTIFY-03 (internal/domain/notifications/webpush/sink.go Sink, which reads the server's waiting list)
     # test: internal/email/sink_test.go (to write), with a fake mail server
     Given email on, and an approval already waiting when the server starts
     When the server starts
@@ -270,7 +270,7 @@ Feature: Shipping through GitHub, and email
 
   @PROP-51 @test @to-security
   Scenario: The mail password and the user's address never reach the log, and mail goes only to that address
-    # @SEC-59 for the password; the user's address is kept with it in features.toml, as push.json keeps a device's address out of the log (internal/webpush/webpush.go)
+    # @SEC-59 for the password; the user's address is kept with it in features.toml, as push.json keeps a device's address out of the log (internal/domain/notifications/webpush/webpush.go)
     # test: internal/email/secrets_test.go (to write)
     Given features.toml holding a known password and the user's address in the email table
     When 3 mails are sent and 1 fails
@@ -280,7 +280,7 @@ Feature: Shipping through GitHub, and email
 
   @PROP-52 @test @to-reliability
   Scenario: A mail that cannot be sent is logged in the server's log, and stops nothing else
-    # Web Push does the same: a push that fails goes to the server's log, never the event log, and does not stop the others (internal/webpush/sink.go push)
+    # Web Push does the same: a push that fails goes to the server's log, never the event log, and does not stop the others (internal/domain/notifications/webpush/sink.go push)
     # test: internal/email/sink_test.go (to write)
     Given email on and the mail server refusing the login
     When 2 entries newly wait

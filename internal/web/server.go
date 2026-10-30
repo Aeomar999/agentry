@@ -15,6 +15,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/current"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
+	"gitlab.com/dev.chempa/agentry/internal/domain/notifications/webpush"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/hooks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
@@ -23,7 +24,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/hookcall"
-	"gitlab.com/dev.chempa/agentry/internal/webpush"
 )
 
 type Config struct {

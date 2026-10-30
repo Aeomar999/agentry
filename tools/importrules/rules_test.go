@@ -74,7 +74,7 @@ var newPath = map[string]string{
 	"internal/domain/workers/workerservice": "internal/domain/workers/workerservice",
 	"internal/domain/policy/hooks":          "internal/domain/policy/hooks",
 	"internal/domain/settings/settingsfile": "internal/domain/settings/settingsfile",
-	"internal/webpush":                      "internal/domain/notifications/webpush",
+	"internal/domain/notifications/webpush": "internal/domain/notifications/webpush",
 
 	"internal/extensions": "internal/extensions",
 	"internal/ideas":      "internal/extensions/ideas",

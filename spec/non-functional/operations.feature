@@ -134,7 +134,7 @@ Feature: Operations
     # cmd/agentry/serve.go -data default: filepath.Join(home, ".agentry"); cmd/agentry/open.go the same; the launchers pass no -data
     # cmd/agentry/open.go -repo default: filepath.Join(home, "Agentry"), made at the first start
     # cmd/agentry/serve.go: agentry.db, state.snapshot, files, repos, worktrees, ui-token, hook-token, desk-token, helper-token
-    # cmd/agentry/policy.go policyFile = policy.toml, settingsFile = features.toml, which is read and not written (internal/domain/settings/settingsfile/settingsfile.go Open, gone); internal/webpush/webpush.go File = push.json
+    # cmd/agentry/policy.go policyFile = policy.toml, settingsFile = features.toml, which is read and not written (internal/domain/settings/settingsfile/settingsfile.go Open, gone); internal/domain/notifications/webpush/webpush.go File = push.json
     # internal/platform/tlsca/ca.go Folder = tls; internal/platform/client/client.go ServerFile = server.json
     # cmd/agentry/serve_lock.go serve.lock; cmd/agentry/open.go serve.log and serve.pid
     # internal/platform/sessions/proc_unix.go sessionsDir: the temporary folder, agentry-<uid>; proc_windows.go: the user cache folder, agentry\sessions
@@ -333,7 +333,7 @@ Feature: Operations
 
   @OPS-19 @test
   Scenario: Push notifications need an https public address and a subscription from the browser
-    # internal/webpush/webpush.go File = push.json beside the log
+    # internal/domain/notifications/webpush/webpush.go File = push.json beside the log
     Given a server whose public address is an https address
     When a browser posts its push subscription
     Then it is answered 200 and kept in push.json, with the VAPID key pair, and never in the log: yes
@@ -341,11 +341,11 @@ Feature: Operations
     When the same endpoint subscribes twice and then unsubscribes
     Then 1 subscription is kept, then 0
     # not under test, checked by hand: serve sets the public address from -public-url (cmd/agentry/serve.go lines 98 and 328) and keeps push.json in the data folder, beside the log (line 207)
-    # README.md, From the source; internal/web/push_api_test.go TestAPushSubscriptionSurvivesARestart, TestPushDataStaysOutOfTheLog and TestSubscribingTwiceAndUnsubscribing; push.json and its keys: internal/webpush/webpush_test.go TestASubscriptionAndTheKeysSurviveARestart
+    # README.md, From the source; internal/web/push_api_test.go TestAPushSubscriptionSurvivesARestart, TestPushDataStaysOutOfTheLog and TestSubscribingTwiceAndUnsubscribing; push.json and its keys: internal/domain/notifications/webpush/webpush_test.go TestASubscriptionAndTheKeysSurviveARestart
 
   @OPS-38 @test
   Scenario: A malformed push subscription, or one whose endpoint is not https, is refused with 400
-    # internal/webpush/webpush.go Check: no endpoint, an endpoint that is not https, or keys that are not a P-256 key and 16 bytes is ErrMalformed, and nothing changes
+    # internal/domain/notifications/webpush/webpush.go Check: no endpoint, an endpoint that is not https, or keys that are not a P-256 key and 16 bytes is ErrMalformed, and nothing changes
     # internal/web/push_api.go: 400 with the reason when the subscription is malformed
     # internal/web/push_api_test.go TestAMalformedPushSubscriptionIsABadRequest
     Given a server with an https -public-url
@@ -356,7 +356,7 @@ Feature: Operations
 
   @OPS-33 @test
   Scenario: Push is off, and subscribing is refused, without an https public address
-    # internal/webpush/webpush.go Available: -public-url must be an https address
+    # internal/domain/notifications/webpush/webpush.go Available: -public-url must be an https address
     # internal/web/push_api.go: subscribing is refused while push is off
     Given a server whose public address is unset, or not https
     When the page asks whether push is available and a browser posts a subscription
@@ -367,7 +367,7 @@ Feature: Operations
 
   @OPS-20 @test
   Scenario: What newly needs the user is pushed once to each subscribed device
-    # cmd/agentry/push.go pushTimeout = 30 seconds, pushFallback = 30 seconds; internal/webpush/sink.go lineShown = 500
+    # cmd/agentry/push.go pushTimeout = 30 seconds, pushFallback = 30 seconds; internal/domain/notifications/webpush/sink.go lineShown = 500
     Given 2 subscribed devices and an entry already waiting when the push sink started
     Then the entry already waiting is pushed: no
     When 1 new entry needs the user
@@ -377,8 +377,8 @@ Feature: Operations
     When a device's push service says the subscription is gone
     Then that device is dropped and the other still gets its pushes: yes
     And a push carries at most 500 bytes of the entry's line, ended with an ellipsis when it is cut
-    # not under test, checked by hand: the cut falls on a character boundary (internal/webpush/sink.go line 115), and serve starts the sink (cmd/agentry/push.go line 32)
-    # README.md, From the source; internal/webpush/sink_test.go TestWhatWaitsAtStartIsNotPushed, TestANewEntryIsPushedOnceToEachDevice, TestAnEntryThatLeavesAndComesBackIsNewAgain, TestAGoneDeviceIsDroppedAndTheOthersStillGetTheirs and TestALongLineIsCutToFitAPush
+    # not under test, checked by hand: the cut falls on a character boundary (internal/domain/notifications/webpush/sink.go line 115), and serve starts the sink (cmd/agentry/push.go line 32)
+    # README.md, From the source; internal/domain/notifications/webpush/sink_test.go TestWhatWaitsAtStartIsNotPushed, TestANewEntryIsPushedOnceToEachDevice, TestAnEntryThatLeavesAndComesBackIsNewAgain, TestAGoneDeviceIsDroppedAndTheOthersStillGetTheirs and TestALongLineIsCutToFitAPush
 
   # The workers' background services
 

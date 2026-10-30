@@ -209,7 +209,7 @@ Feature: Observability
     And the new entry is pushed exactly once to each of the 2 browsers
     And 2 new entries at once are 2 pushes, and an entry that leaves and comes back is pushed again
     And a browser whose push fails does not stop the others from getting theirs
-    # README.md, Install, Push; internal/webpush/sink_test.go TestWhatWaitsAtStartIsNotPushed, TestANewEntryIsPushedOnceToEachDevice, TestTwoNewEntriesAreTwoPushes, TestAnEntryThatLeavesAndComesBackIsNewAgain and TestADeviceThatFailsDoesNotStopTheOthers
+    # README.md, Install, Push; internal/domain/notifications/webpush/sink_test.go TestWhatWaitsAtStartIsNotPushed, TestANewEntryIsPushedOnceToEachDevice, TestTwoNewEntriesAreTwoPushes, TestAnEntryThatLeavesAndComesBackIsNewAgain and TestADeviceThatFailsDoesNotStopTheOthers
 
   @OBS-22 @test
   Scenario: What a push carries
@@ -220,7 +220,7 @@ Feature: Observability
     And an entry with no task opens "/"
     And the same key gives the same tag each time: yes
     # not under test, checked by hand: the service worker shows a push under its tag (ui/public/sw.js line 38), so a repeat replaces the notification shown
-    # README.md, Install, Push; internal/webpush/sink_test.go TestAnEntryWithALongKeyIsStillPushed, TestALongLineIsCutToFitAPush, TestTwoNewEntriesAreTwoPushes and TestATagIsShortAndTheSameForTheSameKey
+    # README.md, Install, Push; internal/domain/notifications/webpush/sink_test.go TestAnEntryWithALongKeyIsStillPushed, TestALongLineIsCutToFitAPush, TestTwoNewEntriesAreTwoPushes and TestATagIsShortAndTheSameForTheSameKey
 
   @OBS-23 @test
   Scenario: A browser the push service no longer knows is dropped
@@ -228,7 +228,7 @@ Feature: Observability
     When the push service answers 404 or 410 for the first browser's push
     Then that subscription is removed from the store and from push.json, and the second is kept
     And the sink goes on: the second browser gets every push after, and the dropped browser none
-    # README.md, Install, Push; internal/webpush/send_test.go TestASubscriptionThePushServiceNoLongerHasIsRemoved; the sink: internal/webpush/sink_test.go TestAGoneDeviceIsDroppedAndTheOthersStillGetTheirs
+    # README.md, Install, Push; internal/domain/notifications/webpush/send_test.go TestASubscriptionThePushServiceNoLongerHasIsRemoved; the sink: internal/domain/notifications/webpush/sink_test.go TestAGoneDeviceIsDroppedAndTheOthersStillGetTheirs
 
   @OBS-24 @test
   Scenario: Push is offered only at an https public address, and keeps its data out of the log

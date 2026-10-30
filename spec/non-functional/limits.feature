@@ -213,7 +213,7 @@ Feature: Limits
     Then its message is at most 3,993 bytes, sealed into a 4,096-byte record
     And a message of 3,994 bytes is refused as too long for a push
     And the push lives 86,400 seconds, 24 hours, at the push service
-    # README.md, Use it; internal/webpush/send_test.go TestAMessageTooLongForAPushIsRefused; the lifetime: TestAPushReachesThePushServiceAndOpensForTheBrowser
+    # README.md, Use it; internal/domain/notifications/webpush/send_test.go TestAMessageTooLongForAPushIsRefused; the lifetime: TestAPushReachesThePushServiceAndOpensForTheBrowser
 
   @LIM-25 @test
   Scenario: Long text quoted into a brief is cut with a marker

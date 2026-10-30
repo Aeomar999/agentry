@@ -4,7 +4,7 @@
 // API, the terminals and the pages always go to the server, so no token is
 // ever cached and a new version shows on the next load. It also shows the
 // pushes the server sends when something new waits for you
-// (internal/webpush), and opens its task when one is tapped.
+// (internal/domain/notifications/webpush), and opens its task when one is tapped.
 
 const CACHE = "agentry-assets";
 const KEPT = 200; // about two versions' bundles; the oldest go first

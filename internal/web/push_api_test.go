@@ -13,8 +13,8 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
+	"gitlab.com/dev.chempa/agentry/internal/domain/notifications/webpush"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
-	"gitlab.com/dev.chempa/agentry/internal/webpush"
 )
 
 // newPushServer is a server on the data folder dir, its log and its push

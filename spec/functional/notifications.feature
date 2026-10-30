@@ -1,6 +1,6 @@
 Feature: Notifications
   Pushes to the user's devices when something newly waits for them.
-  # Sources: cmd/agentry/push.go, internal/webpush, internal/web/push_api.go,
+  # Sources: cmd/agentry/push.go, internal/domain/notifications/webpush, internal/web/push_api.go,
   # ui/src/components/organisms/NotifyDeviceDialog.tsx, ui/src/lib/push.ts,
   # ui/public/sw.js and their tests.
 
@@ -10,7 +10,7 @@ Feature: Notifications
   Scenario: Notifications on this device need an https public address and a browser that takes pushes
     # internal/web/push_api_test.go TestPushNeedsAnHTTPSPublicURL
     # ui/src/components/organisms/NotifyDeviceDialog.test.tsx "with push off at the server, its reason shows and there is no button", "with push on, the button shows" and "with push on but a browser without it, the browser's reason shows and there is no button"
-    # the reasons: internal/webpush/webpush.go lines 234 to 236 and ui/src/lib/push.ts lines 14 and 17
+    # the reasons: internal/domain/notifications/webpush/webpush.go lines 234 to 236 and ui/src/lib/push.ts lines 14 and 17
     Given a server started without -public-url
     When the user opens "Notifications on this device"
     Then push is not available: the note reads "Push needs an https address. Start Agentry with -public-url https://… so phones can reach it." and no button is shown
@@ -43,9 +43,9 @@ Feature: Notifications
 
   @NOTIFY-03 @user @test
   Scenario: What arrives: 1 push per device for each thing that newly waits for you, and tapping it opens the task
-    # internal/webpush/sink_test.go TestWhatWaitsAtStartIsNotPushed, TestANewEntryIsPushedOnceToEachDevice and TestTwoNewEntriesAreTwoPushes
+    # internal/domain/notifications/webpush/sink_test.go TestWhatWaitsAtStartIsNotPushed, TestANewEntryIsPushedOnceToEachDevice and TestTwoNewEntriesAreTwoPushes
     # ui/src/lib/sw.test.ts "shows its title and body, tagged, with the page to open", "opens its page when no window of the app is open", "shows its page in the app's open window" and "opens only Agentry, whatever address the push names"
-    # a push carries at most 500 characters of the line: internal/webpush/sink.go line 15
+    # a push carries at most 500 characters of the line: internal/domain/notifications/webpush/sink.go line 15
     Given 2 devices subscribed and an approval already waiting when the server starts
     When the server starts
     Then nothing is pushed for what already waited
