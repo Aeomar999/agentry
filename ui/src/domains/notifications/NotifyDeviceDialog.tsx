@@ -5,7 +5,7 @@ import { Banner } from "@/components/molecules/Banner";
 import { Dialog } from "@/components/molecules/Dialog";
 import { api } from "@/api/client";
 import type { PushStatus } from "@/api/types";
-import { browserReason, subscribe, thisDevice, unsubscribe } from "@/lib/push";
+import { browserReason, subscribe, thisDevice, unsubscribe } from "@/domains/notifications/push";
 
 // Notifications on this device: subscribes this browser to Agentry's pushes.
 // Push works only when the server is reached at an https -public-url and

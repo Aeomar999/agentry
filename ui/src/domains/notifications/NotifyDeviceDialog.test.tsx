@@ -10,8 +10,8 @@ let inBrowser = "";
 let existing: PushSubscription | null = null;
 const api = vi.fn((method: string, _path: string, _body?: unknown) => Promise.resolve(method === "GET" ? server : {}));
 vi.mock("@/api/client", () => ({ api: (method: string, path: string, body?: unknown) => api(method, path, body) }));
-vi.mock("@/lib/push", async (actual) => ({
-  ...(await actual<typeof import("@/lib/push")>()),
+vi.mock("@/domains/notifications/push", async (actual) => ({
+  ...(await actual<typeof import("@/domains/notifications/push")>()),
   browserReason: () => inBrowser,
   subscribe: vi.fn(),
   unsubscribe: vi.fn(),

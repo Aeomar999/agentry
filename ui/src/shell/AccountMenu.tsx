@@ -3,7 +3,7 @@ import { UserRound } from "lucide-react";
 import { IconButton } from "@/components/atoms/IconButton";
 import { ContextMenu } from "@/components/molecules/ContextMenu";
 import { signOut } from "@/api/client";
-import { NotifyDeviceDialog } from "@/components/organisms/NotifyDeviceDialog";
+import { NotifyDeviceDialog } from "@/domains/notifications/NotifyDeviceDialog";
 import { SignInDeviceDialog } from "@/shell/signin/SignInDeviceDialog";
 import { useToast } from "./Toasts";
 
