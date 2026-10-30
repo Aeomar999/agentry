@@ -696,8 +696,8 @@ func TestEveryPathAFeaturesSourcesNamesExists(t *testing.T) {
 			"  # Sources: internal/domain/tasks, / and their tests.\n",
 			"tasks-and-board.feature:3: Sources names /, which isn't a path into the repo; name it from the repo root, with no empty, . or .. part"},
 		"a leading slash": {
-			"  # Sources: /internal/tasks and their tests.\n",
-			"tasks-and-board.feature:3: Sources names /internal/tasks, which isn't a path into the repo"},
+			"  # Sources: /internal/domain/tasks and their tests.\n",
+			"tasks-and-board.feature:3: Sources names /internal/domain/tasks, which isn't a path into the repo"},
 		"an empty part": {
 			"  # Sources: internal//tasks and their tests.\n",
 			"tasks-and-board.feature:3: Sources names internal//tasks, which isn't a path into the repo"},
@@ -708,8 +708,8 @@ func TestEveryPathAFeaturesSourcesNamesExists(t *testing.T) {
 			"  # Sources: internal/domain/tasks/../tasks and their tests.\n",
 			"tasks-and-board.feature:3: Sources names internal/domain/tasks/../tasks, which isn't a path into the repo"},
 		"a .. part out of an unlisted top folder": {
-			"  # Sources: scripts/../internal/tasks and their tests.\n",
-			"tasks-and-board.feature:3: Sources names scripts/../internal/tasks, which isn't a path into the repo"},
+			"  # Sources: scripts/../internal/domain/tasks and their tests.\n",
+			"tasks-and-board.feature:3: Sources names scripts/../internal/domain/tasks, which isn't a path into the repo"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			files := maps.Clone(repo)

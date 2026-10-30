@@ -383,7 +383,7 @@ func TestAgentrysOwnFilesAreAlwaysOffLimits(t *testing.T) {
 			bash("kill $(cat pid)"),
 			bash("go test $(go list ./...)"),
 			bash("echo $HOME"),
-			bash("go test $(go env X)/internal/tlsca"),
+			bash("go test $(go env X)/internal/platform/tlsca"),
 			bash("cat $(x)tls/y"),
 			// a pattern after a folder that can't be known names nothing more than $X alone
 			bash(`ls "$(go env GOMODCACHE)"/*`),
