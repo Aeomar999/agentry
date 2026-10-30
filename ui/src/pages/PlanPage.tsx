@@ -18,7 +18,7 @@ import { Banner } from "@/components/molecules/Banner";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { AgentName } from "@/components/molecules/AgentName";
 import { StoryProgress } from "@/components/molecules/StoryProgress";
-import { useToast } from "@/components/organisms/Toasts";
+import { useToast } from "@/shell/Toasts";
 import { api } from "@/api/client";
 import type { TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";

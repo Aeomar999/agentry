@@ -17,7 +17,7 @@ Feature: Usability
     And after the reload the dock opens at the height it was left at, kept in this browser, and 320 px the first time
     And its tabs are exactly 2: Questions, with the count of what waits, and Claude; an agent's terminal is on its task's page, in the Terminal tab
     And opened with Ctrl+J while something waits for the user, the dock opens on Questions, not on the tab it was left on
-    # ui/src/components/templates/AdminShell.tsx lines 40, 41, 61 to 66, 70 to 76 and 90; ui/src/components/organisms/TerminalDock.tsx lines 13 to 16 and 53 to 60
+    # ui/src/shell/AdminShell.tsx lines 40, 41, 61 to 66, 70 to 76 and 90; ui/src/components/organisms/TerminalDock.tsx lines 13 to 16 and 53 to 60
     # Steps:
     # 1. In a private window, open the page, press Ctrl+J and drag the dock's top edge up to the top bar, then down as far as it goes.
     # 2. Reload, press Ctrl+J, and read the dock's height and its tabs.
@@ -63,7 +63,7 @@ Feature: Usability
     Then in dark it is 2.84, 2.99, 2.59 and 2.26 on surface-0 to surface-3, every one below 3:1
     And in light it is 2.63, 2.52, 2.32 and 2.08 on surface-0 to surface-3, every one below 3:1
     And ink-faint is used 102 times in ui/src outside tests, 37 at 11 px and 5 at 10.5 px, so no ink-faint text meets 4.5:1 or 3:1 today
-    # ui/src/styles/globals.css lines 28, 111; ui/src/components/atoms/Input.tsx line 23 (placeholder), organisms/Sidebar.tsx line 54 (section titles), molecules/Breadcrumbs.tsx line 15 (chevron, aria-hidden); measured as the heading above says
+    # ui/src/styles/globals.css lines 28, 111; ui/src/components/atoms/Input.tsx line 23 (placeholder), ui/src/shell/Sidebar.tsx line 54 (section titles), molecules/Breadcrumbs.tsx line 15 (chevron, aria-hidden); measured as the heading above says
 
   @USE-06 @benchmark
   Scenario: The link colour reads at 4.5:1 on the base surfaces and is below it on the raised light surfaces
@@ -109,7 +109,7 @@ Feature: Usability
     Then scrollWidth equals clientWidth on each of the 4 pages, so the page itself does not scroll sideways
     And what is wider than the screen scrolls inside its own box, each with overflow-x-auto: the board's columns, the Plan's columns, the handoff path, a tab list, a code block and a table
     And a toast is at most the screen width minus 32 px wide
-    # README.md, Install, What Start Agentry does (a phone can open it); ui/index.html line 5 (viewport width=device-width); ui/src/components/organisms/TaskBoard.tsx line 147, pages/PlanPage.tsx line 128, molecules/HandoffPath.tsx line 41, molecules/Tabs.tsx line 13, molecules/CodeFence.tsx line 29, molecules/ResourceTable.tsx line 57, organisms/Toasts.tsx line 46; no test
+    # README.md, Install, What Start Agentry does (a phone can open it); ui/index.html line 5 (viewport width=device-width); ui/src/components/organisms/TaskBoard.tsx line 147, pages/PlanPage.tsx line 128, molecules/HandoffPath.tsx line 41, molecules/Tabs.tsx line 13, molecules/CodeFence.tsx line 29, molecules/ResourceTable.tsx line 57, ui/src/shell/Toasts.tsx line 46; no test
 
   @USE-11 @manual
   Scenario: Under 768 px the sidebar is a drawer and the top bar keeps only its icons
@@ -118,7 +118,7 @@ Feature: Usability
     Then the sidebar, hidden until then, opens as a drawer over the content under the top bar, and a tap on the dark backdrop or on one of its links closes it
     And at 768 px and wider the same button collapses the 240 px sidebar to a 56 px rail instead, with no drawer
     And the top bar shows the logo, the search button as a 32 px icon with no "Search or jump to" text and no key chip, Install app, the theme button and the account menu; the name "Agentry", the divider after it and the breadcrumbs are hidden under 640 px
-    # README.md, Use it; ui/src/components/templates/AdminShell.tsx line 181 (matchMedia min-width 768px); organisms/Sidebar.tsx lines 41, 48-49; organisms/TopBar.tsx lines 27-55; ui/src/styles/globals.css lines 84-85; no test
+    # README.md, Use it; ui/src/shell/AdminShell.tsx line 181 (matchMedia min-width 768px); ui/src/shell/Sidebar.tsx lines 41, 48-49; ui/src/shell/TopBar.tsx lines 27-55; ui/src/styles/globals.css lines 84-85; no test
 
   @USE-12 @manual
   Scenario: Under 1024 px the task list and the task page drop to one column
@@ -156,7 +156,7 @@ Feature: Usability
     Then the command palette opens, a dialog named "Command palette", and the key does not reach the field
     And ArrowDown and ArrowUp move the cursor exactly one match at a time, Enter runs the match under it and Esc closes it
     And with an empty query the palette lists every item: Go to Tasks, Agents, Policy, Plan, Integrations and Settings, New task, New epic, Ask Claude to start a task, one Open the terminal command per working task with an agent, the theme switch, the commands of each visible feature, Go to Ideas when Ideas is on, then every task and every agent
-    # README.md, Use it, Keys; ui/src/components/templates/AdminShell.tsx lines 101-115 (keydown with capture) and 127-164; organisms/CommandPalette.tsx lines 38-44 (an empty query matches every item), 60-63, 72-73; lib/shortcuts.ts line 12 (modKey); no test presses the keys, CommandPalette.test.tsx covers the matching of epic-N and task-N
+    # README.md, Use it, Keys; ui/src/shell/AdminShell.tsx lines 101-115 (keydown with capture) and 127-164; ui/src/shell/CommandPalette.tsx lines 38-44 (an empty query matches every item), 60-63, 72-73; lib/shortcuts.ts line 12 (modKey); no test presses the keys, CommandPalette.test.tsx covers the matching of epic-N and task-N
 
   @USE-16 @manual
   Scenario: Single keys and two-key chords work outside a field, and Esc closes what is open
@@ -165,7 +165,7 @@ Feature: Usability
     Then ? shows the shortcuts overlay listing exactly 14 shortcuts in 4 groups, Anywhere, Go to, Tasks and Lists; n opens New task; / focuses the page's search field; g t, g a and g p go to Tasks, Agents and Policy when the second key comes within 1200 ms; 1 and 2 show Tasks as a list and as a board; j and k move the row cursor and Enter opens the row under it
     And the same keys typed in an input, a textarea, a select or an editable element, or with Ctrl, ⌘ or Alt held, run no shortcut
     And Esc closes the overlay, the palette, a dialog and a context menu; a context menu also closes on a click elsewhere or a scroll, and is kept 8 px inside the window's right edge
-    # README.md, Use it, Keys; ui/src/lib/shortcuts.ts lines 14-29 (the list the overlay shows), 33-37 (isTyping), 49, 59 (1200 ms), 72-80; components/templates/AdminShell.tsx lines 117-125; pages/TasksPage.tsx line 184; organisms/ShortcutOverlay.tsx line 8; molecules/ContextMenu.tsx lines 5, 13, 30; no test presses these keys
+    # README.md, Use it, Keys; ui/src/lib/shortcuts.ts lines 14-29 (the list the overlay shows), 33-37 (isTyping), 49, 59 (1200 ms), 72-80; ui/src/shell/AdminShell.tsx lines 117-125; pages/TasksPage.tsx line 184; ui/src/shell/ShortcutOverlay.tsx line 8; molecules/ContextMenu.tsx lines 5, 13, 30; no test presses these keys
 
   @USE-17 @test
   Scenario: Esc or a press outside closes a dialog, unless it is held
@@ -235,9 +235,9 @@ Feature: Usability
   Scenario: The UI's words carry no em-dash and none of the three banned words
     Given every .ts and .tsx file under ui/src outside tests
     When the user greps them for the em-dash character, and for the three words spec/README.md rule 6 bans
-    Then the em-dash is found on exactly 1 line, a code comment in ui/src/lib/signin.ts, and in 0 strings shown to the user
+    Then the em-dash is found on exactly 1 line, a code comment in ui/src/shell/signin/signin.ts, and in 0 strings shown to the user
     And the three banned words are found 0 times
-    # spec/README.md rule 6; measured 2026-10-25 at commit 45d8d734 with find ui/src -name '*.ts' -o -name '*.tsx' | xargs grep -n for the em-dash character, and grep -rniE for the three words; ui/src/lib/signin.ts line 8
+    # spec/README.md rule 6; measured 2026-10-25 at commit 45d8d734 with find ui/src -name '*.ts' -o -name '*.tsx' | xargs grep -n for the em-dash character, and grep -rniE for the three words; ui/src/shell/signin/signin.ts line 8
 
   @USE-25 @manual
   Scenario: Reduced motion turns every animation and transition off
@@ -252,7 +252,7 @@ Feature: Usability
     When the user presses the theme button in the top bar, "Light theme", or runs "Switch to the light theme" from the palette
     Then the html element gets the class light, every token takes its light value, and the browser's theme colour becomes #fafafa from #16181d
     And the choice is kept in localStorage under agentry-theme, so the next visit opens in the same theme, and is posted to POST /api/theme, which accepts only "light" or "dark"
-    # ui/src/lib/theme.ts lines 7-27; ui/src/components/templates/AdminShell.tsx lines 95, 149-152; organisms/TopBar.tsx line 55; internal/web/api.go lines 53-66; no test
+    # ui/src/lib/theme.ts lines 7-27; ui/src/shell/AdminShell.tsx lines 95, 149-152; ui/src/shell/TopBar.tsx line 55; internal/web/api.go lines 53-66; no test
 
   @USE-27 @test
   Scenario: An agent's chip is its first letter on a tint of its own colour, and you and Agentry are neutral

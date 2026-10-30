@@ -8,7 +8,7 @@ import { Dialog } from "@/components/molecules/Dialog";
 import { newSigninCode } from "@/api/client";
 import type { SigninCode } from "@/api/types";
 import { useNow } from "@/live/use-now";
-import { shortFingerprint } from "@/lib/trust";
+import { shortFingerprint } from "@/shell/signin/trust";
 
 // Signs in another device, such as a phone or the installed app, without
 // copying the token onto it: a one-time code to type there, and a QR code

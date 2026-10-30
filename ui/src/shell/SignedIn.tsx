@@ -1,6 +1,6 @@
 import { ReactNode, useState, useSyncExternalStore } from "react";
 import { isSignedOut, signinCodeFromLink, watchSignedOut } from "@/api/client";
-import { SignInPage } from "@/pages/SignInPage";
+import { SignInPage } from "@/shell/signin/SignInPage";
 
 // SignedIn shows the sign-in page in place of the app when the server says
 // the page isn't signed in, or when the page opened with a one-time code to

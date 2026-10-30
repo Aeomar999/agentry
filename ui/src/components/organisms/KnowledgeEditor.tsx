@@ -7,7 +7,7 @@ import { Panel } from "@/components/molecules/Panel";
 import { api } from "@/api/client";
 import { useResource } from "@/live/use-resource";
 import { timeAgo } from "@/lib/time";
-import { useToast } from "./Toasts";
+import { useToast } from "@/shell/Toasts";
 
 // What an agent knows: notes it keeps as it works on tasks, part of every
 // brief. You can help it here: add what it should know, fix what's wrong.

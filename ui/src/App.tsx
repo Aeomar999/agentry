@@ -1,7 +1,7 @@
 import { createBrowserRouter, Navigate, RouterProvider, useSearchParams } from "react-router-dom";
-import { AdminShell } from "@/components/templates/AdminShell";
-import { SignedIn } from "@/components/templates/SignedIn";
-import { ToastProvider } from "@/components/organisms/Toasts";
+import { AdminShell } from "@/shell/AdminShell";
+import { SignedIn } from "@/shell/SignedIn";
+import { ToastProvider } from "@/shell/Toasts";
 import { LiveProvider } from "@/live/LiveProvider";
 import { TasksPage } from "@/pages/TasksPage";
 import { PlanPage } from "@/pages/PlanPage";
@@ -13,8 +13,8 @@ import { AgentEditPage } from "@/pages/AgentEditPage";
 import { PolicyPage } from "@/pages/PolicyPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { WorkersPage } from "@/pages/WorkersPage";
-import { NotFoundPage } from "@/pages/NotFoundPage";
-import { ErrorPage } from "@/pages/ErrorPage";
+import { NotFoundPage } from "@/shell/NotFoundPage";
+import { ErrorPage } from "@/shell/ErrorPage";
 import { WorkspacePage } from "@/pages/WorkspacePage";
 import { EXTENSIONS } from "@/extensions";
 

@@ -9,7 +9,7 @@ import { api } from "@/api/client";
 import type { Action, TaskDetail } from "@/api/types";
 import { dateTime, timeAgo } from "@/lib/time";
 import { useSaveLimit } from "./LimitEditor";
-import { useToast } from "./Toasts";
+import { useToast } from "@/shell/Toasts";
 
 // What a task's agents are waiting on you for: actions the policy held, or
 // an agent stuck on a prompt in its terminal. A question from the

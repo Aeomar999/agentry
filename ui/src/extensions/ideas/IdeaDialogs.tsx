@@ -15,7 +15,7 @@ import { COLUMN_TITLES } from "@/lib/columns";
 import { shownEpic, shownId } from "@/lib/shown-id";
 import { TaskLink } from "./IdeaCard";
 import type { Idea, IdeaAcceptance, IdeaDuplicate } from "./types";
-import { useToast } from "@/components/organisms/Toasts";
+import { useToast } from "@/shell/Toasts";
 
 const path = (idea: Idea, action: "accept" | "dismiss") => `/api/ideas/${encodeURIComponent(idea.id)}/${action}`;
 

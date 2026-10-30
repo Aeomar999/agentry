@@ -8,7 +8,7 @@ import { AgentName } from "@/components/molecules/AgentName";
 import { api } from "@/api/client";
 import type { Agent, BoardColumn, TaskSummary } from "@/api/types";
 import { cn } from "@/lib/cn";
-import { useToast } from "./Toasts";
+import { useToast } from "@/shell/Toasts";
 import { rankAt } from "@/lib/rank";
 import { DropLine, slotAt, slotIndex } from "@/lib/drag";
 import { DONE_DAYS, onBoard } from "@/lib/epics";

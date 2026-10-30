@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/molecules/EmptyState";
 import { Dialog } from "@/components/molecules/Dialog";
 import { AddWorkerDialog } from "@/components/organisms/AddWorkerDialog";
 import { MachineDetails } from "@/components/organisms/MachineDetails";
-import { useToast } from "@/components/organisms/Toasts";
+import { useToast } from "@/shell/Toasts";
 import { Button } from "@/components/atoms/Button";
 import { IconButton } from "@/components/atoms/IconButton";
 import { api } from "@/api/client";

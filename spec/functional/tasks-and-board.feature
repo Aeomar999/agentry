@@ -21,7 +21,7 @@ Feature: Tasks and the board
 
   @TASK-02 @user @manual
   Scenario: New task opens as a modal from the key n and the New task button
-    # n: ui/src/lib/shortcuts.ts line 18, bound in ui/src/components/templates/AdminShell.tsx
+    # n: ui/src/lib/shortcuts.ts line 18, bound in ui/src/shell/AdminShell.tsx
     Given the Tasks page is open and no field has the focus
     When the user presses n
     Then a dialog titled "New task" is shown over the page
@@ -391,7 +391,7 @@ Feature: Tasks and the board
   @TASK-34 @user @manual
   Scenario: The ? overlay shows exactly the 14 shortcuts, in 4 groups
     # the list: ui/src/lib/shortcuts.ts lines 14 to 29; the modifier the page shows, modKey: line 12
-    # ui/src/components/organisms/ShortcutOverlay.tsx lines 8, 16, 19 and 37
+    # ui/src/shell/ShortcutOverlay.tsx lines 8, 16, 19 and 37
     Given any page, with no field focused
     When the user presses ?
     Then a dialog "Keyboard shortcuts" is shown with exactly 14 rows in 4 groups: Anywhere, "Go to", Tasks, Lists
@@ -404,8 +404,8 @@ Feature: Tasks and the board
 
   @TASK-35 @user @test
   Scenario: The command palette finds tasks by their shown id, and an epic by task-N too
-    # ui/src/components/organisms/CommandPalette.test.tsx "show an epic as epic-N and a task on its own as task-N", "find an epic by epic-N" and "still find an epic by task-N"
-    # the field "Search tasks, agents and commands": ui/src/components/organisms/CommandPalette.tsx line 84
+    # ui/src/shell/CommandPalette.test.tsx "show an epic as epic-N and a task on its own as task-N", "find an epic by epic-N" and "still find an epic by task-N"
+    # the field "Search tasks, agents and commands": ui/src/shell/CommandPalette.tsx line 84
     Given the palette open with the epic task-21 "Ship v2" and the task task-30 "Fix the login", both working
     When nothing is typed
     Then exactly 2 rows read "Ship v2 epic-21 · working" and "Fix the login task-30 · working"
@@ -416,9 +416,9 @@ Feature: Tasks and the board
 
   @TASK-36 @user @manual
   Scenario: The keys: the palette and the terminal from anywhere, g chords, j, k and Enter, and nothing while typing
-    # modKey K and modKey J are caught before a field or the terminal sees them: ui/src/components/templates/AdminShell.tsx lines 97 to 113; the other keys: lines 116 to 123
+    # modKey K and modKey J are caught before a field or the terminal sees them: ui/src/shell/AdminShell.tsx lines 97 to 113; the other keys: lines 116 to 123
     # keys do nothing while typing, a field, a textarea, a select or the terminal: ui/src/lib/shortcuts.ts lines 33 to 37 and 49; Enter only with nothing focused: line 50; a chord's second key within 1200 ms: line 59
-    # the palette's keys, groups and "Nothing matches": ui/src/components/organisms/CommandPalette.tsx lines 59 to 65 and 90; j, k and Enter on the Tasks and Agents lists: ui/src/pages/TasksPage.tsx line 242, ui/src/pages/AgentsPage.tsx line 99
+    # the palette's keys, groups and "Nothing matches": ui/src/shell/CommandPalette.tsx lines 59 to 65 and 90; j, k and Enter on the Tasks and Agents lists: ui/src/pages/TasksPage.tsx line 242, ui/src/pages/AgentsPage.tsx line 99
     Given any page
     When the user presses modKey K, even while typing in a field or the terminal
     Then the palette opens, the focus in "Search tasks, agents and commands", and the same keys close it

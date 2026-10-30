@@ -3,7 +3,7 @@ import { Select } from "@/components/atoms/Select";
 import { useResource } from "@/live/use-resource";
 import { fileUnder } from "@/lib/epic-api";
 import { shownEpic } from "@/lib/shown-id";
-import { useToast } from "./Toasts";
+import { useToast } from "@/shell/Toasts";
 
 // EpicPicker files a task under one of the epics still going, moves it to
 // another, or takes it out.

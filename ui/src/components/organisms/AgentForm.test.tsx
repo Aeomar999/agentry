@@ -6,8 +6,8 @@ import type { Agent } from "@/api/types";
 import { AgentForm } from "./AgentForm";
 
 vi.mock("@/api/client", async (actual) => ({ ...(await actual<typeof import("@/api/client")>()), api: vi.fn() }));
-vi.mock("@/components/organisms/Toasts", async (actual) => ({
-  ...(await actual<typeof import("@/components/organisms/Toasts")>()),
+vi.mock("@/shell/Toasts", async (actual) => ({
+  ...(await actual<typeof import("@/shell/Toasts")>()),
   useToast: () => vi.fn(),
 }));
 // Monaco doesn't run in jsdom: the prompt is a plain box here.

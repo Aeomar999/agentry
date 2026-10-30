@@ -5,7 +5,7 @@ import { LogoTile } from "@/components/atoms/LogoTile";
 import { Banner } from "@/components/molecules/Banner";
 import { Field } from "@/components/molecules/Field";
 import { signIn } from "@/api/client";
-import { readSignIn } from "@/lib/signin";
+import { readSignIn } from "@/shell/signin/signin";
 
 // The page a device without a valid token sees, such as the installed app,
 // which opens at "/" without the printed link. One field takes a one-time

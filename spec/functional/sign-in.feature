@@ -2,9 +2,9 @@ Feature: Signing in
   Signing devices in with one-time codes, trusting Agentry's CA, installing the app, and the desktop app.
   # Sources: cmd/agentry/trust.go, cmd/agentry-desktop, internal/web/signin.go,
   # internal/platform/tlsca, internal/platform/launch, tools/packaging/desktop.go, tools/packaging/files,
-  # ui/src/pages/SignInPage.tsx,
-  # ui/src/components/organisms/SignInDeviceDialog.tsx, ui/src/lib/signin.ts,
-  # ui/src/lib/trust.ts,
+  # ui/src/shell/signin/SignInPage.tsx,
+  # ui/src/shell/signin/SignInDeviceDialog.tsx, ui/src/shell/signin/signin.ts,
+  # ui/src/shell/signin/trust.ts,
   # ui/src/lib/install.ts and their tests.
 
   # ---- Sign-in codes ---------------------------------------------------------
@@ -47,8 +47,8 @@ Feature: Signing in
 
   @SIGNIN-03 @user @manual
   Scenario: The person menu, Sign in another device, and the sign-in page
-    # ui/src/components/organisms/AccountMenu.tsx lines 29 and 40 to 45; ui/src/components/organisms/SignInDeviceDialog.tsx lines 50, 74 to 96, 97 to 110 and 111 to 118
-    # ui/src/pages/SignInPage.tsx lines 52 to 78; what the field takes: ui/src/lib/signin.ts lines 12 to 24, a code being at most 8 characters, line 6
+    # ui/src/shell/AccountMenu.tsx lines 29 and 40 to 45; ui/src/shell/signin/SignInDeviceDialog.tsx lines 50, 74 to 96, 97 to 110 and 111 to 118
+    # ui/src/shell/signin/SignInPage.tsx lines 52 to 78; what the field takes: ui/src/shell/signin/signin.ts lines 12 to 24, a code being at most 8 characters, line 6
     # README.md, Signing in the installed app, or another device
     Given a device that is signed in
     When the user clicks "Signing in" in the top bar
@@ -69,7 +69,7 @@ Feature: Signing in
   @SIGNIN-04 @user @test
   Scenario: Sign out forgets the cookie on the server and the token on the device
     # internal/web/signin_test.go TestSigningOutClearsTheCookie
-    # the page forgets its token and says "Couldn't sign out" when the server refuses: ui/src/components/organisms/AccountMenu.tsx lines 44 and 45
+    # the page forgets its token and says "Couldn't sign out" when the server refuses: ui/src/shell/AccountMenu.tsx lines 44 and 45
     Given a device that is signed in
     When the user picks "Sign out"
     Then the reply is 200 with the cookie emptied, path /, expiring at once
@@ -103,8 +103,8 @@ Feature: Signing in
 
   @SIGNIN-07 @user @test
   Scenario: Trusting a device once: the trust page per address, with the CA's fingerprint
-    # internal/web/trust_test.go TestThePageIsToldWhereToTrustTheServersOwnCA; ui/src/lib/trust.test.ts "keeps the first eight pairs of a SHA-256"
-    # the dialog's section "First time on this device? Trust Agentry's certificate", with its QR code and the fingerprint: ui/src/components/organisms/SignInDeviceDialog.tsx lines 53 to 73
+    # internal/web/trust_test.go TestThePageIsToldWhereToTrustTheServersOwnCA; ui/src/shell/signin/trust.test.ts "keeps the first eight pairs of a SHA-256"
+    # the dialog's section "First time on this device? Trust Agentry's certificate", with its QR code and the fingerprint: ui/src/shell/signin/SignInDeviceDialog.tsx lines 53 to 73
     # README.md, HTTPS and installing the app on other devices, "Trust a device once"
     Given the server serving -https with its own CA, reachable at 2 network addresses and localhost
     When a sign-in code is issued

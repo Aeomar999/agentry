@@ -18,7 +18,7 @@ import { knownLabels } from "@/lib/labels";
 import { shownEpic, shownId } from "@/lib/shown-id";
 import { useResource } from "@/live/use-resource";
 import { modKey } from "@/lib/shortcuts";
-import { useToast } from "./Toasts";
+import { useToast } from "@/shell/Toasts";
 import { share, sizeOf } from "@/lib/shared";
 
 // A task is what you describe. The title is optional: the coordinator reads

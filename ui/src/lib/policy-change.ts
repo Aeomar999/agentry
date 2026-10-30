@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { PolicyChange } from "@/api/types";
-import { useToast } from "@/components/organisms/Toasts";
+import { useToast } from "@/shell/Toasts";
 
 // usePolicyChange makes one change to the policy at a time. A toast says
 // how it went, with the server's reason when it was refused, and the

@@ -3,8 +3,8 @@ import { UserRound } from "lucide-react";
 import { IconButton } from "@/components/atoms/IconButton";
 import { ContextMenu } from "@/components/molecules/ContextMenu";
 import { signOut } from "@/api/client";
-import { NotifyDeviceDialog } from "./NotifyDeviceDialog";
-import { SignInDeviceDialog } from "./SignInDeviceDialog";
+import { NotifyDeviceDialog } from "@/components/organisms/NotifyDeviceDialog";
+import { SignInDeviceDialog } from "@/shell/signin/SignInDeviceDialog";
 import { useToast } from "./Toasts";
 
 // This device's sign-in, in the top bar: sign in another device with a

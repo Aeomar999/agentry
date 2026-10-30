@@ -7,7 +7,7 @@ import { api } from "@/api/client";
 import type { TaskSummary } from "@/api/types";
 import { knownLabels } from "@/lib/labels";
 import { useResource } from "@/live/use-resource";
-import { useToast } from "./Toasts";
+import { useToast } from "@/shell/Toasts";
 
 // A task's labels, and editing them in place.
 export function LabelEditor({ taskId, labels }: { taskId: string; labels: string[] }) {

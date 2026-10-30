@@ -1,6 +1,6 @@
 import { ComponentType, ReactNode, useMemo } from "react";
 import type { NavigateFunction, RouteObject } from "react-router-dom";
-import type { PaletteItem } from "@/components/organisms/CommandPalette";
+import type { PaletteItem } from "@/shell/CommandPalette";
 import type { BoardColumn, FeatureLine, FeaturesReply, TaskSummary, UnknownEvents } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { COLUMN_TITLES } from "@/lib/columns";

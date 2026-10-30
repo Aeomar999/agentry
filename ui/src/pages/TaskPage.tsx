@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { CircleCheck, EyeOff, FileQuestion, FolderGit2, SquareTerminal } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
 import { Input } from "@/components/atoms/Input";
-import { useToast } from "@/components/organisms/Toasts";
+import { useToast } from "@/shell/Toasts";
 import { api } from "@/api/client";
 import { useBreadcrumb } from "@/lib/breadcrumb";
 import { Badge } from "@/components/atoms/Badge";

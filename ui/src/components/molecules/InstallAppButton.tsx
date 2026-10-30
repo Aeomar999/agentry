@@ -3,7 +3,7 @@ import { Download } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
 import type { Trust } from "@/api/types";
 import { install, useInstall } from "@/lib/install";
-import { httpsAddress } from "@/lib/trust";
+import { httpsAddress } from "@/shell/signin/trust";
 
 // Install app, in the top bar: installs the page as an app where the browser
 // offers it. Opened over plain http at a network address, where browsers

@@ -5,7 +5,7 @@ import { Button } from "@/components/atoms/Button";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { Mono } from "@/components/molecules/Mono";
 import { ResourceTable, Column } from "@/components/molecules/ResourceTable";
-import { useToast } from "./Toasts";
+import { useToast } from "@/shell/Toasts";
 import { downloadURL, share, sizeOf, SharedFile } from "@/lib/shared";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";

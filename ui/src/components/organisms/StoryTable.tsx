@@ -20,7 +20,7 @@ import { Button } from "@/components/atoms/Button";
 import { Checkbox } from "@/components/atoms/Checkbox";
 import { Dialog } from "@/components/molecules/Dialog";
 import { SearchField } from "@/components/molecules/SearchField";
-import { useToast } from "./Toasts";
+import { useToast } from "@/shell/Toasts";
 
 // An epic's stories, in your priority order (drag a row to change it), the
 // finished ones last: who runs each, what it builds on, and how it stands. Tasks there already can be

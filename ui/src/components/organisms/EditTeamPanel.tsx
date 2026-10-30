@@ -4,7 +4,7 @@ import { Input } from "@/components/atoms/Input";
 import { errorId, Field } from "@/components/molecules/Field";
 import { MissingProfilesOffer } from "@/components/molecules/MissingProfilesOffer";
 import { SideSheet } from "@/components/molecules/SideSheet";
-import { useToast } from "@/components/organisms/Toasts";
+import { useToast } from "@/shell/Toasts";
 import {
   checkTeam,
   discardEditDetail,

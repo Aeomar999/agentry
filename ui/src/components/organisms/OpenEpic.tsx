@@ -5,7 +5,7 @@ import { Clamp } from "@/components/molecules/Clamp";
 import { Panel } from "@/components/molecules/Panel";
 import { api } from "@/api/client";
 import type { TaskDetail } from "@/api/types";
-import { useToast } from "./Toasts";
+import { useToast } from "@/shell/Toasts";
 
 // An epic you left open with every story done: it waits quietly until you
 // close it, or add a story to it.

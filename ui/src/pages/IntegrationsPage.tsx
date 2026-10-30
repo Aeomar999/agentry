@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/molecules/EmptyState";
 import { Mono } from "@/components/molecules/Mono";
 import { ResourceTable, Column } from "@/components/molecules/ResourceTable";
 import { Button } from "@/components/atoms/Button";
-import { useToast } from "@/components/organisms/Toasts";
+import { useToast } from "@/shell/Toasts";
 import { api } from "@/api/client";
 import type { InstallCommands } from "@/api/types";
 import { useResource } from "@/live/use-resource";

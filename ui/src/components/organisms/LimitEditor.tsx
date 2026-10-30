@@ -8,7 +8,7 @@ import { api } from "@/api/client";
 import type { TaskSummary } from "@/api/types";
 import { LimitChoice, LimitKind, SCALES, choiceOf, described, limitOf, sent } from "@/lib/limits";
 import { cn } from "@/lib/cn";
-import { useToast } from "./Toasts";
+import { useToast } from "@/shell/Toasts";
 
 type LimitTask = Pick<TaskSummary, "id" | "status" | "budget" | "tokensUsed" | "maxTurns" | "turns" | "turnsSinceAnswer">;
 

@@ -7,7 +7,7 @@ import { changeSettings } from "@/api/client";
 import type { Settings } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { CUSTOM, LimitChoice, RUNNING, choiceOf, limitOf, runningLine } from "@/lib/limits";
-import { useToast } from "./Toasts";
+import { useToast } from "@/shell/Toasts";
 
 // The most tasks Agentry gives a turn at once, across every repo, and how
 // many run against it and wait for a slot. A preset or No limit saves as you

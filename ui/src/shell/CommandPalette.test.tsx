@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { TaskSummary } from "@/api/types";
 import { task } from "@/api/tasks.fixtures";
-import { taskItem } from "@/components/templates/AdminShell";
+import { taskItem } from "@/shell/AdminShell";
 import { CommandPalette } from "./CommandPalette";
 
 // The shell's imports reach its install button, which reads matchMedia as

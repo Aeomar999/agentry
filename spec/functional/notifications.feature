@@ -25,7 +25,7 @@ Feature: Notifications
   Scenario: Turning notifications on and off for this device
     # the server half: internal/domain/notifications/notificationsapi/notificationsapi_test.go TestSubscribingTwiceAndUnsubscribing and TestAMalformedPushSubscriptionIsABadRequest
     # the dialog's half when it opens: ui/src/components/organisms/NotifyDeviceDialog.test.tsx "a subscription made with the server's key is sent again and shows as notified" and "a subscription made with another key is dropped in the browser and the button shows"; no test clicks either button
-    # the dialog "Notifications on this device", from the Signing in menu: ui/src/components/organisms/AccountMenu.tsx line 41; its buttons: ui/src/components/organisms/NotifyDeviceDialog.tsx lines 52 to 77
+    # the dialog "Notifications on this device", from the Signing in menu: ui/src/shell/AccountMenu.tsx line 41; its buttons: ui/src/components/organisms/NotifyDeviceDialog.tsx lines 52 to 77
     # "Notifications weren't allowed." when the browser refuses permission, in the banner "Couldn't change notifications": ui/src/lib/push.ts line 43; ui/src/components/organisms/NotifyDeviceDialog.tsx line 45
     Given push available and this browser not subscribed
     When the user opens "Notifications on this device" from the Signing in menu, clicks "Notify me on this device" and allows notifications

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { Agent } from "@/api/types";
 import { api } from "@/api/client";
 import { Button } from "@/components/atoms/Button";
-import { useToast } from "@/components/organisms/Toasts";
+import { useToast } from "@/shell/Toasts";
 import { onlyTeamReason, removeTeamDetail, removeTeamQuestion, tasksNeeding } from "@/lib/custom-team";
 import { cn } from "@/lib/cn";
 

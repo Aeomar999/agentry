@@ -12,7 +12,7 @@ import { Dialog } from "@/components/molecules/Dialog";
 import { Mono } from "@/components/molecules/Mono";
 import { AgentName } from "@/components/molecules/AgentName";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
-import { useToast } from "@/components/organisms/Toasts";
+import { useToast } from "@/shell/Toasts";
 import { AddTeam } from "@/components/organisms/AddTeam";
 import { EditTeamPanel } from "@/components/organisms/EditTeamPanel";
 import { TeamPanel } from "@/components/organisms/TeamPanel";

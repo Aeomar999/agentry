@@ -14,8 +14,8 @@ vi.mock("@/api/client", async (actual) => ({ ...(await actual<typeof import("@/a
 
 // The toasts the page shows, as calls.
 const { notify } = vi.hoisted(() => ({ notify: vi.fn() }));
-vi.mock("@/components/organisms/Toasts", async (actual) => ({
-  ...(await actual<typeof import("@/components/organisms/Toasts")>()),
+vi.mock("@/shell/Toasts", async (actual) => ({
+  ...(await actual<typeof import("@/shell/Toasts")>()),
   useToast: () => notify,
 }));
 

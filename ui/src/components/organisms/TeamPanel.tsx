@@ -7,7 +7,7 @@ import { errorId, Field } from "@/components/molecules/Field";
 import { MissingProfilesOffer } from "@/components/molecules/MissingProfilesOffer";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { SideSheet } from "@/components/molecules/SideSheet";
-import { useToast } from "@/components/organisms/Toasts";
+import { useToast } from "@/shell/Toasts";
 import {
   addCustomTeam,
   blankNotice,

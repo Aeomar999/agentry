@@ -19,7 +19,7 @@ import { readStored, writeStored } from "@/lib/stored";
 import { tokens } from "@/lib/tokens";
 import { rankAt } from "@/lib/rank";
 import { api } from "@/api/client";
-import { useToast } from "@/components/organisms/Toasts";
+import { useToast } from "@/shell/Toasts";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { TaskBoard } from "@/components/organisms/TaskBoard";
 import { RunningLimit } from "@/components/organisms/RunningLimit";

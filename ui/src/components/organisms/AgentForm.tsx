@@ -14,7 +14,7 @@ import { Panel } from "@/components/molecules/Panel";
 import { api } from "@/api/client";
 import type { Agent, Policy, ServerConfig } from "@/api/types";
 import { useResource } from "@/live/use-resource";
-import { useToast } from "./Toasts";
+import { useToast } from "@/shell/Toasts";
 import { effectiveProfile } from "@/lib/profiles";
 import { LOCAL, machineName } from "@/lib/machines";
 import { byItsWork, RESUME_TITLES } from "@/lib/resume";

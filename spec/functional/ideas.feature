@@ -7,7 +7,7 @@ Feature: Ideas
 
   @IDEA-01 @user @manual
   Scenario: Ideas is in the sidebar under Work, with the count of open ideas
-    # the Work section, Tasks then Plan, then each feature's item with its badge: ui/src/components/organisms/Sidebar.tsx lines 14 to 22 and 65 to 77
+    # the Work section, Tasks then Plan, then each feature's item with its badge: ui/src/shell/Sidebar.tsx lines 14 to 22 and 65 to 77
     # the Ideas item: ui/src/extensions/ideas/index.tsx line 10; its badge counts the open ideas: internal/extensions/ideas/routes_test.go TestIdeasBadgeCountsOpenIdeas
     # the page header: ui/src/extensions/ideas/IdeasPage.tsx lines 64 to 66
     Given a Visionaries team and 2 open ideas

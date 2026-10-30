@@ -3,7 +3,7 @@ import type { TeamTemplate } from "@/api/types";
 import { Badge } from "@/components/atoms/Badge";
 import { Button } from "@/components/atoms/Button";
 import { MissingProfilesOffer } from "@/components/molecules/MissingProfilesOffer";
-import { useToast } from "@/components/organisms/Toasts";
+import { useToast } from "@/shell/Toasts";
 import { addTeam, missingProfilesOf } from "@/lib/teams";
 import {
   deleteTemplate,
