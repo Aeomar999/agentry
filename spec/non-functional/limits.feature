@@ -36,7 +36,7 @@ Feature: Limits
     And a task created with maxTurns -5 is refused with HTTP 409
     And the config endpoint shows a budget of 5,000,000 and 2 turns
     And the MCP tool's create_task with no limits sends budget 0 and maxTurns 0 to the API: yes
-    # not under test, checked by hand: the MCP tool sends a budget or maxTurns of -1 to the API as given (internal/domain/tasks/tasksapi/tools.go line 308)
+    # not under test, checked by hand: the MCP tool sends a budget or maxTurns of -1 to the API as given (internal/domain/tasks/tasksapi/tools.go line 309)
     # README.md, Use it from Claude Code; internal/domain/tasks/tasksapi/tasks_api_test.go TestANewTaskHasItsLimits; the MCP tool: internal/mcp/server_test.go TestTheBoardAndHandingOverWork
 
   @LIM-05 @test

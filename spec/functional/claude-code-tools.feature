@@ -109,7 +109,7 @@ Feature: Agentry from Claude Code
     And the epic's line says 2 of 2 stories done
     And the other repo's task is on the board: no
     # internal/mcp/server_test.go TestTheBoardAndHandingOverWork; (close_epic) on the epic's line: TestAnswersNameAnEpicAsEpicN
-    # not under test, checked by hand: the reply has 4 sections, Needs you, Running, Epics and Not started (internal/domain/tasks/tasksapi/tools.go lines 116, 122, 138 and 144),
+    # not under test, checked by hand: the reply has 4 sections, Needs you, Running, Epics and Not started (internal/domain/tasks/tasksapi/tools.go lines 117, 123, 139 and 145),
     # and status with all lists the tasks of every repo (line 110)
 
   @TOOLS-10 @claude-code @test
@@ -136,7 +136,7 @@ Feature: Agentry from Claude Code
     Given a done task whose work was pushed, moved to Done by the user
     When Claude calls show_task for it
     Then the reply reads its title, status shipped and its board column Done, and gives a link to its page: yes
-    # not under test, checked by hand: the same line names its coordinator and its repo (internal/domain/tasks/tasksapi/tools.go line 206)
+    # not under test, checked by hand: the same line names its coordinator and its repo (internal/domain/tasks/tasksapi/tools.go line 207)
     And it says Moved to Done by you: yes
     And it says what the task used of its budget and turns, such as 0 tokens (no limit)
     # internal/domain/tasks/tasksapi/tools_test.go TestTheTaskSaysItShipped; the title and the link: internal/mcp/server_test.go TestAnswersNameAnEpicAsEpicN; the usage: internal/domain/tasks/tasksapi/tools_test.go TestTheTaskSaysItsLimits
@@ -180,7 +180,7 @@ Feature: Agentry from Claude Code
     Then a task is made in this repo, with budget 0 and maxTurns 0 sent, which the server reads as its defaults
     # internal/domain/tasks/tasksapi/tasks_api.go createTask: 0 takes the server's default, -1 is no limit (internal/domain/tasks/tasksapi/tools.go createTask)
     And the reply names the new task as task-N and gives a link to its page: yes
-    # not under test, checked by hand: the reply says its coordinator reads it next (internal/domain/tasks/tasksapi/tools.go line 319)
+    # not under test, checked by hand: the reply says its coordinator reads it next (internal/domain/tasks/tasksapi/tools.go line 320)
     And the reply ends with Waiting for the user (2) when 2 things wait
     # internal/mcp/server_test.go TestTheBoardAndHandingOverWork; the note at the end: internal/mcp/extensions_test.go TestRepliesEndWithWhatTheServerSaysWaits
 
@@ -190,11 +190,11 @@ Feature: Agentry from Claude Code
     When Claude calls create_task with a title and epic epic-3
     Then the server is sent epic task-3: yes
     And the reply names the new task-N: yes
-    # not under test, checked by hand: no repo is sent, so the story works where its epic does (internal/domain/tasks/tasksapi/tools.go line 298), and the reply says it waits in the user's Backlog until they start it (line 315)
+    # not under test, checked by hand: no repo is sent, so the story works where its epic does (internal/domain/tasks/tasksapi/tools.go line 299), and the reply says it waits in the user's Backlog until they start it (line 316)
     When Claude calls create_task with kind epic and stories task-1 and epic-9
     Then the server is sent stories task-1 and task-9, each as task-N
     And the reply names the new epic as epic-N: yes
-    # not under test, checked by hand: the reply says its coordinator splits it into stories next (internal/domain/tasks/tasksapi/tools.go line 317)
+    # not under test, checked by hand: the reply says its coordinator splits it into stories next (internal/domain/tasks/tasksapi/tools.go line 318)
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the replies: TestAnswersNameAnEpicAsEpicN
 
   @TOOLS-18 @claude-code @test
@@ -203,7 +203,7 @@ Feature: Agentry from Claude Code
     When an epic is created with stories task-1 and task-9
     Then the epic is made with 1 story, task-1
     And the answer says task-9: no task task-9: yes
-    # not under test, checked by hand: create_task words it Not filed: (internal/domain/tasks/tasksapi/tools.go line 322)
+    # not under test, checked by hand: create_task words it Not filed: (internal/domain/tasks/tasksapi/tools.go line 323)
     # internal/domain/tasks/tasksapi/tasksapi_test.go TestTasksAreFiledUnderEpics: the epic has 2 stories once task-2 is filed too
 
   @TOOLS-19 @claude-code @test
@@ -211,7 +211,7 @@ Feature: Agentry from Claude Code
     Given a repo at a git address the server can reach
     When Claude calls create_task with that address as repo
     Then the server clones the repo, and the task works in the clone: yes
-    # not under test, checked by hand: the clone may take 10 minutes (internal/platform/worktrees/repo.go line 66, CloneTimeout), and create_task allows 1 minute more (internal/domain/tasks/tasksapi/tools.go line 305)
+    # not under test, checked by hand: the clone may take 10 minutes (internal/platform/worktrees/repo.go line 66, CloneTimeout), and create_task allows 1 minute more (internal/domain/tasks/tasksapi/tools.go line 306)
     # internal/domain/tasks/tasksapi/tasks_api_test.go TestATaskInARepoNamedByItsAddressWorksInAClone: the task is made through the API, not create_task
 
   @TOOLS-20 @claude-code @test
@@ -219,7 +219,7 @@ Feature: Agentry from Claude Code
     Given a task whose coordinator is between turns
     When Claude calls tell_coordinator with the task and the user's words
     Then the message is posted to the task, and the reply says it was sent to task-N's coordinator: yes
-    # not under test, checked by hand: the reply says the coordinator reads it now (internal/domain/tasks/tasksapi/tools.go line 334)
+    # not under test, checked by hand: the reply says the coordinator reads it now (internal/domain/tasks/tasksapi/tools.go line 335)
     # internal/domain/tasks/tasksapi/chat_api.go Say: with a turn open, the message is recorded and that turn is stopped, so the coordinator reads it at once
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
 
@@ -228,7 +228,7 @@ Feature: Agentry from Claude Code
     Given a task whose coordinator asked the user a question
     When Claude calls answer_question with the user's answer
     Then the answer is posted to the task as given, and the reply says the task is answered: yes
-    # not under test, checked by hand: the reply says its coordinator carries on (internal/domain/tasks/tasksapi/tools.go line 352), and Claude Code is asked nothing for a plain answer
+    # not under test, checked by hand: the reply says its coordinator carries on (internal/domain/tasks/tasksapi/tools.go line 353), and Claude Code is asked nothing for a plain answer
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
 
   @TOOLS-22 @claude-code @test
@@ -321,7 +321,7 @@ Feature: Agentry from Claude Code
     When Claude calls start with both ids
     Then a task named is directed to In progress: yes
     And the reply names the 2 as started, epics as epic-N: yes
-    # not under test, checked by hand: each of the 2 is directed to In progress, and the reply says they are on the Tasks board now (internal/domain/tasks/tasksapi/tools.go line 406)
+    # not under test, checked by hand: each of the 2 is directed to In progress, and the reply says they are on the Tasks board now (internal/domain/tasks/tasksapi/tools.go line 407)
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN (the call, for epic-2); the reply: TestAnswersNameAnEpicAsEpicN
 
   @TOOLS-31 @claude-code @manual
@@ -329,7 +329,7 @@ Feature: Agentry from Claude Code
     Given 2 tasks with ranks of their own
     When Claude calls set_priority with their ids in the order wanted
     Then the first task named is sent the lowest of the 2 ranks they held between them: yes
-    # not under test, checked by hand: the second gets the other rank, and no other task moves (internal/domain/tasks/tasksapi/tools.go lines 387 to 392)
+    # not under test, checked by hand: the second gets the other rank, and no other task moves (internal/domain/tasks/tasksapi/tools.go lines 388 to 393)
     And the reply says In this order now, naming the 2 as task-N or epic-N: yes
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN calls it, but its fixture already holds the asserted rank
     # (epic-3 at -3, the lower of the 2), so it passes with no reordering; the reply: TestAnswersNameAnEpicAsEpicN
@@ -345,7 +345,7 @@ Feature: Agentry from Claude Code
     Then the server is sent epic task-3, and the reply says the task is a story of epic-3: yes
     When Claude calls file_under_epic with the task and an empty epic
     Then the server is sent an empty epic: yes
-    # not under test, checked by hand: the reply says the task is out of its epic (internal/domain/tasks/tasksapi/tools.go line 363)
+    # not under test, checked by hand: the reply says the task is out of its epic (internal/domain/tasks/tasksapi/tools.go line 364)
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
 
   @TOOLS-33 @claude-code @test
