@@ -3,7 +3,7 @@ package tasks
 import (
 	"slices"
 
-	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 )
 
 // UndoesYourColumn says why handing the task to agent would undo the column

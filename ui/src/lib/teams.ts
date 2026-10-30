@@ -2,7 +2,7 @@ import { api, ApiError } from "@/api/client";
 import type { Agent, TeamTemplate } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 
-// Teams of agents (internal/agents): each has a coordinator, which hands its
+// Teams of agents (internal/domain/agents): each has a coordinator, which hands its
 // tasks only to the team's own agents. An agent with no team is in Software.
 
 export const DEFAULT_TEAM = "Software";

@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
+	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 )
 
 // An agent's knowledge is a chain of versions: each agent.learned is a full

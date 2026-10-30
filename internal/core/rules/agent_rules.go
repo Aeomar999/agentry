@@ -6,8 +6,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
+	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 )
 
 // KnownEngines are the engines an agent may name. The engines package has a

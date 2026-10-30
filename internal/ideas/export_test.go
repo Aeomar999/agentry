@@ -3,7 +3,7 @@ package ideas
 import (
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 )
 
 // BeforeMarking runs f between Accept making the task and marking the idea.

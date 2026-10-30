@@ -3,7 +3,7 @@ package tasks
 import (
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 )
 
 // Summary is a task as the list on the page shows it. It is all an

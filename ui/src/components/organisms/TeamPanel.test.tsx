@@ -2529,7 +2529,7 @@ describe("Edit team: what the team does", () => {
     expect(inSheet().getByText("Other coordinators read the Writing template's description instead.")).toBeTruthy();
     expect(inSheet().queryByText(warning)).toBeNull();
 
-    // A new coordinator takes the old one's template link when saved (internal/agents/edit.go).
+    // A new coordinator takes the old one's template link when saved (internal/domain/agents/edit.go).
     fireEvent.click(inSheet().getByRole("button", { name: "Add agent" }));
     typeInto("Name", "lead");
     fireEvent.click(inSheet().getByRole("radio", { name: "Coordinator, lead" }));

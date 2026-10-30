@@ -217,7 +217,7 @@ Feature: Security
     When it reads a file, runs go test and gofmt -l, or edits its own knowledge file in the worktree
     Then every call is allowed
     # not under test, checked by hand: the tests are allowed by the rule "reads and runs the tests" and the knowledge file by "keeps its own notes" (internal/policy/default.toml lines 298 and 211)
-    # README.md, The policy; internal/policy/default_test.go TestTheReadOnlyProfile; the profiles: internal/agents/agents_test.go TestEachDefaultAgentHasAProfile, TestTheVisionariesTeam, TestTheNetworkingTeam
+    # README.md, The policy; internal/policy/default_test.go TestTheReadOnlyProfile; the profiles: internal/domain/agents/agents_test.go TestEachDefaultAgentHasAProfile, TestTheVisionariesTeam, TestTheNetworkingTeam
 
   @SEC-23 @test
   Scenario: Under read-only, every change is denied

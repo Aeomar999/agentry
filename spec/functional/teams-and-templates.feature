@@ -1,6 +1,6 @@
 Feature: Teams and templates
   The teams on the Agents page, teams of the user's own, templates and each agent's page.
-  # Sources: internal/agents, internal/web/agents_api.go,
+  # Sources: internal/domain/agents, internal/web/agents_api.go,
   # internal/web/templates_api.go, ui/src/pages/AgentsPage.tsx,
   # ui/src/pages/AgentPage.tsx, ui/src/pages/AgentEditPage.tsx,
   # ui/src/components/organisms/TeamPanel.tsx,
@@ -62,21 +62,21 @@ Feature: Teams and templates
 
   @TEAM-04 @agent @test
   Scenario: The Writing team has one coordinator and three agents, the fact-checker checking the work
-    # internal/agents/agents_test.go TestTeamsComeFromTemplatesWithTheirOwnCoordinator
+    # internal/domain/agents/agents_test.go TestTeamsComeFromTemplatesWithTheirOwnCoordinator
     Given the Writing team added from its template
     When the roster is read
     Then its coordinator is the editor, and it has exactly 3 other agents, the fact-checker last
     And a task that names no team still goes to the first team's coordinator, tech-lead
     And added again, the team "Writing 2" has the coordinator editor-2: yes
     # not under test, checked by hand: nothing the user has is renamed
-    # internal/agents/teams.go AddTeam, MadeFor
+    # internal/domain/agents/teams.go AddTeam, MadeFor
 
   # ---- Teams of your own -----------------------------------------------------
 
   @TEAM-05 @user @test
   Scenario: Build a team of your own: the New team panel, blank or from a copy of a template
     # ui/src/components/organisms/TeamPanel.test.tsx "Build a team in Add a team opens the panel with one coordinator" and "creates the team as typed, the coordinator on the default prompt"
-    # internal/agents/custom_test.go TestACustomTeamGetsDefaultPrompts
+    # internal/domain/agents/custom_test.go TestACustomTeamGetsDefaultPrompts
     # the panel "New team" at ?team=new: ui/src/pages/AgentsPage.tsx lines 114 to 117; "Team name", "Start from" with Blank and "Copy a template", "Create team": ui/src/components/organisms/TeamPanel.tsx lines 63, 174, 202 and 289 to 297
     Given the Add a team dialog
     When the user clicks "Build a team"
@@ -90,9 +90,9 @@ Feature: Teams and templates
 
   @TEAM-06 @user @test
   Scenario: What a team of your own is refused for, every problem at once
-    # internal/agents/custom_test.go TestACustomTeamIsRefused
+    # internal/domain/agents/custom_test.go TestACustomTeamIsRefused
     # ui/src/components/organisms/TeamPanel.test.tsx "an empty team name is in the summary, which takes focus, and under the field" and "every problem at once: team, agents and each row's fields"
-    # an agent's name: lowercase letters, digits and dashes, starting with a letter, at most 31 long: internal/agents/agent.go lines 18 to 22; the page's limit: ui/src/lib/custom-team.ts line 54
+    # an agent's name: lowercase letters, digits and dashes, starting with a letter, at most 31 long: internal/domain/agents/agent.go lines 18 to 22; the page's limit: ui/src/lib/custom-team.ts line 54
     Given the New team panel
     When the user clicks "Create team" with no name
     Then nothing is sent, the summary reads "Couldn't create the team: 1 thing to fix" and takes the focus, and "Give the team a name." is shown under the field
@@ -146,7 +146,7 @@ Feature: Teams and templates
   @TEAM-09 @user @test
   Scenario: What a team does: its coordinator's description, read by other coordinators or taken from its template
     # ui/src/components/organisms/TeamPanel.test.tsx "it shows the coordinator's description and the line other coordinators read, following the team's name", "a team made from a built-in template is read by the template's description, even with a new coordinator" and "on a team with no template, the coordinator's Description says other coordinators read it"
-    # internal/web/templates_api_test.go TestYourTemplatesDescriptionDescribesItsCoordinator; internal/agents/user_templates_test.go TestAUserTemplatesDescriptionFillsAnEmptyCoordinators
+    # internal/web/templates_api_test.go TestYourTemplatesDescriptionDescribesItsCoordinator; internal/domain/agents/user_templates_test.go TestAUserTemplatesDescriptionFillsAnEmptyCoordinators
     # the field "What this team does" and its hint: ui/src/components/organisms/TeamPanelParts.tsx lines 169 to 176
     # not under test, checked by hand: the hint "One line. Other coordinators read it to choose what to send this team.", and the Agents page heading's "· <description>" only for a team whose template has one: ui/src/pages/AgentsPage.tsx lines 169 and 285
     Given the Edit team panel of a team with no template
@@ -182,7 +182,7 @@ Feature: Teams and templates
 
   @TEAM-11 @user @test
   Scenario: A team from your template comes with its prompts, a second copy is numbered, and Update my template saves it back
-    # internal/agents/user_templates_test.go TestATeamIsAddedFromAUserTemplateWithItsPrompts, TestAUserTemplatesDescriptionFillsAnEmptyCoordinators and TestAUserTemplateAddedAgainGetsNumbers
+    # internal/domain/agents/user_templates_test.go TestATeamIsAddedFromAUserTemplateWithItsPrompts, TestAUserTemplatesDescriptionFillsAnEmptyCoordinators and TestAUserTemplateAddedAgainGetsNumbers
     # internal/web/templates_api_test.go TestATemplateIsUpdatedFromItsTeam; ui/src/components/organisms/TeamPanel.test.tsx "it updates the template with the team as last saved, and says so" and "with unsaved changes it is off and says why beside it, as on a phone"
     Given your template Papers, described "Reads papers.", with lead and reader
     When the user adds a team from it

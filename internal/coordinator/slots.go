@@ -3,7 +3,7 @@ package coordinator
 import (
 	"slices"
 
-	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 

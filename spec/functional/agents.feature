@@ -1,7 +1,7 @@
 Feature: The agents' turns
   The engineer, reviewer, tester, deployer and the other teams' agents, each in its own
   worktree and session: what each one's turn does.
-  # Sources: internal/turns, internal/agents, internal/coordinator/brief.go,
+  # Sources: internal/turns, internal/domain/agents, internal/coordinator/brief.go,
   # internal/coordinator/checks.go, internal/hooks/handler.go and their tests.
 
   # ---- Every agent's turn ----------------------------------------------------
@@ -30,7 +30,7 @@ Feature: The agents' turns
     When the engineer's turn starts
     Then its own prompt, "You are the engineer", and those instructions are shown in its brief
     # not under test, checked by hand: the brief opens with the prompt, and the prompt is the engineer's own, not the coordinator's: internal/coordinator/brief.go workerBrief
-    # each prompt is embedded from defaults/<name>.md, or defaults/<team folder>/<name>.md for the other teams: internal/agents/defaults.go, teams.go Prompted
+    # each prompt is embedded from defaults/<name>.md, or defaults/<team folder>/<name>.md for the other teams: internal/domain/agents/defaults.go, teams.go Prompted
 
   @TURN-04 @agent @test
   Scenario: An agent's turn ends with a report, and every report goes back to the coordinator
@@ -80,7 +80,7 @@ Feature: The agents' turns
     Then its prompt says to write 1 failing test first for a bug and tests for new behaviour, and to run the project's tests, linters and type checks
     And it says to commit in small working steps with conventional messages, and never to push: the deployer does
     And its report says what changed and why, each commit, how it was tested with commands and results, and anything left or risky
-    # the prompt: internal/agents/defaults/engineer.md
+    # the prompt: internal/domain/agents/defaults/engineer.md
     # Steps: start a task that needs a small code change, read the engineer's report and its commits with git log on the task branch;
     # check that no push happened (the task's Actions list no git push from the engineer).
 
@@ -91,7 +91,7 @@ Feature: The agents' turns
     Then its prompt says it changes nothing: no edits, no commits
     And it reads every change with git log and git diff from the base commit, and labels each finding must fix, should fix or nit, with the file and line
     And its report ends with the must-fix list, then exactly 1 verdict line last
-    # the prompt: internal/agents/defaults/reviewer.md
+    # the prompt: internal/domain/agents/defaults/reviewer.md
     # Steps: on a task with a committed change, let the reviewer take a turn; check its report's last line is a verdict and
     # that git status in the worktree shows 0 changes from it.
 
@@ -123,7 +123,7 @@ Feature: The agents' turns
     And to exercise the change as a user would, on the port in PORT, leaving no server running when it finishes
     And to fill the gaps with tests committed on the task branch, with 0 changes to the code under test, and never to push
     And its report ends with the failures, each with steps to reproduce, then exactly 1 verdict line last
-    # the prompt: internal/agents/defaults/tester.md
+    # the prompt: internal/domain/agents/defaults/tester.md
     # Steps: on a task with a reviewed change, let the tester take a turn; check its commits touch only tests, and its report's
     # last line is a verdict.
 
@@ -138,7 +138,7 @@ Feature: The agents' turns
     And to run the tests and build once more after the merge, and push only when they pass
     And the push is exactly git push origin HEAD:dev, as a command of its own, with nothing before it and nothing chained
     And never to force push, rewrite history, or push to any branch but dev
-    # the prompt: internal/agents/defaults/deployer.md
+    # the prompt: internal/domain/agents/defaults/deployer.md
     # Steps: ship a reviewed task; check the deployer's Actions show git fetch origin, git merge origin/dev, the tests, then
     # git push origin HEAD:dev on its own; then move an unreviewed task to the deployer and check its report stops.
 
@@ -172,7 +172,7 @@ Feature: The agents' turns
     And the researcher records every fact with its source in research/notes.md, invents 0 sources, and does not write the piece
     And the writer drafts draft.md with every fact sourced or marked [NEEDS SOURCE: what], and commits it
     And the fact-checker writes fact-check.md with a verdict per claim, does not rewrite the draft, and ends with exactly 1 verdict line
-    # the prompts: internal/agents/defaults/writing/editor.md, researcher.md, writer.md, fact-checker.md
+    # the prompts: internal/domain/agents/defaults/writing/editor.md, researcher.md, writer.md, fact-checker.md
     # Steps: give the Writing team a short article; read brief.md, research/notes.md, draft.md and fact-check.md on the branch,
     # and check the fact-checker's report ends with a verdict.
 
@@ -184,7 +184,7 @@ Feature: The agents' turns
     And the investigator records sources in sources.md and data in data/ as CSV with a README, and never changes raw data after recording it
     And the analyst writes scripts in analysis/ that anyone can rerun, with uncertainty on every estimate, and SVG charts in analysis/charts/
     And the critic reruns the analysis, writes review.md, changes nothing else, and ends with exactly 1 verdict line
-    # the prompts: internal/agents/defaults/research/research-lead.md, investigator.md, analyst.md, critic.md
+    # the prompts: internal/domain/agents/defaults/research/research-lead.md, investigator.md, analyst.md, critic.md
     # Steps: give the Research team a question answerable from a CSV in the repo; read question.md, sources.md, analysis/ and
     # review.md on the branch, rerun the scripts, and check the critic's report ends with a verdict.
 
@@ -196,7 +196,7 @@ Feature: The agents' turns
     And the product-designer writes flows.md and SVG wireframes in designs/ for every state, with text contrast at least 4.5:1 and targets at least 44 by 44 pixels
     And the ux-writer writes the copy deck copy.md, naming every button with a verb and an object
     And the design-critic reviews against the spec and WCAG 2.2 AA, writes critique.md with a severity per finding, changes nothing else, and ends with exactly 1 verdict line
-    # the prompts: internal/agents/defaults/design/product-lead.md, product-designer.md, ux-writer.md, design-critic.md
+    # the prompts: internal/domain/agents/defaults/design/product-lead.md, product-designer.md, ux-writer.md, design-critic.md
     # Steps: give the Design team a small screen to design; read spec.md, flows.md, designs/, copy.md and critique.md on the
     # branch, and check the critic's report ends with a verdict.
 
@@ -208,6 +208,6 @@ Feature: The agents' turns
     And the engineer changes config in the repo and never a live machine's firewall, routes, VPN, DNS records or proxy
     And the verifier and the security reviewer never change live state and cannot write files, so their evidence is their report, ending with exactly 1 verdict line
     And the lead's prompt says the shipped policy allows everything, so these rules are the only guard until the user turns that line off
-    # the prompts: internal/agents/defaults/networking/network-lead.md, network-engineer.md, network-verifier.md, network-security.md
+    # the prompts: internal/domain/agents/defaults/networking/network-lead.md, network-engineer.md, network-verifier.md, network-security.md
     # Steps: give the Networking team a config change in a repo; check the engineer's commits touch only the repo, that its report
     # proposes the live change with commands, check and rollback, and that the lead asks the user before any of it runs.

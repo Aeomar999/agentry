@@ -2,7 +2,7 @@ Feature: Policy
   The policy profiles each agent runs under, the gate that judges every action,
   and the Policy page.
   # Sources: cmd/agentry/hook.go, cmd/agentry/policy.go, internal/policy,
-  # internal/hooks, internal/agents/agent.go, internal/web/policy_api.go,
+  # internal/hooks, internal/domain/agents/agent.go, internal/web/policy_api.go,
   # ui/src/pages/PolicyPage.tsx, ui/src/components/organisms/TryPolicyCall.tsx,
   # ui/src/components/organisms/DefaultProfiles.tsx,
   # ui/src/components/organisms/PolicyHistory.tsx and their tests.
@@ -123,23 +123,23 @@ Feature: Policy
 
   @POLICY-08 @agent @test
   Scenario: Each default agent runs under the profile the code gives it
-    # internal/agents/agents_test.go TestEachDefaultAgentHasAProfile; the 5: TestTheDefaultsAreFiveAgentsWithPrompts in the same file
+    # internal/domain/agents/agents_test.go TestEachDefaultAgentHasAProfile; the 5: TestTheDefaultsAreFiveAgentsWithPrompts in the same file
     Given a new install's Software team
     When the roster is read
     Then it has exactly 5 agents: tech-lead under read-only, engineer under developer, reviewer under read-only, tester under developer, deployer under developer
     # not under test, checked by hand: exactly 2 of them check work, the reviewer and the tester; the deployer ships it, and the engineer builds it
-    # internal/agents/defaults.go; the columns: internal/agents/agent.go Builds, Reviews, Ships
+    # internal/domain/agents/defaults.go; the columns: internal/domain/agents/agent.go Builds, Reviews, Ships
 
   @POLICY-09 @agent @test
   Scenario: The other teams' agents run under the profiles their templates give them
-    # internal/agents/agents_test.go TestTheVisionariesTeam
+    # internal/domain/agents/agents_test.go TestTheVisionariesTeam
     Given the Visionaries and the Networking teams added from their templates
     When the roster is read
     Then all 5 Visionaries are under read-mostly, and only the skeptic's work counts as review
     And network-lead is under read-only, network-engineer under developer, network-verifier and network-security under network-diagnosis, the last 2 counting as review
     And every profile a template names is in the shipped policy
     # not under test, checked by hand: the shipped policy has 6 profiles
-    # internal/agents/agents_test.go TestTheNetworkingTeam; the profiles: internal/agents/teams.go; internal/agents/prompts_policy_test.go TestEveryTemplateProfileIsInTheShippedPolicy
+    # internal/domain/agents/agents_test.go TestTheNetworkingTeam; the profiles: internal/domain/agents/teams.go; internal/domain/agents/prompts_policy_test.go TestEveryTemplateProfileIsInTheShippedPolicy
 
   @POLICY-10 @agent @test
   Scenario: As shipped, every agent allows everything until the user turns that line off
@@ -153,12 +153,12 @@ Feature: Policy
 
   @POLICY-11 @agent @test
   Scenario: The tester runs under developer, so it can commit tests
-    # internal/agents/agents_test.go TestEachDefaultAgentHasAProfile
+    # internal/domain/agents/agents_test.go TestEachDefaultAgentHasAProfile
     Given the Software team as shipped
     When the tester's profile and column are read
     Then its profile is exactly "developer", the same as the engineer's
     # not under test, checked by hand: its work counts as review, so its verdict is 1 of the checks a done decision waits for
-    # Column: Reviews on the tester: internal/agents/defaults.go; checks by column: internal/coordinator/checks.go recordOf
+    # Column: Reviews on the tester: internal/domain/agents/defaults.go; checks by column: internal/coordinator/checks.go recordOf
 
   @POLICY-12 @agent @manual
   Scenario: In Writing, Research and Design the coordinator is read-only and the others are developers
@@ -166,7 +166,7 @@ Feature: Policy
     When each agent's profile and column are read on the Agents page
     Then in each of the 3 teams exactly 1 agent coordinates, under read-only, and the 3 others are under developer
     And exactly 1 agent in each team counts as review: the fact-checker, the critic and the design-critic
-    # the templates: internal/agents/teams.go, writing, research and design
+    # the templates: internal/domain/agents/teams.go, writing, research and design
     # Steps: on the Teams page add Writing, Research and Design from their templates; open each team's agents and
     # read the profile and the column of each of its 4 agents; compare with teams.go.
 
@@ -258,8 +258,8 @@ Feature: Policy
     When it runs glab ci list --sha <hash> -F json, or gh run list --commit <hash> --json status,conclusion,url
     Then each is allowed
     And gh run view 123 -w, glab ci get -p 123 --with-variables, gh run rerun 123 and gh run watch 123 are asked
-    # not under test, checked by hand: the prompt says to report the pipeline once, with 0 waiting or polling: internal/agents/defaults/deployer.md line 9
-    # the rules: internal/policy/default.toml lines 164 to 168 and 192 to 193; the prompt: internal/agents/defaults/deployer.md
+    # not under test, checked by hand: the prompt says to report the pipeline once, with 0 waiting or polling: internal/domain/agents/defaults/deployer.md line 9
+    # the rules: internal/policy/default.toml lines 164 to 168 and 192 to 193; the prompt: internal/domain/agents/defaults/deployer.md
 
   # ---- The judging profiles --------------------------------------------------
 
@@ -277,17 +277,17 @@ Feature: Policy
 
   @POLICY-23 @agent @test
   Scenario: The Visionaries read the board and change no code
-    # internal/agents/prompts_policy_test.go TestTheVisionariesReadTheBoardAndChangeNothing
+    # internal/domain/agents/prompts_policy_test.go TestTheVisionariesReadTheBoardAndChangeNothing
     Given each of the 5 Visionaries under read-mostly
     When it calls the board tools list_tasks or show_task, or runs git log --oneline -30
     Then each is allowed
     And create_task is asked, and Edit on main.go, Write on ideas.md and git commit -am 'ideas' are denied
     # not under test, checked by hand: every prompt of the team says it changes no code and commits nothing, its report is its work: the first line of each prompt below
-    # the prompts: internal/agents/defaults/visionaries/visionary-lead.md, product-strategist.md, user-advocate.md, technologist.md, skeptic.md
+    # the prompts: internal/domain/agents/defaults/visionaries/visionary-lead.md, product-strategist.md, user-advocate.md, technologist.md, skeptic.md
 
   @POLICY-24 @agent @test
   Scenario: The Networking checkers diagnose without asking, and any live change asks whoever runs it
-    # internal/agents/prompts_policy_test.go TestTheNetworkingTeamDiagnosesAndAsksBeforeChanging
+    # internal/domain/agents/prompts_policy_test.go TestTheNetworkingTeamDiagnosesAndAsksBeforeChanging
     Given network-verifier and network-security under network-diagnosis, and network-engineer under developer
     When a checker runs ping -c 3 -W 2 <host>, dig +short <name>, ss -tlnp, ip route show, docker network inspect <network>, ufw status, nft list ruleset, iptables -S or wg show
     Then each is allowed, with 0 asked
@@ -429,7 +429,7 @@ Feature: Policy
     And the push runs only once the user approves, and the agent is told "you approved"
     And the deployer's prompt names no push that the policy would allow without asking
     # the rule: internal/policy/default.toml line 134; the wait: internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser;
-    # the prompt check: internal/agents/prompts_policy_test.go TestTheDefaultPromptsOnlyAskForCommandsThePolicyPermits
+    # the prompt check: internal/domain/agents/prompts_policy_test.go TestTheDefaultPromptsOnlyAskForCommandsThePolicyPermits
 
   @POLICY-38 @agent @test
   Scenario: Agentry's own files are off limits for every profile, and no policy file can change that
@@ -467,8 +467,8 @@ Feature: Policy
     Given an agent under developer
     When it runs git push -f origin dev, git push origin dev --force, or git -c k=v push -f origin dev
     Then each is denied
-    # not under test, checked by hand: the rule "never force push", which also matches a + before the ref, and the deployer's prompt saying never to force push or rewrite history (internal/agents/defaults/deployer.md line 10)
-    # the rule: internal/policy/default.toml line 115; the prompt: internal/agents/defaults/deployer.md
+    # not under test, checked by hand: the rule "never force push", which also matches a + before the ref, and the deployer's prompt saying never to force push or rewrite history (internal/domain/agents/defaults/deployer.md line 10)
+    # the rule: internal/policy/default.toml line 115; the prompt: internal/domain/agents/defaults/deployer.md
 
   @POLICY-42 @agent @test
   Scenario: The Edit and Write tools work only inside the workspace

@@ -25,8 +25,8 @@ Feature: Supervisor agents
 
   @PROP-54 @user @test @to-teams-and-templates
   Scenario: A template keeps which agents may assign
-    # templates save each agent's settings: @TEAM-10 and @TEAM-12 (internal/agents/user_templates.go)
-    # test: internal/agents/user_templates_test.go (to write)
+    # templates save each agent's settings: @TEAM-10 and @TEAM-12 (internal/domain/agents/user_templates.go)
+    # test: internal/domain/agents/user_templates_test.go (to write)
     Given a team whose reviewer may assign
     When the user saves the team as a template, exports it, imports it and adds a team from it
     Then the new team's reviewer may assign, and every other agent of it may not: yes
@@ -36,7 +36,7 @@ Feature: Supervisor agents
   @PROP-55 @user @test @to-teams-and-templates
   Scenario: The permission is refused on a coordinator
     # a coordinator assigns already: the rules let it (internal/core/rules/task_rules.go byTheCoordinator)
-    # test: internal/agents/custom_test.go and internal/web/api_test.go (to write)
+    # test: internal/domain/agents/custom_test.go and internal/web/api_test.go (to write)
     Given the Kitchen team
     When an agent is saved with coordinates true and assigns true
     Then it is refused with "chef coordinates the Kitchen team, so it assigns already", and nothing is saved
@@ -134,8 +134,8 @@ Feature: Supervisor agents
 
   @PROP-64 @test @to-compatibility
   Scenario: Agents, templates and logs from before read as agents that may not assign
-    # agents.Agent and the templates gain an optional field (internal/agents/agent.go); an old log replays the same (internal/core/current/real_log_test.go)
-    # test: internal/agents/agents_test.go and internal/agents/user_templates_test.go (to write)
+    # agents.Agent and the templates gain an optional field (internal/domain/agents/agent.go); an old log replays the same (internal/core/current/real_log_test.go)
+    # test: internal/domain/agents/agents_test.go and internal/domain/agents/user_templates_test.go (to write)
     Given a roster, an exported template and a log saved before supervisors were built
     When Agentry reads them
     Then every agent may not assign, and every task reads the same as before: yes

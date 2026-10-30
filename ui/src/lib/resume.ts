@@ -1,7 +1,7 @@
 import type { Agent } from "@/api/types";
 
 // Whether an agent's turns go on with its session from its last turn on the
-// task, or each start fresh (internal/agents Agent.Resume). Unset, it goes
+// task, or each start fresh (internal/domain/agents Agent.Resume). Unset, it goes
 // by the agent's column, as the server decides: a reviewer starts fresh and
 // is briefed with a compact handoff of the change; every other agent goes
 // on with its session, which costs fewer tokens.

@@ -42,7 +42,7 @@ Feature: Shipping through GitHub, and email
 
   @PROP-32 @agent @manual @to-agents
   Scenario: For a repo git is on for, the deployer pushes the task branch, not dev
-    # docs/design/t-019-shipping.md section 4, decision 1 in section 12; changes @TURN-13 for those repos only (internal/agents/defaults/deployer.md)
+    # docs/design/t-019-shipping.md section 4, decision 1 in section 12; changes @TURN-13 for those repos only (internal/domain/agents/defaults/deployer.md)
     # the brief's section comes from the feature's Coordinator.Brief (internal/extensions/extensions.go Coordinator)
     Given git on for the repo of task-121, and a reviewed and tested task handed to the deployer
     When the deployer's turn runs

@@ -29,7 +29,7 @@ Feature: The coordinator and its handoffs
     Given the coordinator's first turn on a task
     When its brief is written
     Then the brief shows its own prompt, the task, the agents it can hand work to, and every step of the trail so far
-    # not under test, checked by hand: its prompt says it reads the task, the trail and the code and changes no code: internal/agents/defaults/tech-lead.md lines 1 and 5, internal/agents/defaults/custom/coordinator.md lines 1 and 5
+    # not under test, checked by hand: its prompt says it reads the task, the trail and the code and changes no code: internal/domain/agents/defaults/tech-lead.md lines 1 and 5, internal/domain/agents/defaults/custom/coordinator.md lines 1 and 5
 
   @HANDOFF-04 @coordinator @test
   Scenario: An unfinished plan carries over to the agent's next turn
@@ -380,7 +380,7 @@ Feature: The coordinator and its handoffs
     And done is allowed once at least 1 checker has approved since the last change and no checker's latest check is older than that change
     # not under test, checked by hand: done is also refused while a checker's latest check asks for changes or gives no verdict: internal/coordinator/checks.go unchecked, line 140
     And a checker that never looked is not required: the test's team has a reviewer and a tester, and the reviewer's approval alone allows done
-    # unchecked: internal/coordinator/checks.go; the team's checkers, reviewer and tester: internal/agents/defaults.go, Column Reviews
+    # unchecked: internal/coordinator/checks.go; the team's checkers, reviewer and tester: internal/domain/agents/defaults.go, Column Reviews
 
   @HANDOFF-38 @coordinator @test
   Scenario: A change after a review needs another review
@@ -411,7 +411,7 @@ Feature: The coordinator and its handoffs
     # not under test, checked by hand: the rule that denies it, "this agent changes nothing" or the rule for its command: internal/policy/default.toml line 219
     And reading a file, git diff, and go test ./... are allowed
     And writing its own notes in .agentry/knowledge.md is allowed
-    # tech-lead and every template's coordinator: Profile "read-only", internal/agents/defaults.go and internal/agents/teams.go (the Visionaries' lead is read-mostly)
+    # tech-lead and every template's coordinator: Profile "read-only", internal/domain/agents/defaults.go and internal/domain/agents/teams.go (the Visionaries' lead is read-mostly)
     # the profile: internal/policy/default.toml, [profiles.read-only], line 198
 
   @HANDOFF-41 @coordinator @test

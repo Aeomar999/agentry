@@ -208,7 +208,7 @@ Feature: Ideas
   @IDEA-14 @user @test
   Scenario: Which ideas count as agreed: Everyone backed it, or Nobody doubted it
     # internal/ideas/agreed_test.go TestAnIdeaIsAgreedWhenEveryViewpointBacksIt and TestAnIdeaNobodyDoubtedIsAgreedWithTwoBackers; internal/ideas/routes_test.go TestAnOpenIdeaSaysWhyItWasntAutoAccepted
-    # the 4 viewpoints of the Visionaries template, product-strategist, user-advocate, technologist and skeptic, under visionary-lead: internal/agents/teams.go lines 71 to 79
+    # the 4 viewpoints of the Visionaries template, product-strategist, user-advocate, technologist and skeptic, under visionary-lead: internal/domain/agents/teams.go lines 71 to 79
     # the page's line: ui/src/extensions/ideas/IdeaCard.tsx line 39
     Given the Visionaries team with its 4 viewpoints
     When an idea is judged under "Everyone backed it"
@@ -263,4 +263,4 @@ Feature: Ideas
     And an idea with an empty title, a size "XL", a kind "story", from a task that does not exist, or from an agent not working on the task is refused
     And only the user accepts or dismisses an idea, never an agent
     # IdeasFormat and suggest: internal/ideas/coordinator.go; the user decides: TestOnlyYouAcceptOrDismiss in internal/ideas/ideas_test.go;
-    # the skeptic's verdict closes the session: internal/agents/defaults/visionaries/skeptic.md
+    # the skeptic's verdict closes the session: internal/domain/agents/defaults/visionaries/skeptic.md
