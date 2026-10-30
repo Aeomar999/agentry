@@ -13,11 +13,11 @@ vi.mock("@/live/use-resource", () => ({
 
 const NO_SHIPPING: FeaturesReply = { features: [], board: { columns: ["backlog", "todo", "in-progress", "review", "done"] } };
 
-function page(address: string, tasks: TaskSummary[], features?: FeaturesReply) {
+function page(address: string, tasks: TaskSummary[], extensions?: FeaturesReply) {
   replies.clear();
   replies.set("/api/tasks", tasks);
   replies.set("/api/agents", []);
-  if (features) replies.set("/api/features", features);
+  if (extensions) replies.set("/api/features", extensions);
   render(
     <MemoryRouter initialEntries={[address]}>
       <TasksPage />

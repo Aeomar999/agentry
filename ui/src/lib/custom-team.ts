@@ -19,7 +19,7 @@ export type DraftAgent = TemplateAgent & { key: string };
 export interface TeamDraft {
   team: string;
   agents: DraftAgent[];
-  copiedFrom?: string; // a copy's built-in template, whose features the team keeps
+  copiedFrom?: string; // a copy's built-in template, whose extensions the team keeps
 }
 
 // The fields of a row a problem can be under.

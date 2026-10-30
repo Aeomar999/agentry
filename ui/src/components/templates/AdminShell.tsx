@@ -20,7 +20,7 @@ import { useKeys } from "@/lib/shortcuts";
 import { CrumbContext } from "@/lib/breadcrumb";
 import { readStored, writeStored } from "@/lib/stored";
 import { shownId } from "@/lib/shown-id";
-import { useFeatures, visibleFeatures } from "@/features";
+import { useExtensions, visibleExtensions } from "@/extensions";
 
 // The one template: top bar, sidebar, status bar, the terminal dock, the
 // palette and shortcuts around every page. It stays mounted while pages
@@ -47,7 +47,7 @@ export function AdminShell() {
   const questions = useResource<Question[]>("/api/questions").data ?? [];
   const agents = useResource<Agent[]>("/api/agents").data ?? [];
   const config = useResource<ServerConfig>("/api/config").data;
-  const features = useFeatures();
+  const extensions = useExtensions();
 
   const [crumbs, setCrumbs] = useState<Crumb[]>([]);
   const [theme, setTheme] = useState<Theme>(savedTheme);
@@ -131,7 +131,7 @@ export function AdminShell() {
       { id: "new-task", group: "Commands", label: "New task", icon: <Plus />, run: () => newTask() },
       { id: "new-epic", group: "Commands", label: "New epic", icon: <Plus />, run: () => newTask("epic") },
       { id: "go-plan", group: "Go to", label: "Plan", icon: <MapIcon />, run: () => navigate("/plan") },
-      ...visibleFeatures(features).flatMap((feature) => feature.commands?.(navigate) ?? []),
+      ...visibleExtensions(extensions).flatMap((extension) => extension.commands?.(navigate) ?? []),
       { id: "go-integrations", group: "Go to", label: "Integrations", icon: <Plug />, run: () => navigate("/integrations") },
       { id: "go-settings", group: "Go to", label: "Settings", icon: <Settings />, run: () => navigate("/settings") },
       { id: "desk", group: "Commands", label: "Ask Claude to start a task", icon: <Sparkles />, run: () => openDock(DESK) },
@@ -162,7 +162,7 @@ export function AdminShell() {
         run: () => navigate(`/agents/${encodeURIComponent(agent.name)}`),
       })),
     ],
-    [tasks, agents, features, theme, navigate, newTask, toggleTheme, openDock, openTaskTerminal],
+    [tasks, agents, extensions, theme, navigate, newTask, toggleTheme, openDock, openTaskTerminal],
   );
 
   const needsYou = tasks.filter((task) => task.status === "needs you").length;
@@ -188,7 +188,7 @@ export function AdminShell() {
                   collapsed={collapsed}
                   drawerOpen={drawerOpen}
                   needsYou={needsYou}
-                  features={features}
+                  extensions={extensions}
                   onCloseDrawer={() => setDrawerOpen(false)}
                 />
                 <div ref={column} className="flex min-w-0 flex-1 flex-col">

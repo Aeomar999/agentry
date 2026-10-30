@@ -582,7 +582,7 @@ describe("addCustomTeam", () => {
     expect(api).toHaveBeenCalledWith("POST", "/api/teams", { ...sent, addMissingProfiles: true, hash: "h1" });
   });
 
-  // A copy sends the built-in template its team keeps the features of: the
+  // A copy sends the built-in template its team keeps the extensions of: the
   // one copied, or the one a template of yours is based on.
   test("sends the built-in template a copy came from", async () => {
     const posted = async (draft: TeamDraft) => {

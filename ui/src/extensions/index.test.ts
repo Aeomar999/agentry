@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { BoardColumn, TaskSummary } from "@/api/types";
-import { boardColumns, featuresOf, hiddenFeatures, unknownLine, visibleFeatures, withTheirCards } from ".";
+import { boardColumns, extensionsOf, hiddenExtensions, unknownLine, visibleExtensions, withTheirCards } from ".";
 
 const ALL = ["backlog", "todo", "in-progress", "review", "shipping", "done"];
 const NO_SHIPPING = ["backlog", "todo", "in-progress", "review", "done"];
@@ -42,17 +42,17 @@ describe("withTheirCards", () => {
   });
 });
 
-describe("hiddenFeatures", () => {
+describe("hiddenExtensions", () => {
   test("is the features the manifest lists but doesn't show", () => {
-    const off = featuresOf({ features: [{ name: "ideas", enabled: false, visible: false }], unknown: null });
-    expect(hiddenFeatures(off).map((feature) => feature.name)).toEqual(["ideas"]);
-    expect(visibleFeatures(off)).toEqual([]);
+    const off = extensionsOf({ features: [{ name: "ideas", enabled: false, visible: false }], unknown: null });
+    expect(hiddenExtensions(off).map((extension) => extension.name)).toEqual(["ideas"]);
+    expect(visibleExtensions(off)).toEqual([]);
   });
 
   test("leaves out a visible feature, and one the manifest doesn't list", () => {
-    expect(hiddenFeatures(featuresOf({ features: [{ name: "ideas", enabled: false, visible: true }], unknown: [] }))).toEqual([]);
-    expect(hiddenFeatures(featuresOf({ features: [], unknown: [] }))).toEqual([]);
-    expect(hiddenFeatures(featuresOf(undefined))).toEqual([]);
+    expect(hiddenExtensions(extensionsOf({ features: [{ name: "ideas", enabled: false, visible: true }], unknown: [] }))).toEqual([]);
+    expect(hiddenExtensions(extensionsOf({ features: [], unknown: [] }))).toEqual([]);
+    expect(hiddenExtensions(extensionsOf(undefined))).toEqual([]);
   });
 });
 

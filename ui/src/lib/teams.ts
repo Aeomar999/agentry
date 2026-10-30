@@ -7,7 +7,7 @@ import { useResource } from "@/live/use-resource";
 
 export const DEFAULT_TEAM = "Software";
 
-// The feature of the team whose sessions suggest features to the Ideas page.
+// The extension of the team whose sessions suggest features to the Ideas page.
 export const IDEAS = "ideas";
 
 export const teamOf = (agent: Agent) => agent.team || DEFAULT_TEAM;
@@ -20,17 +20,17 @@ export function roleOf(agent: Agent): string {
   return role === agent.name ? "" : role;
 }
 
-// templatesWith is the ids of the templates that turn the feature on: the
+// templatesWith is the ids of the templates that turn the extension on: the
 // built-in one that lists it, and yours based on it, whose teams keep it.
-export function templatesWith(templates: TeamTemplate[], feature: string): string[] {
-  return templates.filter((t) => t.features.includes(feature)).map((t) => t.id);
+export function templatesWith(templates: TeamTemplate[], extension: string): string[] {
+  return templates.filter((t) => t.features.includes(extension)).map((t) => t.id);
 }
 
 // teamMadeFrom is the team made from one of the templates, if you have one:
 // the team of a coordinator one of them made, as the server decides, so a
 // second copy ("Visionaries 2") counts and a team you made and named as the
 // template doesn't. A lead's base counts too, so a team from a template you
-// removed, which the list leaves out, keeps its feature. The first such team
+// removed, which the list leaves out, keeps its extension. The first such team
 // when you have several.
 export function teamMadeFrom(agents: Agent[], templates: string[]): string | undefined {
   const madeFrom = (id: string | undefined) => id !== undefined && id !== "" && templates.includes(id);
@@ -42,27 +42,27 @@ export interface TeamWith {
   ready: boolean; // the templates and the agents are read, so team says what you have
   error: string; // why the templates or the agents couldn't be read, the last time they were
   agentsError: string; // why the agents couldn't be read, the last time they were
-  template?: TeamTemplate; // the built-in template that turns the feature on, which adding the team adds
+  template?: TeamTemplate; // the built-in template that turns the extension on, which adding the team adds
   templates: string[]; // the ids of every template that turns it on, yours included
   team?: string; // the team you have made from one of them, by its name now
   reload: () => Promise<void>; // reads the agents again, returning once they are shown
 }
 
-// useTeamWith finds the team that turns a feature on: the built-in template
+// useTeamWith finds the team that turns an extension on: the built-in template
 // that lists it, and the team you made from it or from a template of yours
 // based on it, whatever it is called.
-export function useTeamWith(feature: string): TeamWith {
+export function useTeamWith(extension: string): TeamWith {
   const templates = useResource<TeamTemplate[]>("/api/teams/templates");
   const agents = useResource<Agent[]>("/api/agents");
-  const template = templates.data?.find((t) => !t.userMade && t.features.includes(feature));
-  const withFeature = templatesWith(templates.data ?? [], feature);
+  const template = templates.data?.find((t) => !t.userMade && t.features.includes(extension));
+  const withExtension = templatesWith(templates.data ?? [], extension);
   return {
     ready: templates.data !== undefined && agents.data !== undefined,
     error: templates.error || agents.error,
     agentsError: agents.error,
     template,
-    templates: withFeature,
-    team: teamMadeFrom(agents.data ?? [], withFeature),
+    templates: withExtension,
+    team: teamMadeFrom(agents.data ?? [], withExtension),
     reload: agents.reload,
   };
 }

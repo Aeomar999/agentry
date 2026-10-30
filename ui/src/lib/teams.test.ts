@@ -94,9 +94,9 @@ describe("teamOf", () => {
   });
 });
 
-// template is a listed template with only what the feature lookup reads set.
-function template(id: string, features: string[], userMade = false, basedOn?: string): TeamTemplate {
-  return { id, team: id, description: "", features, agents: [], userMade, basedOn };
+// template is a listed template with only what the extension lookup reads set.
+function template(id: string, extensions: string[], userMade = false, basedOn?: string): TeamTemplate {
+  return { id, team: id, description: "", features: extensions, agents: [], userMade, basedOn };
 }
 
 describe("finding the team with a feature", () => {

@@ -35,7 +35,7 @@ export function builtInTemplateOf(roster: Agent[], templates: TeamTemplate[], ag
 }
 
 // A template saved from a team, and why that team isn't linked to it, if
-// it isn't: its teams keep a template's features through the link.
+// it isn't: its teams keep a template's extensions through the link.
 export type SavedTemplate = TeamTemplate & { notLinked?: string };
 
 // saveAsTemplate saves the team, as it was last saved, as your template,

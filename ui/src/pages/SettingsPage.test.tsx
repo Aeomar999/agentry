@@ -3,19 +3,19 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { fireEvent, render as renderIn, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { FeaturesReply } from "@/api/types";
-import type { Features } from "@/features";
-import type { AskVisionaries } from "@/features/ideas/visionaries";
+import type { Extensions } from "@/extensions";
+import type { AskVisionaries } from "@/extensions/ideas/visionaries";
 import { SettingsPage } from "./SettingsPage";
 
 // The page reads only the manifest; the test answers it, and asking the
 // visionaries is a fresh install's: a template, no team yet. Beside Ideas,
-// the page knows Quiet, a feature with no button that turns it on.
+// the page knows Quiet, an extension with no button that turns it on.
 let manifest: FeaturesReply | undefined;
 const { QUIET } = vi.hoisted(() => ({ QUIET: { name: "quiet", label: "Quiet" } }));
-vi.mock("@/features", async (importOriginal) => {
-  const real = await importOriginal<typeof import("@/features")>();
-  const list = [...real.FEATURES, QUIET];
-  return { ...real, FEATURES: list, hiddenFeatures: (features: Features) => real.hiddenFeatures(features, list) };
+vi.mock("@/extensions", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/extensions")>();
+  const list = [...real.EXTENSIONS, QUIET];
+  return { ...real, EXTENSIONS: list, hiddenExtensions: (extensions: Extensions) => real.hiddenExtensions(extensions, list) };
 });
 vi.mock("@/live/use-resource", () => ({ useResource: () => ({ data: manifest, error: "", position: 1, reload: async () => {} }) }));
 
@@ -32,7 +32,7 @@ const FRESH: AskVisionaries = {
   askAddingProfiles: () => {},
 };
 let useAskVisionaries = (): AskVisionaries => FRESH;
-vi.mock("@/features/ideas/visionaries", () => ({ useAskVisionaries: () => useAskVisionaries() }));
+vi.mock("@/extensions/ideas/visionaries", () => ({ useAskVisionaries: () => useAskVisionaries() }));
 
 const IDEAS_OFF = { name: "ideas", enabled: false, visible: false, why: "add a team from the Visionaries template to get ideas" };
 const IDEAS_ON = { name: "ideas", enabled: true, visible: true, why: "the Visionaries team suggests ideas", badge: 3 };

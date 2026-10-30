@@ -377,7 +377,7 @@ export interface TeamTemplate {
   userMade: boolean; // one you saved, not one Agentry ships
   savedAt?: string; // yours: when you last saved it, RFC 3339
   from?: string; // yours: the team you saved it from; one saved by an older Agentry has none
-  basedOn?: string; // yours: the built-in template it is based on, whose features it lists and its teams keep
+  basedOn?: string; // yours: the built-in template it is based on, whose extensions it lists and its teams keep
 }
 
 // An agent of a template, with what a team made from it gets, prompt included.
@@ -446,17 +446,17 @@ export interface Settings {
 // nobodyDoubted: none doubted it and at least two viewpoints backed it.
 export type AutoAcceptRule = "everyoneBacked" | "nobodyDoubted";
 
-// Whether the page shows one feature, and why (internal/features Line), in
+// Whether the page shows one extension, and why (internal/extensions Line), in
 // GET /api/features.
 export interface FeatureLine {
-  name: string; // the feature's name in the page's registry (features/index.ts)
+  name: string; // the extension's name in the page's registry (extensions/index.ts)
   enabled: boolean; // its trigger is present, so it can make new data
   visible: boolean; // the page shows it: enabled, or it has data to look at
   why?: string; // one line saying why it is on, kept or off
   badge?: number; // a count for the sidebar, such as open ideas
 }
 
-// GET /api/features: the features, and the board's columns, which a server
+// GET /api/features: the extensions, and the board's columns, which a server
 // older than them doesn't send.
 export interface FeaturesReply {
   features: FeatureLine[];
@@ -465,7 +465,7 @@ export interface FeaturesReply {
 }
 
 // Events the server skipped or didn't understand (internal/current Unknown),
-// in GET /api/features: those of one stream prefix from a feature this
+// in GET /api/features: those of one stream prefix from an extension this
 // build doesn't have, or those of one type it doesn't know.
 export interface UnknownEvents {
   prefix?: string; // the foreign streams' prefix, "idea-"; or

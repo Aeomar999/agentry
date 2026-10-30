@@ -383,7 +383,7 @@ describe("New team: Copy a template", () => {
     expect(within(panel()).queryByRole("button", { name: /^writer/ })).toBeNull();
     expect(rowButton("visionary")).toBeTruthy();
   });
-  // The team keeps the features of the built-in template it was copied
+  // The team keeps the extensions of the built-in template it was copied
   // from, and follows Start from: yours sends its base, Blank sends none.
   test("Create team sends the built-in template the agents were copied from", async () => {
     vi.mocked(api).mockResolvedValue({});

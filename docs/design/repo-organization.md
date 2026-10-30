@@ -608,7 +608,8 @@ else it rewrites:
   "imports only events and features"; and `go test ./internal/features` on
   line 77). Line 77 has the reviewer compare section 1 with the packages,
   so a miss there is caught by no test. In `spec/glossary.md`, **feature**
-  (line 56) stays, as the user's word; the step adds an **extension** entry,
+  (line 56) stays, as the user's word, though its `internal/features`
+  citation is rewritten like any other path; the step adds an **extension** entry,
   or a line in the feature entry, naming extension as the code's name for
   it, `internal/extensions` and `ui/src/extensions`. Every `internal/features`
   and `ui/src/features` path in `spec/` (such as `spec/constraints.md` line
@@ -636,8 +637,9 @@ else it rewrites:
   `features` stays.
 
 It leaves `features.toml`, `/api/features`, its JSON and the words users
-read in the UI as they are (section 4), so the step changes no behaviour, and section 6's "Package
-names don't change in a move" stays true for every move after it.
+read in the UI as they are (section 4), so the step changes no behaviour,
+and section 6's "Package names don't change in a move" stays true for every
+move after it.
 
 Old design docs under `docs/design/` keep the paths they were written with;
 they record what was true then.

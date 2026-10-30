@@ -53,7 +53,8 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **erase**: deleting every row of a task, from its archive too, and the copies of its words other tasks keep; the log keeps who erased it, when and why, never what it held, and nothing undoes it.
 - **event**: one thing that happened, written to the log by the piece it happened in and read by the others; every step of every task is one, and the Events tab of a task's page lists its own.
 - **Events tab**: the task page's list of every event in the task's stream.
-- **feature**: a part of Agentry that can be on or off, such as Ideas, with its own events, routes, settings and secrets; `GET /api/features` says which are enabled and visible, and the Settings page lists those that are off (internal/features).
+- **extension**: the code's name for a feature: the framework in internal/extensions and ui/src/extensions, and each feature built on it, such as ideas. Users read feature; only the code says extension.
+- **feature**: a part of Agentry that can be on or off, such as Ideas, with its own events, routes, settings and secrets; `GET /api/features` says which are enabled and visible, and the Settings page lists those that are off (internal/extensions).
 - **features.toml**: the settings file beside policy.toml: one table per feature, of strings, with its secrets in a table under it; watched, and never in the log.
 - **files**: a task's shared files, on the Files tab, where the user drops files in, downloads them and takes them away.
 - **fingerprint**: the CA's, printed after the https links and by `agentry ca`, which the user checks on the trust page and the install commands check before sending a code.

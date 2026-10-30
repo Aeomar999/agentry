@@ -4,49 +4,49 @@ import type { PaletteItem } from "@/components/organisms/CommandPalette";
 import type { BoardColumn, FeatureLine, FeaturesReply, TaskSummary, UnknownEvents } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { COLUMN_TITLES } from "@/lib/columns";
-import type { FeatureStreams } from "./streams";
+import type { ExtensionStreams } from "./streams";
 import { ideas } from "./ideas";
 
-// A feature's UI is one folder here whose index exports a FeatureUI. The
-// router, the sidebar and Ctrl K go through FEATURES, and GET /api/features
-// says which of them show: the page decides how a feature looks, the server
-// whether it shows. Settings lists the features that don't show, each with
+// An extension's UI is one folder here whose index exports an ExtensionUI. The
+// router, the sidebar and Ctrl K go through EXTENSIONS, and GET /api/features
+// says which of them show: the page decides how an extension looks, the server
+// whether it shows. Settings lists the extensions that don't show, each with
 // its turnOn.
 
-export interface FeatureUI {
-  name: string; // the server's feature name in GET /api/features
+export interface ExtensionUI {
+  name: string; // the server's extension name in GET /api/features
   label: string; // what the page calls it
-  routes?: RouteObject[]; // always mounted, so a bookmark works when the feature is off
+  routes?: RouteObject[]; // always mounted, so a bookmark works when the extension is off
   nav?: { section: "work" | "setup"; to: string; label: string; icon: ReactNode }[];
   commands?: (navigate: NavigateFunction) => PaletteItem[]; // Ctrl K, under "Go to" or "Commands"
-  turnOn?: ComponentType; // the feature's own button that turns it on, on Settings while it is off
-  streams?: FeatureStreams; // the streams it owns, linked from a task they made
+  turnOn?: ComponentType; // the extension's own button that turns it on, on Settings while it is off
+  streams?: ExtensionStreams; // the streams it owns, linked from a task they made
 }
 
-export const FEATURES: FeatureUI[] = [ideas];
+export const EXTENSIONS: ExtensionUI[] = [ideas];
 
-export { featureLink } from "./streams";
+export { extensionLink } from "./streams";
 
-export interface Features {
+export interface Extensions {
   loaded: boolean; // the manifest is read
   error: string; // why it couldn't be read
-  line: (name: string) => FeatureLine | undefined; // undefined for a feature the server doesn't list
+  line: (name: string) => FeatureLine | undefined; // undefined for an extension the server doesn't list
   visible: (name: string) => boolean;
   badge: (name: string) => number; // 0 for none
   columns: BoardColumn[]; // the board's, in order
   unknown: UnknownEvents[]; // events this build skipped or didn't understand
 }
 
-// useFeatures reads GET /api/features, again whenever the log moves, and
-// says which features show.
-export function useFeatures(): Features {
+// useExtensions reads GET /api/features, again whenever the log moves, and
+// says which extensions show.
+export function useExtensions(): Extensions {
   const { data, error } = useResource<FeaturesReply>("/api/features");
-  return useMemo(() => featuresOf(data, error), [data, error]);
+  return useMemo(() => extensionsOf(data, error), [data, error]);
 }
 
-// featuresOf reads a manifest. A name only one side knows is ignored, and
-// while the manifest is loading, or has never loaded, no feature shows.
-export function featuresOf(manifest: FeaturesReply | undefined, error = ""): Features {
+// extensionsOf reads a manifest. A name only one side knows is ignored, and
+// while the manifest is loading, or has never loaded, no extension shows.
+export function extensionsOf(manifest: FeaturesReply | undefined, error = ""): Extensions {
   const lines = new Map((manifest?.features ?? []).map((line) => [line.name, line]));
   return {
     loaded: manifest !== undefined,
@@ -62,7 +62,7 @@ export function featuresOf(manifest: FeaturesReply | undefined, error = ""): Fea
 const EVERY_COLUMN = Object.keys(COLUMN_TITLES) as BoardColumn[];
 
 // boardColumns are the columns the manifest lists, those this page knows.
-// Before it loads, Shipping waits like any feature; a server too old to
+// Before it loads, Shipping waits like any extension; a server too old to
 // list them gets every column, as it had before.
 export function boardColumns(reply: FeaturesReply | undefined): BoardColumn[] {
   if (!reply) return EVERY_COLUMN.filter((column) => column !== "shipping");
@@ -77,15 +77,15 @@ export function withTheirCards(columns: BoardColumn[], tasks: TaskSummary[]): Bo
   return EVERY_COLUMN.filter((column) => columns.includes(column) || tasks.some((task) => task.column === column));
 }
 
-// visibleFeatures is the FEATURES the manifest says show, in FEATURES' order.
-export function visibleFeatures(features: Features): FeatureUI[] {
-  return FEATURES.filter((feature) => features.visible(feature.name));
+// visibleExtensions is the EXTENSIONS the manifest says show, in EXTENSIONS' order.
+export function visibleExtensions(extensions: Extensions): ExtensionUI[] {
+  return EXTENSIONS.filter((extension) => extensions.visible(extension.name));
 }
 
-// hiddenFeatures is the FEATURES the manifest lists but doesn't show: those
+// hiddenExtensions is the EXTENSIONS the manifest lists but doesn't show: those
 // installed and off, in the list's order.
-export function hiddenFeatures(features: Features, list = FEATURES): FeatureUI[] {
-  return list.filter((feature) => features.line(feature.name)?.visible === false);
+export function hiddenExtensions(extensions: Extensions, list = EXTENSIONS): ExtensionUI[] {
+  return list.filter((extension) => extensions.line(extension.name)?.visible === false);
 }
 
 // unknownLine words one entry of the unknown tally.

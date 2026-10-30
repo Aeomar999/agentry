@@ -1,13 +1,13 @@
 import { Bot, ListTodo, Map as MapIcon, Plug, Server, Settings, ShieldCheck } from "lucide-react";
 import { SidebarItem } from "@/components/molecules/SidebarItem";
 import { cn } from "@/lib/cn";
-import { Features, visibleFeatures } from "@/features";
+import { Extensions, visibleExtensions } from "@/extensions";
 
 interface SidebarProps {
   collapsed: boolean; // a 56px icon rail, on wide screens
   drawerOpen: boolean; // on narrow screens the sidebar is a drawer over the page
   needsYou: number;
-  features: Features; // which features show, each adding its items to its section
+  extensions: Extensions; // which extensions show, each adding its items to its section
   onCloseDrawer: () => void;
 }
 
@@ -33,9 +33,9 @@ const SECTIONS = [
   },
 ];
 
-export function Sidebar({ collapsed, drawerOpen, needsYou, features, onCloseDrawer }: SidebarProps) {
+export function Sidebar({ collapsed, drawerOpen, needsYou, extensions, onCloseDrawer }: SidebarProps) {
   const rail = collapsed && !drawerOpen;
-  const shown = visibleFeatures(features);
+  const shown = visibleExtensions(extensions);
   return (
     <>
       {drawerOpen && <div className="fixed inset-0 top-topbar z-20 bg-black/50 md:hidden" onClick={onCloseDrawer} />}
@@ -62,8 +62,8 @@ export function Sidebar({ collapsed, drawerOpen, needsYou, features, onCloseDraw
                 count={"countsNeedsYou" in item ? needsYou : undefined}
               />
             ))}
-            {shown.flatMap((feature) =>
-              (feature.nav ?? [])
+            {shown.flatMap((extension) =>
+              (extension.nav ?? [])
                 .filter((item) => item.section === section.section)
                 .map((item) => (
                   <SidebarItem
@@ -72,7 +72,7 @@ export function Sidebar({ collapsed, drawerOpen, needsYou, features, onCloseDraw
                     label={item.label}
                     icon={item.icon}
                     collapsed={rail}
-                    count={features.badge(feature.name)}
+                    count={extensions.badge(extension.name)}
                   />
                 )),
             )}

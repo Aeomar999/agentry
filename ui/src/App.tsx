@@ -16,11 +16,11 @@ import { WorkersPage } from "@/pages/WorkersPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ErrorPage } from "@/pages/ErrorPage";
 import { WorkspacePage } from "@/pages/WorkspacePage";
-import { FEATURES } from "@/features";
+import { EXTENSIONS } from "@/extensions";
 
 // Every page renders inside the one shell. The Go server answers any path
 // that isn't the API or a file with index.html, so these addresses can be
-// bookmarked and reloaded. A feature's routes are there whether or not it
+// bookmarked and reloaded. An extension's routes are there whether or not it
 // shows, so a bookmark to one still opens.
 const router = createBrowserRouter([
   // A task's Workspace is its own page, in its own tab.
@@ -44,7 +44,7 @@ const router = createBrowserRouter([
           { path: "/integrations", element: <IntegrationsPage /> },
           { path: "/policy", element: <PolicyPage /> },
           { path: "/settings", element: <SettingsPage /> },
-          ...FEATURES.flatMap((feature) => feature.routes ?? []),
+          ...EXTENSIONS.flatMap((extension) => extension.routes ?? []),
           { path: "*", element: <NotFoundPage /> },
         ],
       },

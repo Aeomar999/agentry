@@ -1,9 +1,9 @@
 import { Lightbulb } from "lucide-react";
-import type { FeatureUI } from "..";
+import type { ExtensionUI } from "..";
 import { IdeasPage } from "./IdeasPage";
 import { TurnOnIdeas } from "./AskVisionaries";
 
-export const ideas: FeatureUI = {
+export const ideas: ExtensionUI = {
   name: "ideas",
   label: "Ideas",
   routes: [{ path: "/ideas", element: <IdeasPage /> }],

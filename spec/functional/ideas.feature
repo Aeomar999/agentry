@@ -6,8 +6,8 @@ Feature: Ideas
   @IDEA-01 @user @manual
   Scenario: Ideas is in the sidebar under Work, with the count of open ideas
     # the Work section, Tasks then Plan, then each feature's item with its badge: ui/src/components/organisms/Sidebar.tsx lines 14 to 22 and 65 to 77
-    # the Ideas item: ui/src/features/ideas/index.tsx line 10; its badge counts the open ideas: internal/ideas/routes_test.go TestIdeasBadgeCountsOpenIdeas
-    # the page header: ui/src/features/ideas/IdeasPage.tsx lines 64 to 66
+    # the Ideas item: ui/src/extensions/ideas/index.tsx line 10; its badge counts the open ideas: internal/ideas/routes_test.go TestIdeasBadgeCountsOpenIdeas
+    # the page header: ui/src/extensions/ideas/IdeasPage.tsx lines 64 to 66
     Given a Visionaries team and 2 open ideas
     When the sidebar is shown
     Then Work lists exactly 3 items in order: Tasks, Plan, Ideas
@@ -19,7 +19,7 @@ Feature: Ideas
   @IDEA-02 @user @test
   Scenario: Open ideas are grouped by the session that suggested them, newest session first
     # internal/ideas/routes_test.go TestIdeasListNewestSessionFirst
-    # the groups on the page: ui/src/features/ideas/IdeasPage.tsx lines 106 to 124 and 304 to 312, sessionsOf
+    # the groups on the page: ui/src/extensions/ideas/IdeasPage.tsx lines 106 to 124 and 304 to 312, sessionsOf
     Given task-1, an older session in one repo, and task-2, a newer session in another
     And task-2 suggested an idea, then task-1 one, then task-2 another
     When the ideas are read
@@ -32,8 +32,8 @@ Feature: Ideas
 
   @IDEA-03 @user @manual
   Scenario: An idea's card: the problem, the proposal, why now, the size, the risks and who backed or doubted it
-    # ui/src/features/ideas/IdeaCard.tsx lines 25 and 26, the badges; lines 31 to 37, the parts; line 39, Not auto-accepted; lines 41 to 55, the buttons and links; line 97, "no one"
-    # the sizes S, M and L read small, medium and large: ui/src/features/ideas/IdeaCard.tsx line 13
+    # ui/src/extensions/ideas/IdeaCard.tsx lines 25 and 26, the badges; lines 31 to 37, the parts; line 39, Not auto-accepted; lines 41 to 55, the buttons and links; line 97, "no one"
+    # the sizes S, M and L read small, medium and large: ui/src/extensions/ideas/IdeaCard.tsx line 13
     # README.md, Ideas
     Given an open idea of size M, backed by product-strategist and technologist, doubted by skeptic, that follows up epic-7 and was suggested by task-12
     When its card is shown
@@ -45,7 +45,7 @@ Feature: Ideas
 
   @IDEA-04 @user @manual
   Scenario: The History panel, and the page with every idea decided
-    # ui/src/features/ideas/IdeasPage.tsx lines 86 to 104, the empty states; lines 137 to 145, History; lines 274 to 301, a row
+    # ui/src/extensions/ideas/IdeasPage.tsx lines 86 to 104, the empty states; lines 137 to 145, History; lines 274 to 301, a row
     # README.md, Ideas: the history, "Auto-accepted" with its note on hover
     Given 3 ideas: 1 accepted as task-9, now In progress, 1 Agentry auto-accepted and 1 dismissed with a note
     When the Ideas page is shown
@@ -59,9 +59,9 @@ Feature: Ideas
   @IDEA-05 @user @test
   Scenario: Ideas shows while a Visionaries team or an idea is there, and the page says what it is otherwise
     # internal/ideas/routes_test.go TestIdeasHiddenWithNoTeamAndNoIdeas, TestIdeasOnWithTheVisionariesTeam, TestIdeasKeptForTheirIdeasWhenTheTeamIsRemoved and TestIdeasBadgeCountsOpenIdeas
-    # ui/src/features/ideas/view.test.ts "is off with no ideas and no team, and on with the team", "is on with ideas and no team" and "settles when no template turns Ideas on, on with ideas"
+    # ui/src/extensions/ideas/view.test.ts "is off with no ideas and no team, and on with the team", "is on with ideas and no team" and "settles when no template turns Ideas on, on with ideas"
     # internal/ideas/extension_test.go TestIdeasIsOnByTheTeamsTemplate, for the why
-    # not under test, checked by hand: the Ideas page's off view, which shows what Ideas is and only the button "Ask the visionaries", or with no template that turns Ideas on reads "This Agentry has no team template that turns Ideas on, so there is no team to ask." and offers no button: ui/src/features/ideas/IdeasPage.tsx lines 155 to 167; ui/src/features/ideas/AskVisionaries.tsx lines 10 to 24
+    # not under test, checked by hand: the Ideas page's off view, which shows what Ideas is and only the button "Ask the visionaries", or with no template that turns Ideas on reads "This Agentry has no team template that turns Ideas on, so there is no team to ask." and offers no button: ui/src/extensions/ideas/IdeasPage.tsx lines 155 to 167; ui/src/extensions/ideas/AskVisionaries.tsx lines 10 to 24
     Given no Visionaries team and no ideas
     When the features are read
     Then ideas is not enabled and not visible, its why "add a team from the Visionaries template, or one of yours based on it, to get ideas"
@@ -74,7 +74,7 @@ Feature: Ideas
 
   @IDEA-06 @user @manual
   Scenario: Ask the visionaries opens New task with the team picked, adding the team first when you have none
-    # ui/src/features/ideas/visionaries.ts lines 49 to 75, ask; ui/src/features/ideas/IdeasPage.tsx lines 58 and 72, the button's label
+    # ui/src/extensions/ideas/visionaries.ts lines 49 to 75, ask; ui/src/extensions/ideas/IdeasPage.tsx lines 58 and 72, the button's label
     # ui/src/lib/new-task.ts: ?new=task&newTeam=<team>; README.md, Ideas, "Ask the visionaries"
     Given the Ideas page and a team made from the Visionaries template
     When the user clicks "Ask the visionaries"
@@ -107,7 +107,7 @@ Feature: Ideas
 
   @IDEA-08 @user @manual
   Scenario: The Accept dialog: task or epic, the note, the token budget and where the task went
-    # ui/src/features/ideas/IdeaDialogs.tsx line 63, the title; lines 95 to 109, Make it; line 110, Note; lines 113 to 127, Token budget; lines 130 to 139, the buttons
+    # ui/src/extensions/ideas/IdeaDialogs.tsx line 63, the title; lines 95 to 109, Make it; line 110, Note; lines 113 to 127, Token budget; lines 130 to 139, the buttons
     # what was made: lines 64 to 75 and 176 to 191, placeOf; the toast: line 53
     # the budget preset to the epic's for an idea that follows one up, else the server's: lines 160 to 171, untouchedBudget
     Given an open idea "Dark mode" that follows up epic-7, whose budget is 2,000,000 tokens
@@ -146,9 +146,9 @@ Feature: Ideas
   @IDEA-10 @user @test
   Scenario: An idea that looks like an open task makes none until you say anyway
     # internal/ideas/routes_test.go TestAnIdeaLikeAnOpenTaskIsRefusedUntilYouSayAnyway
-    # ui/src/features/ideas/IdeaDialogs.test.tsx "shows the open task an idea looks like, and makes another only when you say anyway" and "Cancel leaves the idea open, sending nothing more"
+    # ui/src/extensions/ideas/IdeaDialogs.test.tsx "shows the open task an idea looks like, and makes another only when you say anyway" and "Cancel leaves the idea open, sending nothing more"
     # the titles share more than half their words, past the filler words: internal/ideas/duplicate.go line 121, SameTitleAbove 0.5
-    # the banner "It looks like an open task", its words and the buttons: ui/src/features/ideas/IdeaDialogs.tsx lines 76 to 92; the test asserts the link and the requests, not the words
+    # the banner "It looks like an open task", its words and the buttons: ui/src/extensions/ideas/IdeaDialogs.tsx lines 76 to 92; the test asserts the link and the requests, not the words
     Given the idea "Make a ship the user chose actually push, and count it shipped only after the push" accepted as task-2
     And the open idea "Make a ship the user chose push, and count it shipped only when it pushed" in the same repo
     When the user accepts the second
@@ -163,7 +163,7 @@ Feature: Ideas
   @IDEA-11 @user @test
   Scenario: Dismiss puts the idea in the history with your reason
     # internal/ideas/routes_test.go TestYouDismissAnIdea and TestAnUnknownIdeaIsNotFound; internal/ideas/ideas_test.go TestDismissKeepsYourNote
-    # the dialog "Dismiss “<title>”" with Reason, Dismiss and Keep, and the toast "Dismissed “<title>”" with "It is in the history.": ui/src/features/ideas/IdeaDialogs.tsx lines 205 to 229
+    # the dialog "Dismiss “<title>”" with Reason, Dismiss and Keep, and the toast "Dismissed “<title>”" with "It is in the history.": ui/src/extensions/ideas/IdeaDialogs.tsx lines 205 to 229
     # the words "no such idea": internal/ideas/routes.go lines 143 and 152; the test asserts the 404 only
     Given an open idea "Dark mode"
     When the user dismisses it with the note " The OS does it "
@@ -207,7 +207,7 @@ Feature: Ideas
   Scenario: Which ideas count as agreed: Everyone backed it, or Nobody doubted it
     # internal/ideas/agreed_test.go TestAnIdeaIsAgreedWhenEveryViewpointBacksIt and TestAnIdeaNobodyDoubtedIsAgreedWithTwoBackers; internal/ideas/routes_test.go TestAnOpenIdeaSaysWhyItWasntAutoAccepted
     # the 4 viewpoints of the Visionaries template, product-strategist, user-advocate, technologist and skeptic, under visionary-lead: internal/agents/teams.go lines 71 to 79
-    # the page's line: ui/src/features/ideas/IdeaCard.tsx line 39
+    # the page's line: ui/src/extensions/ideas/IdeaCard.tsx line 39
     Given the Visionaries team with its 4 viewpoints
     When an idea is judged under "Everyone backed it"
     Then it is agreed only when every 1 of the 4 backed it and none doubted it
@@ -238,7 +238,7 @@ Feature: Ideas
 
   @IDEA-16 @user @manual
   Scenario: The settings on the Ideas page: follow-ups on an epic close, auto-accept, the rule and starting them
-    # ui/src/features/ideas/IdeasPage.tsx lines 226 to 262, the controls; lines 180 to 184, the 2 rules and their hints; lines 264 to 267, Saving and the banners
+    # ui/src/extensions/ideas/IdeasPage.tsx lines 226 to 262, the controls; lines 180 to 184, the 2 rules and their hints; lines 264 to 267, Saving and the banners
     # README.md, Ideas: the ticks at the top of the Ideas page; the page has them, not Settings
     Given the Ideas page with a Visionaries team and settings never changed
     When the controls are shown

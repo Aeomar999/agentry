@@ -30,7 +30,7 @@ import { grouped, waitingLine } from "@/lib/epics";
 import { shownEpic, shownId } from "@/lib/shown-id";
 import { stageOf } from "@/lib/columns";
 import { EpicBadge, StoryProgress } from "@/components/molecules/StoryProgress";
-import { useFeatures, withTheirCards } from "@/features";
+import { useExtensions, withTheirCards } from "@/extensions";
 
 // The filter lives in the address (?status=needs-you), so a link can open
 // the list already filtered: the bell in the top bar does. Review and
@@ -183,7 +183,7 @@ export function TasksPage() {
     });
   useKeys({ "1": () => showView("list"), "2": () => showView("board") });
 
-  const columns = withTheirCards(useFeatures().columns, tasks);
+  const columns = withTheirCards(useExtensions().columns, tasks);
   const filters = FILTERS.filter((f) => !f.column || columns.includes(f.column));
   const filter = filters.find((f) => f.id === params.get("status")) ?? filters[0];
   // The Backlog shows when you ask; remembered here.
