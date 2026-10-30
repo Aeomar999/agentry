@@ -510,7 +510,7 @@ func TestAProposalCarriesExactlyOneKnownTarget(t *testing.T) {
 		"two":                   {"@PROP-01 @user @test @to-policy @to-security", "proposals/board.feature:5: more than one target tag (@to-policy, @to-security); a proposal has exactly one"},
 		"an unknown stem":       {"@PROP-01 @user @test @to-billing", "proposals/board.feature:5: unknown target @to-billing; the known stems are agents, approvals-and-questions,"},
 		"a stem with .feature":  {"@PROP-01 @user @test @to-policy.feature", "proposals/board.feature:5: unknown target @to-policy.feature;"},
-		"a capital new stem":    {"@PROP-01 @user @test @to-new-Output-gate", "proposals/board.feature:5: unknown target @to-new-Output-gate; the known stems are agents, approvals-and-questions, claude-code-tools, compatibility, coordinator-and-handoffs, epics-and-stories, ideas, limits, notifications, observability, operations, performance, policy, reliability, security, sessions, settings, shared-files, sign-in, tasks-and-board, teams-and-templates, usability, workers, worktrees-and-branches, or new-<stem> in lower-case words joined by dashes for a file that does not exist yet"},
+		"a capital new stem":    {"@PROP-01 @user @test @to-new-Output-gate", "proposals/board.feature:5: unknown target @to-new-Output-gate; the known stems are agents, approvals-and-questions, claude-code-tools, compatibility, coordinator-and-handoffs, epics-and-stories, ideas, limits, notifications, observability, operations, performance, policy, reliability, schedules, security, sessions, settings, shared-files, sign-in, tasks-and-board, teams-and-templates, usability, workers, worktrees-and-branches, or new-<stem> in lower-case words joined by dashes for a file that does not exist yet"},
 		"a functional file":     {"@PROP-01 @user @test @to-policy", ""},
 		"a non-functional file": {"@PROP-01 @test @to-security", ""},
 		"a new file":            {"@PROP-01 @test @to-new-output-gate", ""},
@@ -725,7 +725,16 @@ func TestEveryPathAFeaturesSourcesNamesExists(t *testing.T) {
 	}
 }
 
+// listedWhenTheRuleCameIn puts the fixtures' listed package back in
+// noSpecYet for one test: the real list is empty now.
+func listedWhenTheRuleCameIn(t *testing.T) {
+	was := noSpecYet
+	noSpecYet = []string{"internal/extensions/schedules"}
+	t.Cleanup(func() { noSpecYet = was })
+}
+
 func TestEveryDomainAndExtensionPackageIsNamedBySources(t *testing.T) {
+	listedWhenTheRuleCameIn(t)
 	repo := map[string]string{
 		"../internal/domain/tasks/task.go":                "package tasks\n",
 		"../internal/domain/tasks/resume.go":              "package tasks\n",
@@ -779,6 +788,7 @@ func TestEveryDomainAndExtensionPackageIsNamedBySources(t *testing.T) {
 }
 
 func TestAListedEntryThatIsNoPackageFails(t *testing.T) {
+	listedWhenTheRuleCameIn(t)
 	expectProblems(t, problemsOf(t, map[string]string{
 		"functional/tasks-and-board.feature": goodScenario,
 		"README.md":                          "## Code with no spec yet\n\n- `internal/extensions/schedules`\n",

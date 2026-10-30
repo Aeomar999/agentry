@@ -19,6 +19,7 @@ The glossary gives each noun Agentry uses its one meaning, so the scenarios can 
 | `spec/functional/epics-and-stories.feature` | epics, their stories, Plan and closing an epic |
 | `spec/functional/approvals-and-questions.feature` | actions the policy held for the user, and the questions coordinators ask |
 | `spec/functional/ideas.feature` | the Visionaries' ideas and how the user accepts or dismisses them |
+| `spec/functional/schedules.feature` | schedules: their events, the state they fold to and when each runs |
 | `spec/functional/teams-and-templates.feature` | teams, teams of the user's own, templates and each agent's page |
 | `spec/functional/policy.feature` | the policy profiles, the gate's rules and the Policy page |
 | `spec/functional/sessions.feature` | going on with a session, fresh sessions, forks and the live terminal |
@@ -51,6 +52,7 @@ Every scenario is tagged with an ID: the prefix of its file, a dash and a number
 | `epics-and-stories.feature` | `@EPIC-nn` |
 | `approvals-and-questions.feature` | `@APPROVE-nn` |
 | `ideas.feature` | `@IDEA-nn` |
+| `schedules.feature` | `@SCHED-nn` |
 | `teams-and-templates.feature` | `@TEAM-nn` |
 | `policy.feature` | `@POLICY-nn` |
 | `sessions.feature` | `@SESSION-nn` |
@@ -147,7 +149,7 @@ Every functional file names the code behind it in a `# Sources:` comment under i
 
 Every Go package under `internal/domain` and `internal/extensions` is named by the Sources of a feature file outside `spec/proposals`, as its folder: a package nobody specified is either dead or missing its spec. A folder names its own package and not its subpackages, so `internal/extensions` is the framework, not `internal/extensions/ideas`, and `internal/domain/workers` does not name `internal/domain/workers/workerlink`; a file such as `internal/domain/tasks/resume.go` names no package. A test helper, a `<name>test` package beside its `<name>` such as `taskstest`, needs no Sources. The check fails on a package no Sources names (`internal/x is named by no feature file's # Sources: line`) unless it is on the list below, Code with no spec yet.
 
-Line numbers go stale as dev moves, so a new scenario cites a function or a test by name instead. The check fails on `line N` or `lines N`, in any case, or on a path with a line number after it such as `internal/x/x.go:42` or `internal/x/x.go:3-5`, in a comment line of any scenario numbered above the last ID each file had when this rule came in, or, for a functional file, when the files were regrouped by feature: TASK 55, EPIC 19, APPROVE 7, IDEA 17, TEAM 14, POLICY 46, SESSION 5, HANDOFF 42, TURN 19, TREE 12, MACHINE 34, FILES 8, SIGNIN 7, NOTIFY 3, SET 4, TOOLS 54, REL 54, SEC 68, OPS 42, PERF 16, LIM 35, USE 29, COMPAT 27 and OBS 34, and PROP 0, so the rule holds for every proposal. These numbers are fixed, in `lastIDBeforeLineRule` in `tools/speccheck/rules.go`, and the scenarios at or below them keep their line numbers. A step is not a citation, so a Then such as "line 1 of the report is the verdict" passes.
+Line numbers go stale as dev moves, so a new scenario cites a function or a test by name instead. The check fails on `line N` or `lines N`, in any case, or on a path with a line number after it such as `internal/x/x.go:42` or `internal/x/x.go:3-5`, in a comment line of any scenario numbered above the last ID each file had when this rule came in, or, for a functional file, when the files were regrouped by feature: TASK 55, EPIC 19, APPROVE 7, IDEA 17, TEAM 14, POLICY 46, SESSION 5, HANDOFF 42, TURN 19, TREE 12, MACHINE 34, FILES 8, SIGNIN 7, NOTIFY 3, SET 4, TOOLS 54, SCHED 0, REL 54, SEC 68, OPS 42, PERF 16, LIM 35, USE 29, COMPAT 27 and OBS 34, and PROP 0, so the rule holds for every proposal. These numbers are fixed, in `lastIDBeforeLineRule` in `tools/speccheck/rules.go`, and the scenarios at or below them keep their line numbers. A step is not a citation, so a Then such as "line 1 of the report is the verdict" passes.
 
 A passing run prints the scenarios per file, the totals per check tag for the baseline and then, on a line of their own, for the proposals, and exits 0:
 
@@ -173,6 +175,11 @@ The last line is `go run` reporting the exit code.
 
 ## Code with no spec yet
 
-The packages under `internal/domain` and `internal/extensions` that no feature file's Sources names yet, one per line as a path from the repo root in backquotes. The list may only shrink: when a feature file's Sources names an entry, the entry comes off in the same change. The check fails on an entry a Sources names, on one that is no such package, and on one that was not on the list when this rule came in (`noSpecYet` in `tools/speccheck/specified.go`), and on a package `noSpecYet` holds that the list no longer does, so `noSpecYet` shrinks with the list.
+The packages under `internal/domain` and `internal/extensions` that no feature file's Sources names yet, one per line as a path from the repo root in backquotes. The rules:
 
-- `internal/extensions/schedules`: comes off when someone writes `schedules.feature`.
+- The list may only shrink. When a feature file's Sources names an entry, the entry comes off in the same change.
+- The checker keeps what the list held when this rule came in, `noSpecYet` in `tools/speccheck/specified.go`, and it shrinks with the list.
+- The check fails on an entry a Sources names, on an entry that is no such package, and on an entry `noSpecYet` does not hold.
+- The check fails on a package `noSpecYet` holds that the list no longer does.
+
+The list is empty: every package under `internal/domain` and `internal/extensions` is named by a feature file's Sources.

@@ -19,7 +19,7 @@ var specifiedFolders = []string{"internal/domain", "internal/extensions"}
 // when this rule came in. An entry comes off the list when a feature file's
 // Sources names it; a package not here may not go on, so the list only
 // shrinks.
-var noSpecYet = []string{"internal/extensions/schedules"}
+var noSpecYet = []string{}
 
 const noSpecYetHeading = "## Code with no spec yet"
 
