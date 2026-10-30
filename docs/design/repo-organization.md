@@ -200,8 +200,11 @@ copy it:
   `web.NewServer`, as the extensions' route tests do, so the token check
   is tested with them.
 - **The spec follows**: `@test` citations' paths and any line numbers in
-  them, the `# Sources:` lines that named the old file, and the api package
-  in one feature file's Sources.
+  them, and the `# Sources:` lines that named the old file. The api package
+  goes in the Sources of the domain's own feature file (`settings.feature`
+  here). Other feature files whose Sources named one of its files keep
+  naming that file at its new path, as `ideas.feature` and
+  `tasks-and-board.feature` name `settingsapi.go`.
 
 What stays in `web` after that: sign-in and tokens (`signin.go`), the
 embedded page and install scripts (`page.go`, `scripts.go`), addresses,
