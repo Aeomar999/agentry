@@ -205,8 +205,12 @@ func (c *citer) check(cite citation) string {
 }
 
 // isRepoFolder is true when the name is a folder at the repo root that
-// .gitignore does not leave out, as it does bin/ and release/.
+// .gitignore does not leave out, as it does bin/ and release/. The name's
+// case must match, so Internal isn't taken for internal on the Mac.
 func (c *citer) isRepoFolder(name string) bool {
+	if !existsExactly(c.root, name) {
+		return false
+	}
 	info, err := os.Stat(filepath.Join(c.root, name))
 	if err != nil || !info.IsDir() {
 		return false
