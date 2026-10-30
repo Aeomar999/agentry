@@ -92,10 +92,48 @@ func run() error {
 }
 
 // checkRoot refuses to run anywhere but the repo's root, with the page built
-// into the server.
+// into the server from HEAD.
 func checkRoot() error {
-	if _, err := os.Stat("internal/web/dist/index.html"); err != nil {
+	if _, err := os.Stat(page + "/index.html"); err != nil {
 		return fmt.Errorf("run it from the repo's root, with the page built (make ui)")
+	}
+	head, err := git("rev-parse", "HEAD")
+	if err != nil {
+		fmt.Println("Not a git checkout, so the page's commit isn't checked")
+		return nil
+	}
+	if err := checkPageCommit(head); err != nil {
+		return err
+	}
+	return checkUICommitted()
+}
+
+// page is where make ui builds the page the server embeds.
+const page = "internal/web/static/dist"
+
+// checkPageCommit refuses a page built from another commit than head, such
+// as one left from before a pull, or copied in from another checkout.
+func checkPageCommit(head string) error {
+	builtFrom, err := os.ReadFile(page + "/built-from")
+	if err != nil {
+		return fmt.Errorf("the page doesn't say which commit it was built from (no %s/built-from), so it may not be HEAD (%s): run `make ui`, or copy in a page built from this commit", page, head)
+	}
+	if commit := strings.TrimSpace(string(builtFrom)); commit != head {
+		return fmt.Errorf("the page was built from %s, not from HEAD (%s): run `make ui`, or copy in a page built from this commit", commit, head)
+	}
+	return nil
+}
+
+// checkUICommitted refuses changes to ui/ that aren't committed: the page
+// may hold them, though built-from names HEAD, or may not, though the tree
+// does.
+func checkUICommitted() error {
+	changes, err := git("status", "--porcelain", "--", "ui")
+	if err != nil {
+		return fmt.Errorf("git status: %w", err)
+	}
+	if changes != "" {
+		return fmt.Errorf("ui/ has changes that aren't committed, so the page can't be HEAD's:\n%s\ncommit them, then run `make ui`", changes)
 	}
 	return nil
 }

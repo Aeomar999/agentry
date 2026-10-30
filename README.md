@@ -374,7 +374,7 @@ make test       # go vet, go test, and the UI's type and format checks; builds t
 make            # rebuild the UI, then the binary
 make workers    # the builds other machines download, next to bin/agentry
 make package    # the zips for every system, in release/
-make desktop    # the desktop app, in release/: Linux and Windows on Linux, the Mac app on a Mac; it uses the committed page, so needs no Node
+make desktop    # the desktop app, in release/: Linux and Windows on Linux, the Mac app on a Mac; it doesn't build the page, so needs no Node, and refuses a page built from another commit
 make release-check  # before publishing: checks release/ against the tag, writes SHA256SUMS
 ```
 
@@ -396,7 +396,7 @@ Each folder in `internal/` does one job, and folders only depend on the ones bel
 Releases live on GitHub only; GitLab just checks, builds and deploys.
 
 1. Tag the commit on `dev` and push the tag: `git tag v0.1.0 && git push github v0.1.0`.
-2. Run `make package` and `make desktop` on the tagged commit in a clean checkout, on Linux. The names come from the tag; a tree with changes adds `-dirty`. `make desktop` cross-builds the Windows app, but builds the Linux one with cgo, so it needs a C compiler and the GTK and WebKit headers: on Debian or Ubuntu, `sudo apt install build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev`. Then, for the Mac app, run `make desktop` on a Mac (it needs the Xcode command line tools: `xcode-select --install`, and no Node, as it uses the committed page) on the same tagged commit in a clean checkout, and copy `release/agentry-desktop-<version>-macos-universal.zip` into `release/` on the machine that publishes. It is one app for Apple Silicon and Intel, signed ad hoc, not by a developer.
+2. Run `make package` and `make desktop` on the tagged commit in a clean checkout, on Linux. The names come from the tag; a tree with changes adds `-dirty`. `make desktop` cross-builds the Windows app, but builds the Linux one with cgo, so it needs a C compiler and the GTK and WebKit headers: on Debian or Ubuntu, `sudo apt install build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev`. Then, for the Mac app, check out the same tagged commit on a Mac in a clean checkout, copy in the page `make package` built (`rsync -a --delete internal/web/static/dist/ <mac>:<checkout>/internal/web/static/dist/`, with the Mac's name and the path of its checkout), and run `make desktop` there. It needs the Xcode command line tools (`xcode-select --install`) and no Node; it refuses a page built from another commit. Copy `release/agentry-desktop-<version>-macos-universal.zip` into `release/` on the machine that publishes. It is one app for Apple Silicon and Intel, signed ad hoc, not by a developer.
 3. On the tagged commit, run `make release-check` on the machine that publishes, with the files from both machines in `release/`. It checks that the release's 9 files are there, that none is named `-dirty`, and that every program in them was built from the tag's commit with no changes. Then it writes `release/SHA256SUMS` and prints the `gh release create` command that publishes them all; run it. Older files in `release/` stay out of the release, as their names have another version.
 
 ### License

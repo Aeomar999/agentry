@@ -517,7 +517,7 @@ Feature: Operations
   Scenario: The Makefile's targets build the UI, the binary, the worker builds, run the checks and package the zips
     # Makefile: all = ui build workers; ui = cd ui && npm ci && npm run build, then git rev-parse HEAD into internal/web/static/dist/built-from; build = go build -o bin/agentry ./cmd/agentry
     # Makefile: WORKER_PLATFORMS = darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64, built with CGO_ENABLED=0 to bin/agentry-<os>-<arch>
-    # Makefile: test = internal/web/static/dist/index.html (make ui, only when it is missing), spec/check, go vet ./... && go test ./... then cd ui && npm run lint; package = ui, then go run ./tools/packaging; desktop = go run ./tools/packaging desktop, with no ui, so it packages the committed internal/web/dist
+    # Makefile: test = internal/web/static/dist/index.html (make ui, only when it is missing), spec/check, go vet ./... && go test ./... then cd ui && npm run lint; package = ui, then go run ./tools/packaging; desktop = go run ./tools/packaging desktop, with no ui, so it packages the page already in internal/web/static/dist, built here or copied in
     # Steps:
     # 1. Run make -n all, make -n test and make -n package and read the commands.
     # 2. Run make build and check bin/agentry.
@@ -532,7 +532,7 @@ Feature: Operations
     When make package runs
     Then it builds the UI first and then runs the packaging program: yes
     When make desktop runs
-    Then it runs the packaging program's desktop mode on the committed page, without building the UI: yes
+    Then it runs the packaging program's desktop mode on the page already built, without building the UI: yes
     # README.md, Work on it; Makefile
 
   @OPS-28 @manual
@@ -575,7 +575,7 @@ Feature: Operations
   Scenario: make package makes one zip per kind of computer, each holding everything Agentry needs
     # tools/packaging/main.go: 6 platforms; the zips go to release/agentry-<version>-<label>.zip; version from git describe --tags --always --dirty, or dev without git
     # tools/packaging/main.go pack: the folder Agentry with this computer's agentry (agentry.exe on Windows), the 5 other builds as agentry-<os>-<arch>, the two launchers and README.txt with the version and the first-run note for the system
-    # tools/packaging/main.go run: refuses unless internal/web/dist/index.html is there
+    # tools/packaging/main.go run: checkRoot refuses unless internal/web/static/dist/index.html is there, built from HEAD with ui/ committed (@OPS-47)
     # README.md Make a release: tag the commit on dev, push the tag, make package on the tagged commit in a clean checkout, publish the zips with gh release create
     # Steps:
     # 1. On a clean checkout of the tagged commit, run make package.
@@ -594,13 +594,28 @@ Feature: Operations
 
   @OPS-35 @manual
   Scenario: The packaging program is refused without the page built
-    # tools/packaging/main.go run: refuses unless internal/web/dist/index.html is there
+    # tools/packaging/main.go checkRoot: refuses unless internal/web/static/dist/index.html is there; tools/packaging/root_test.go TestCheckRootRefusesARootWithNoPage
     # Steps:
-    # 1. Run go run ./tools/packaging in a tree without internal/web/dist/index.html.
-    Given a tree without internal/web/dist/index.html
+    # 1. Run go run ./tools/packaging in a tree without internal/web/static/dist/index.html.
+    Given a tree without internal/web/static/dist/index.html
     When go run ./tools/packaging runs
     Then it refuses, saying to run it from the repo's root with the page built, and exits 1
     # README.md, Make a release; tools/packaging/main.go
+
+  @OPS-47 @test
+  Scenario: Packaging refuses a page that isn't HEAD's, so a stale page can't ship
+    # tools/packaging/main.go checkRoot, checkPageCommit and checkUICommitted run before make package and make desktop build anything; make ui writes internal/web/static/dist/built-from
+    # tools/packaging/root_test.go TestCheckRootRefusesAPageBuiltFromAnotherCommit, TestCheckRootRefusesAPageThatDoesntSayItsCommit, TestCheckRootRefusesUIChangesThatArentCommitted, TestCheckRootLeavesChangesOutsideUIAlone and TestCheckRootTakesAPageBuiltFromACleanHEAD
+    Given a git checkout whose page in internal/web/static/dist names in built-from the commit it was built from
+    When the page was built from another commit than HEAD, and go run ./tools/packaging or its desktop mode runs
+    Then it is refused with "the page was built from <commit>, not from HEAD (<commit>): run `make ui`, or copy in a page built from this commit": yes
+    When built-from is missing
+    Then it is refused, naming HEAD and the missing built-from, with the same advice: yes
+    When a file under ui/ is changed or added and not committed
+    Then it is refused, naming the file and saying to commit it, then run make ui: yes
+    When only files outside ui/ are changed, and the page was built from HEAD
+    Then it is not refused
+    # not under test, checked by hand: outside a git checkout it checks only that the page is there, and says the page's commit isn't checked (tools/packaging/root_test.go TestCheckRootOutsideGitChecksOnlyThePage); the Mac build takes a page copied in from the publishing machine (README.md, Make a release)
 
   @OPS-43 @manual
   Scenario: make desktop packages the desktop app with its server for Linux and Windows
