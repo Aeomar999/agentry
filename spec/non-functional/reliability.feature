@@ -265,7 +265,7 @@ Feature: Reliability
 
   @REL-21 @test
   Scenario: After a start, a worker that was online is waited for, not refused at once
-    # internal/workerlink/server.go ForgetConnections records every worker offline at start
+    # internal/domain/workers/workerlink/server.go ForgetConnections records every worker offline at start
     # internal/machines/fleet.go OfflineGrace = 30 seconds
     Given a fleet that expects a worker which has not dialed in since the start
     And an agent that may run only on that worker
@@ -585,8 +585,8 @@ Feature: Reliability
 
   @REL-42 @manual
   Scenario: A worker dials the server again, waiting 1 second, then twice as long each time, up to 30 seconds
-    # internal/workerlink/worker.go Run: wait starts at 1 second, doubles, min(2*wait, 30 seconds); back to 1 second after a link that was up
-    # internal/workerlink/worker.go stream: each write to the terminal stream gives up after 10 seconds
+    # internal/domain/workers/workerlink/worker.go Run: wait starts at 1 second, doubles, min(2*wait, 30 seconds); back to 1 second after a link that was up
+    # internal/domain/workers/workerlink/worker.go stream: each write to the terminal stream gives up after 10 seconds
     # Steps:
     # 1. Join a worker and check its link is up on the Workers page.
     # 2. Stop the server.
@@ -599,7 +599,7 @@ Feature: Reliability
     When the server starts again
     Then the worker is online again within 30 seconds of the start: yes
     And a link that drops after being up starts the waits at 1s again: yes
-    # README.md, Add machines; internal/workerlink/worker.go
+    # README.md, Add machines; internal/domain/workers/workerlink/worker.go
 
   @REL-43 @test
   Scenario: The coordinator asks the user when the agent's only machines are offline
@@ -612,18 +612,18 @@ Feature: Reliability
 
   @REL-44 @test
   Scenario: A join code works once, for 1 hour
-    # internal/workers/workers.go InviteLifetime = 1 hour
+    # internal/domain/workers/workers.go InviteLifetime = 1 hour
     Given a join code made now
     When a machine joins with it at once
     Then it joins: yes
-    # README.md, Add machines; internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode (once and the hour: REL-54)
+    # README.md, Add machines; internal/domain/workers/workers_test.go TestAMachineJoinsOnceWithItsCode (once and the hour: REL-54)
 
   @REL-54 @test
   Scenario: A used, wrong or expired join code is refused
-    # internal/workers/workers.go InviteLifetime = 1 hour; expired means 1 second past the hour in the test
+    # internal/domain/workers/workers.go InviteLifetime = 1 hour; expired means 1 second past the hour in the test
     Given a join code made now and used once by a machine
     When the same code is used again, or a code that was never made
     Then the join is refused: yes
     When a fresh code is used 1 hour and 1 second after it was made
     Then the join is refused: yes
-    # README.md, Add machines; internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
+    # README.md, Add machines; internal/domain/workers/workers_test.go TestAMachineJoinsOnceWithItsCode

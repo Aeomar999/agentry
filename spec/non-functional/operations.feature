@@ -386,7 +386,7 @@ Feature: Operations
   Scenario: The install command from the Workers page joins the machine and starts the worker in the background
     # internal/web/workers_api.go: the page gives one command per system; internal/web/install.sh runs agentry worker join [-ca-fingerprint F] [-name N] <server> <code>, then agentry worker start
     # cmd/agentry/worker.go workerCommands: join, start, stop, restart, status, logs [-f], update, leave [-purge], run
-    # internal/workerservice/service.go ForThisMachine: systemd user service agentry-worker.service on Linux; launchd agent dev.agentry.worker on macOS, or a background process when started over SSH; on Windows a background process started at login by the Task Scheduler task "Agentry worker"
+    # internal/domain/workers/workerservice/service.go ForThisMachine: systemd user service agentry-worker.service on Linux; launchd agent dev.agentry.worker on macOS, or a background process when started over SSH; on Windows a background process started at login by the Task Scheduler task "Agentry worker"
     # cmd/agentry/worker_manage.go runStart waits 15 seconds for the link; worker.log in the worker's folder
     # Steps:
     # 1. On the Workers page, make a join code and copy the command for the other machine's system.
@@ -403,17 +403,17 @@ Feature: Operations
     Then the worker is running again: yes, except a plain background process, which is not started again
     When agentry worker stop runs
     Then it says agents running there keep going until their turn ends: yes
-    # README.md, Add machines; internal/workerservice/service.go
+    # README.md, Add machines; internal/domain/workers/workerservice/service.go
 
   @OPS-22 @test
   Scenario: A worker replaces itself with the server's agentry
-    # internal/workerlink/update.go: before each dial the worker compares its build with the server's by ETag and replaces itself
+    # internal/domain/workers/workerlink/update.go: before each dial the worker compares its build with the server's by ETag and replaces itself
     # not under test, checked by hand: Run returns ErrUpdated and the process restarts into the new program (cmd/agentry/worker.go runAsWorker)
     Given a worker whose agentry differs from the one the server has for its system
     When it checks for an update
     Then it replaces its own program with the server's: yes
     And the program keeps its executable mode: yes
-    # README.md, Add machines; internal/workerlink/update_test.go TestAWorkerUpdatesToTheServersAgentry
+    # README.md, Add machines; internal/domain/workers/workerlink/update_test.go TestAWorkerUpdatesToTheServersAgentry
 
   @OPS-23 @test
   Scenario: Claude Code on another machine names the server by AGENTRY_URL, AGENTRY_TOKEN and AGENTRY_CA_FINGERPRINT

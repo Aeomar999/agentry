@@ -18,10 +18,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // Judge gives the policy's verdict on a call by an agent with a profile.

@@ -4,7 +4,7 @@ import (
 	"cmp"
 	"fmt"
 
-	"gitlab.com/dev.chempa/agentry/internal/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 )
 
 // MaxResumedContext is the most context, in tokens, a session may carry

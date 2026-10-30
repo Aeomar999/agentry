@@ -18,10 +18,10 @@ import (
 	"strings"
 	"syscall"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/pinned"
 	"gitlab.com/dev.chempa/agentry/internal/platform/procs"
-	"gitlab.com/dev.chempa/agentry/internal/workerlink"
 )
 
 // workerConfig is what `agentry worker join` keeps, and the worker runs with.

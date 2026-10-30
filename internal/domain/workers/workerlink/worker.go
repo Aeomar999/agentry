@@ -12,13 +12,13 @@ import (
 
 	"github.com/coder/websocket"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/pinned"
 	"gitlab.com/dev.chempa/agentry/internal/platform/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/platform/terminal"
 	"gitlab.com/dev.chempa/agentry/internal/platform/workspace"
 	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // Worker is the worker's end of the link: `agentry worker`.

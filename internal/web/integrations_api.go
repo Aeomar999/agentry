@@ -9,7 +9,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 )
 
 // The Integrations page connects Claude Code on any machine to Agentry

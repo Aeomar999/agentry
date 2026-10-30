@@ -18,10 +18,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/hooks"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // Erasing a task through the page (docs/design/log-growth.md section 5,

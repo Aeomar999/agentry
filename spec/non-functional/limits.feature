@@ -263,8 +263,8 @@ Feature: Limits
     And the second try is refused as unknown, used or expired
     And the code no longer works once its lifetime has passed: yes
     And the join's event holds neither the code nor the worker's credential as they are: yes
-    # not under test, checked by hand: the lifetime, InviteLifetime, is 1 hour (internal/workers/workers.go line 28)
-    # README.md, Add machines; internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode; the refusal's words: internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
+    # not under test, checked by hand: the lifetime, InviteLifetime, is 1 hour (internal/domain/workers/workers.go line 28)
+    # README.md, Add machines; internal/domain/workers/workers_test.go TestAMachineJoinsOnceWithItsCode; the refusal's words: internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @LIM-30 @manual
   Scenario: A Claude Code invite works for 15 minutes
@@ -276,7 +276,7 @@ Feature: Limits
 
   @LIM-31 @manual
   Scenario: A worker is offline after 20 seconds of silence
-    # internal/workerlink/server.go StatusEvery = 2 seconds, silentFor = 10 * StatusEvery
+    # internal/domain/workers/workerlink/server.go StatusEvery = 2 seconds, silentFor = 10 * StatusEvery
     Given a worker that reports its status every 2 seconds
     When it is silent for 20 seconds
     Then the server hangs up its link and the worker is shown offline

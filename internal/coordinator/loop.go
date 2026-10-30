@@ -16,12 +16,12 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/workspace"
 	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
 	"gitlab.com/dev.chempa/agentry/internal/turns"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // Loop reads the log and, for every task an event touched, does the one move

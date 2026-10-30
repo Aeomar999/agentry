@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 )
 
 func TestTheFleetPicksWhereAnAgentWorks(t *testing.T) {

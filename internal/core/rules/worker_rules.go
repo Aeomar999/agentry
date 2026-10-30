@@ -7,7 +7,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 )
 
 // workerRule checks a proposal against the agents and the workers that exist.

@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
-	"gitlab.com/dev.chempa/agentry/internal/workerlink"
 )
 
 // joinable is a server with -https's front door that takes any code, and

@@ -18,8 +18,8 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // Workers: the machines, besides this one, that agents run on. You make a

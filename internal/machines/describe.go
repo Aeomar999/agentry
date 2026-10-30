@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // Describe is what this machine tells the server about itself: what it

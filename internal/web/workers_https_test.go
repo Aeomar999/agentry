@@ -15,6 +15,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/pinned"
 	"gitlab.com/dev.chempa/agentry/internal/platform/sessions"
@@ -22,8 +24,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
-	"gitlab.com/dev.chempa/agentry/internal/workerlink"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // Served over https with Agentry's own CA, a worker that pins the CA links,

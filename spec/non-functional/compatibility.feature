@@ -116,7 +116,7 @@ Feature: Compatibility
     And on a Mac it is the launchd agent dev.agentry.worker under ~/Library/LaunchAgents; from a session with no login, as over SSH, it is a plain background process and the command says to run agentry worker start in Terminal on the Mac once
     And on Windows it is a background process, with exactly 1 Task Scheduler task, "Agentry worker", that starts it again at login
     And where there is neither systemd nor launchd it is a plain background process with a pid file, and agentry worker status names the kind in every case
-    # README.md, Add machines; internal/workerservice/service.go lines 38-53; systemd.go lines 15-36; launchd.go lines 16-22; logintask.go lines 12-22; cmd/agentry/worker_manage.go lines 75-78; no test of the pick per system
+    # README.md, Add machines; internal/domain/workers/workerservice/service.go lines 38-53; systemd.go lines 15-36; launchd.go lines 16-22; logintask.go lines 12-22; cmd/agentry/worker_manage.go lines 75-78; no test of the pick per system
 
   @COMPAT-11 @manual
   Scenario: A worker machine needs git and Claude Code and no open port
@@ -281,4 +281,4 @@ Feature: Compatibility
     When agentry worker update runs, or the install command is run again
     Then the server's build for windows and the machine's arch is downloaded whole, checked against its SHA-256 ETag, and refused with "the new agentry didn't arrive whole" when the bytes do not match
     And since Windows does not replace a program that runs, the old agentry.exe is renamed agentry.exe.old first and removed at the next update; on macOS and Linux the new file is renamed over the old one in 1 step
-    # README.md, Add machines (run again, it updates it); internal/workerlink/update.go lines 57, 85-93, 104-120; internal/web/install.ps1 lines 48-55; no test of the Windows branch
+    # README.md, Add machines (run again, it updates it); internal/domain/workers/workerlink/update.go lines 57, 85-93, 104-120; internal/web/install.ps1 lines 48-55; no test of the Windows branch

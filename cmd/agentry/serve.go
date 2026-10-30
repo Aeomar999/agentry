@@ -32,6 +32,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/desk"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/hooks"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
@@ -50,8 +52,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/watchdog"
 	"gitlab.com/dev.chempa/agentry/internal/web"
 	"gitlab.com/dev.chempa/agentry/internal/webpush"
-	"gitlab.com/dev.chempa/agentry/internal/workerlink"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 type serveOptions struct {

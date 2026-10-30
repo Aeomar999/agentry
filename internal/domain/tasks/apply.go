@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 )
 
 // FromEvents builds a task by applying its accepted events in order.

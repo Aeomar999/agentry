@@ -14,8 +14,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/rules"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // Adding, changing and removing agents from the page. Each is an event, so

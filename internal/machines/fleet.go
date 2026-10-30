@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 )
 
 // Fleet is every machine agents can work on now: this one, always, and

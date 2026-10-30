@@ -15,6 +15,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/current"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/hooks"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
@@ -22,8 +24,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/webpush"
-	"gitlab.com/dev.chempa/agentry/internal/workerlink"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 type Config struct {

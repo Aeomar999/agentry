@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 )
 
 // resumable is an engineer's turn its next one resumes: ended, on claude on

@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerservice"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/sessions"
-	"gitlab.com/dev.chempa/agentry/internal/workerlink"
-	"gitlab.com/dev.chempa/agentry/internal/workerservice"
 )
 
 // The `agentry worker` commands that manage the worker on this machine:

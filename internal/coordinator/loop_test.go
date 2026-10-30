@@ -13,6 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
@@ -21,7 +22,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/turns"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // The whole loop on a real store, real sessions and git, with a fake `claude` that

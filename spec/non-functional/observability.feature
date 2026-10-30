@@ -298,7 +298,7 @@ Feature: Observability
     When it dials the server and says hello with its host and engines
     Then GET /api/workers lists it by name with "online": true: yes
     And GET /api/workers/{name} gives a host, a count of CPUs above 0, and a history whose first entry is "online"
-    # not under test, checked by hand: the hello is kept as a worker.connected event in the workers stream with its name, host, os, arch, version, engines and missing tools (internal/workers/workers.go lines 186 to 188, written at internal/workerlink/server.go line 80), and the history is newest first (internal/web/workers_api.go line 108)
+    # not under test, checked by hand: the hello is kept as a worker.connected event in the workers stream with its name, host, os, arch, version, engines and missing tools (internal/domain/workers/workers.go lines 186 to 188, written at internal/domain/workers/workerlink/server.go line 80), and the history is newest first (internal/web/workers_api.go line 108)
     # README.md, Add machines; internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @OBS-30 @test
@@ -307,8 +307,8 @@ Feature: Observability
     When it runs for 3.5 seconds
     Then it logs a line starting "link down" for each failed dial, 2 or more
     And it logs how to join again, with `agentry worker join -ca-fingerprint`, exactly once
-    # not under test, checked by hand: it dials at 0, 1 and 3 seconds as the wait doubles, and the line goes on "; dialing again in" the wait (internal/workerlink/worker.go lines 82 and 88)
-    # README.md, HTTPS and installing the app, Regenerate the CA; internal/workerlink/worker_test.go TestAWorkerWhoseCAChangedSaysOnceHowToJoinAgain
+    # not under test, checked by hand: it dials at 0, 1 and 3 seconds as the wait doubles, and the line goes on "; dialing again in" the wait (internal/domain/workers/workerlink/worker.go lines 82 and 88)
+    # README.md, HTTPS and installing the app, Regenerate the CA; internal/domain/workers/workerlink/worker_test.go TestAWorkerWhoseCAChangedSaysOnceHowToJoinAgain
 
   @OBS-31 @manual
   Scenario: What a worker's log says
@@ -316,7 +316,7 @@ Feature: Observability
     When it starts, connects, takes a turn, opens Claude in a task's Workspace, sends a shared file back, and is updated to the server's agentry
     Then the log shows, one line each: "<name>, working for <server>", "connected to <server>", "<task>: starting <turn>", "<task>: starting Claude in the Workspace", "sending <path> to the server, as a shared file" and "agentry was updated to the server's; restarting"
     And the log is kept in worker.log in the worker's folder, which `agentry worker logs` shows
-    # README.md, Add machines; cmd/agentry/worker.go runAsWorker and internal/workerlink/worker.go; only the CA line of the log is tested, in OBS-30
+    # README.md, Add machines; cmd/agentry/worker.go runAsWorker and internal/domain/workers/workerlink/worker.go; only the CA line of the log is tested, in OBS-30
 
   @OBS-32 @manual
   Scenario: A worker's link that goes silent is hung up and the worker recorded offline
@@ -325,4 +325,4 @@ Feature: Observability
     Then the server closes the silent link and writes a worker.disconnected event, not when a newer link from the same worker replaced it
     And the link with no hello is closed with "say hello first", and no worker.connected is written for it
     And at the restart every worker the log had online is recorded offline, until it dials in again
-    # README.md, Add machines; internal/workerlink/server.go, StatusEvery, silentFor, Connect and ForgetConnections; no test covers these; the 20-second offline mark on the Workers page is LIM-31; OfflineGrace, 30 seconds, is how long its turns still count as running (REL-41)
+    # README.md, Add machines; internal/domain/workers/workerlink/server.go, StatusEvery, silentFor, Connect and ForgetConnections; no test covers these; the 20-second offline mark on the Workers page is LIM-31; OfflineGrace, 30 seconds, is how long its turns still count as running (REL-41)

@@ -18,12 +18,12 @@ import (
 	"testing"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/pinned"
 	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
-	"gitlab.com/dev.chempa/agentry/internal/workerlink"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // The commands an -https server hands out check its CA by fingerprint

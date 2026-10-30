@@ -6,7 +6,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"gitlab.com/dev.chempa/agentry/internal/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 )
 
 // stream is one terminal's own websocket, from a worker.

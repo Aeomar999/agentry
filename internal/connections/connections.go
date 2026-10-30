@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 )
 
 // InviteLifetime is how long an install command works.

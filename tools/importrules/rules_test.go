@@ -60,21 +60,21 @@ var newPath = map[string]string{
 	"internal/core/rules":   "internal/core/rules",
 	"internal/core/httpapi": "internal/core/httpapi",
 
-	"internal/domain/agents": "internal/domain/agents",
-	"internal/domain/tasks":  "internal/domain/tasks",
-	"internal/workers":       "internal/domain/workers",
-	"internal/connections":   "internal/domain/connections",
-	"internal/policy":        "internal/domain/policy",
-	"internal/settings":      "internal/domain/settings",
-	"internal/sharedfiles":   "internal/domain/sharedfiles",
+	"internal/domain/agents":  "internal/domain/agents",
+	"internal/domain/tasks":   "internal/domain/tasks",
+	"internal/domain/workers": "internal/domain/workers",
+	"internal/connections":    "internal/domain/connections",
+	"internal/policy":         "internal/domain/policy",
+	"internal/settings":       "internal/domain/settings",
+	"internal/sharedfiles":    "internal/domain/sharedfiles",
 
-	"internal/domain/tasks/taskstest": "internal/domain/tasks/taskstest",
-	"internal/domain/tasks/waitlist":  "internal/domain/tasks/waitlist",
-	"internal/workerlink":             "internal/domain/workers/workerlink",
-	"internal/workerservice":          "internal/domain/workers/workerservice",
-	"internal/hooks":                  "internal/domain/policy/hooks",
-	"internal/settingsfile":           "internal/domain/settings/settingsfile",
-	"internal/webpush":                "internal/domain/notifications/webpush",
+	"internal/domain/tasks/taskstest":       "internal/domain/tasks/taskstest",
+	"internal/domain/tasks/waitlist":        "internal/domain/tasks/waitlist",
+	"internal/domain/workers/workerlink":    "internal/domain/workers/workerlink",
+	"internal/domain/workers/workerservice": "internal/domain/workers/workerservice",
+	"internal/hooks":                        "internal/domain/policy/hooks",
+	"internal/settingsfile":                 "internal/domain/settings/settingsfile",
+	"internal/webpush":                      "internal/domain/notifications/webpush",
 
 	"internal/extensions": "internal/extensions",
 	"internal/ideas":      "internal/extensions/ideas",
@@ -101,7 +101,7 @@ var newPath = map[string]string{
 }
 
 // layerOf gives a package's layer, and for a surface the folder whose other
-// subpackages it may import: "internal/workerlink" is a surface in
+// subpackages it may import: "internal/domain/workers/workerlink" is a surface in
 // "internal/domain/workers".
 func layerOf(path string) (layer, string) {
 	moved, ok := newPath[path]

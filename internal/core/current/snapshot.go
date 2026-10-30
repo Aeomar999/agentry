@@ -22,9 +22,9 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/platform/exactgob"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // A snapshot is the state written to a file, so a start can read it and

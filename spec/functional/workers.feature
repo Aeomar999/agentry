@@ -1,7 +1,7 @@
 Feature: Workers
   A machine joined to Agentry so that agents can run on it.
   # Sources: cmd/agentry/worker.go, cmd/agentry/worker_manage.go,
-  # internal/workers, internal/workerlink, internal/workerservice,
+  # internal/domain/workers, internal/domain/workers/workerlink, internal/domain/workers/workerservice,
   # internal/machines, internal/turns, internal/platform/pinned, internal/web/workers_api.go
   # and their tests.
 
@@ -12,16 +12,16 @@ Feature: Workers
     Given an install command made on the Workers page, with its join code
     When the machine runs the command and joins
     Then the machine gets a credential of its own, and the log holds it as given: no
-    # not under test, checked by hand: the log keeps the credential's hash (internal/workers/workers.go line 180)
+    # not under test, checked by hand: the log keeps the credential's hash (internal/domain/workers/workers.go line 180)
     And the same code is refused for a second machine
-    # README.md, Add machines; internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
+    # README.md, Add machines; internal/domain/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
 
   @MACHINE-02 @worker @test
   Scenario: Add worker makes a one-time install command for a machine
     Given the user is signed in on the Workers page
     When they ask to add a worker
     Then the page gives a code, and an install command that fetches the install script with that code: yes
-    # not under test, checked by hand: the code works for 1 hour (internal/workers/workers.go line 28 InviteLifetime; the tests use the constant)
+    # not under test, checked by hand: the code works for 1 hour (internal/domain/workers/workers.go line 28 InviteLifetime; the tests use the constant)
     And 1 install command per address the server has, each fetching the install script with that code
     And the install script fetched with the code carries the code: yes
     And the script fetched with a wrong code is refused with status 401
@@ -46,15 +46,15 @@ Feature: Workers
     When a machine joins with it
     Then the code lets a 2nd machine join: no
     And a wrong code lets a machine join: no
-    # internal/workers/workers.go InviteLifetime: the code expires 1 hour after it was made
+    # internal/domain/workers/workers.go InviteLifetime: the code expires 1 hour after it was made
     And the code 1 second after its lifetime lets a machine join: no
-    # not under test, checked by hand: the lifetime is 1 hour (internal/workers/workers.go line 28; the test uses the constant)
+    # not under test, checked by hand: the lifetime is 1 hour (internal/domain/workers/workers.go line 28; the test uses the constant)
     And the join's entry in the log holds the code or the credential as given: no
-    # not under test, checked by hand: the log keeps their hashes (internal/workers/workers.go line 180); the invite's entry keeps only the code's hash (internal/workers/workers.go line 162)
+    # not under test, checked by hand: the log keeps their hashes (internal/domain/workers/workers.go line 180); the invite's entry keeps only the code's hash (internal/domain/workers/workers.go line 162)
     And the credential's hash lets a worker in: no
     When the worker is removed
     Then its credential lets it in: no, and the roster has 0 workers
-    # internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
+    # internal/domain/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
 
   @MACHINE-05 @worker @test
   Scenario: The rules on who may join and where agents run
@@ -129,10 +129,10 @@ Feature: Workers
   Scenario: On Linux the worker is a systemd user service
     Given a Linux machine with a systemd user session
     When the user runs `agentry worker start`
-    # internal/workerservice/service.go ForThisMachine; systemd.go
+    # internal/domain/workers/workerservice/service.go ForThisMachine; systemd.go
     Then the service is a systemd user service called agentry-worker.service, 1 unit file in the user's systemd folder
     And it runs `agentry worker run` with the PATH of the shell that started it, its output appended to 1 log file, worker.log
-    # internal/workerservice/systemd.go: Restart=always, RestartSec=5
+    # internal/domain/workers/workerservice/systemd.go: Restart=always, RestartSec=5
     And it is restarted 5 seconds after it stops, every time
     And lingering is turned on for the user where the machine allows, so it runs logged out: yes
     # 1. On Linux with a systemd user session, run `agentry worker start`.
@@ -145,7 +145,7 @@ Feature: Workers
   Scenario: On macOS the worker is a launchd agent, or a background process over SSH
     Given a Mac
     When the user runs `agentry worker start` in Terminal on the Mac
-    # internal/workerservice/launchd.go
+    # internal/domain/workers/workerservice/launchd.go
     Then the service is a launchd agent labelled dev.agentry.worker, 1 plist in the user's LaunchAgents, with RunAtLoad and KeepAlive
     When the user runs it over SSH, where launchd takes no agent
     Then it runs as a background process instead, and the output says to run `agentry worker start` in Terminal on the Mac 1 time to have it start at login
@@ -161,13 +161,13 @@ Feature: Workers
     Then the background process runs, and the service's kind names it: yes
     When the first service can start, and the worker is started again
     Then the first runs and the background process is stopped, 1 service running
-    # internal/workerservice/fallback_test.go TestFallbackStartsTheSecondWhenTheFirstCant
+    # internal/domain/workers/workerservice/fallback_test.go TestFallbackStartsTheSecondWhenTheFirstCant
 
   @MACHINE-12 @worker @manual
   Scenario: On Windows the worker is a background process started at logon by Task Scheduler
     Given a Windows machine
     When the user runs `agentry worker start`
-    # internal/workerservice/logintask.go
+    # internal/domain/workers/workerservice/logintask.go
     Then the worker runs as a background process, its process id in worker.pid, 1 file
     And 1 Task Scheduler task called Agentry worker runs `agentry worker start` at logon, with limited rights
     And when the task cannot be made, the worker still runs now: yes
@@ -181,9 +181,9 @@ Feature: Workers
   Scenario: With neither systemd nor launchd the worker is a plain background process
     Given a machine with neither systemd nor launchd
     When the user runs `agentry worker start`
-    # internal/workerservice/background.go
+    # internal/domain/workers/workerservice/background.go
     Then the worker runs detached from the shell, its process id in worker.pid, and is started again after a reboot: no
-    # internal/workerservice/background.go Stop: 50 checks 100 milliseconds apart
+    # internal/domain/workers/workerservice/background.go Stop: 50 checks 100 milliseconds apart
     When the user runs `agentry worker stop`
     Then it is told to stop and waited for up to 5 seconds, after which the stop fails saying so
     # 1. In a container with neither systemd nor launchd, run `agentry worker start`.
@@ -251,16 +251,16 @@ Feature: Workers
     Given a worker running an older agentry than the server has for its system
     When it asks the server for agentry for its system, saying the hash of its own
     Then the worker's program is replaced by the server's: yes
-    # not under test, checked by hand: the worker writes it beside itself as .new, checks its hash against the server's ETag and swaps it in (internal/workerlink/update.go lines 82 to 98); the test's server is a stand-in
+    # not under test, checked by hand: the worker writes it beside itself as .new, checks its hash against the server's ETag and swaps it in (internal/domain/workers/workerlink/update.go lines 82 to 98); the test's server is a stand-in
     And the new program can be run: yes
     Given a worker running the same agentry as the server
     When it asks again
     Then it is replaced: no
-    # not under test, checked by hand: the server answers 304 Not Modified (internal/workerlink/update.go line 75)
-    # internal/workerlink/worker.go Run: with SelfUpdate the check runs before every dial, and an update restarts the process
+    # not under test, checked by hand: the server answers 304 Not Modified (internal/domain/workers/workerlink/update.go line 75)
+    # internal/domain/workers/workerlink/worker.go Run: with SelfUpdate the check runs before every dial, and an update restarts the process
     # cmd/agentry/worker_manage.go runUpdate: `agentry worker update` does the same, with 5 minutes to fetch, and restarts the service if it runs
-    # internal/workerlink/update.go swap: on Windows the old program is moved aside as .old and removed by the next update
-    # internal/workerlink/update_test.go TestAWorkerUpdatesToTheServersAgentry
+    # internal/domain/workers/workerlink/update.go swap: on Windows the old program is moved aside as .old and removed by the next update
+    # internal/domain/workers/workerlink/update_test.go TestAWorkerUpdatesToTheServersAgentry
 
   @MACHINE-19 @worker @manual
   Scenario: agentry worker leave takes the machine off the server
@@ -294,26 +294,26 @@ Feature: Workers
   Scenario: A worker keeps dialing when its link drops, and says once when the CA changed
     Given a worker whose server shows a certificate its kept CA did not sign
     When the worker runs for 3.5 seconds
-    # internal/workerlink/worker.go Run: the wait starts at 1 second, doubles each time, and is at most 30 seconds
+    # internal/domain/workers/workerlink/worker.go Run: the wait starts at 1 second, doubles each time, and is at most 30 seconds
     Then it logs link down at least 2 times
     # not under test, checked by hand: it dials at 0, 1 and 3 seconds
     And it says how to join again with a new fingerprint 1 time, not on every dial
-    # internal/workerlink/worker.go Run: a link that was up resets the wait to 1 second; a credential the server no longer takes ends the run
-    # internal/workerlink/worker_test.go TestAWorkerWhoseCAChangedSaysOnceHowToJoinAgain
+    # internal/domain/workers/workerlink/worker.go Run: a link that was up resets the wait to 1 second; a credential the server no longer takes ends the run
+    # internal/domain/workers/workerlink/worker_test.go TestAWorkerWhoseCAChangedSaysOnceHowToJoinAgain
 
   @MACHINE-22 @worker @test
   Scenario: A connected worker says hello and what it runs, and the page reads its details
     Given a joined worker that connects with its credential
     When it says hello with its version, engines and missing tools
     Then the Workers page lists it online: yes
-    # not under test, checked by hand: the server records its version, engines and missing tools with it (internal/workerlink/server.go line 80)
-    # internal/workerlink/server.go Connect: a link with no hello within 10 seconds is closed
-    # internal/workerlink/server.go StatusEvery, silentFor: the worker says what it runs every 2 seconds, and a link silent for 20 seconds is hung up
+    # not under test, checked by hand: the server records its version, engines and missing tools with it (internal/domain/workers/workerlink/server.go line 80)
+    # internal/domain/workers/workerlink/server.go Connect: a link with no hello within 10 seconds is closed
+    # internal/domain/workers/workerlink/server.go StatusEvery, silentFor: the worker says what it runs every 2 seconds, and a link silent for 20 seconds is hung up
     And the worker's details page shows what the worker reads about itself over the link: yes
     # internal/web/workers_api.go showWorker: 15 seconds for the details, and the last 20 joined, online and offline entries
     When the worker's link drops
     Then the fleet takes it as gone, unless a newer link replaced it: yes
-    # not under test, checked by hand: the server records it offline (internal/workerlink/server.go line 88)
+    # not under test, checked by hand: the server records it offline (internal/domain/workers/workerlink/server.go line 88)
     # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork; the link dropping: internal/machines/fleet_test.go TestTheFleetPicksWhereAnAgentWorks
 
   @MACHINE-23 @worker @test
@@ -424,7 +424,7 @@ Feature: Workers
     Then the worker has claude: yes
     When an agent on another engine is checked against it
     Then the worker has that engine: no
-    # internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
+    # internal/domain/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
 
   # ---- Going offline ---------------------------------------------------------
 

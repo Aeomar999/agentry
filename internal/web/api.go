@@ -19,10 +19,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // listTasks lists every task's summary, an archived task's too: it is done,
