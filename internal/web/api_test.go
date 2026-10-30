@@ -270,7 +270,17 @@ func TestThePolicyShowsWithItsProblem(t *testing.T) {
 	}
 }
 
+// needsTheUI skips a test that reads the built page when there is none: it
+// isn't committed, so a fresh clone has it only after `make ui`.
+func needsTheUI(t *testing.T) {
+	t.Helper()
+	if _, isBuilt := built(); !isBuilt {
+		t.Skip("the UI isn't built: run `make ui`")
+	}
+}
+
 func TestServesTheUI(t *testing.T) {
+	needsTheUI(t)
 	server, _ := newTestServer(t)
 	get := func(path string) (*http.Response, string) {
 		response, err := http.Get(server.URL + path)
@@ -311,6 +321,7 @@ func TestServesTheUI(t *testing.T) {
 // the manifest, the service worker and the icons, at the root, with the
 // types it checks. The API still needs the token.
 func TestServesTheAppFilesWithoutTheToken(t *testing.T) {
+	needsTheUI(t)
 	server, _ := newTestServer(t)
 	get := func(path string) (*http.Response, string) {
 		response, err := http.Get(server.URL + path)

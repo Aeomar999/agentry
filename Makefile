@@ -1,13 +1,20 @@
 # `make` builds the UI, then the binary that embeds it.
-# Node is needed only for `make ui`; the built UI is committed, so
-# `go build` and `go install` work without it.
+# Node 24 is needed for `make ui`. The built UI isn't committed: `go build`
+# or `go install` without `make ui` gives a binary that serves a page saying
+# the UI isn't built and how to build it.
 
 .PHONY: all ui build workers test spec package desktop release-check
 
 all: ui build workers
 
+# built-from names the commit the page was built from.
 ui:
 	cd ui && npm ci && npm run build
+	git rev-parse HEAD > internal/web/static/dist/built-from
+
+# The page, built only when it is missing; `make ui` refreshes it.
+internal/web/static/dist/index.html:
+	$(MAKE) ui
 
 build:
 	go build -o bin/agentry ./cmd/agentry
@@ -21,7 +28,7 @@ workers:
 		GOOS=$${p%/*} GOARCH=$${p#*/} CGO_ENABLED=0 go build -o bin/agentry-$${p%/*}-$${p#*/} ./cmd/agentry || exit 1; \
 	done
 
-test:
+test: internal/web/static/dist/index.html
 	spec/check
 	go vet ./... && go test ./...
 	cd cmd/agentry-desktop && CGO_ENABLED=0 go vet . && CGO_ENABLED=0 go test .

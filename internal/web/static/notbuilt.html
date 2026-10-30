@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentry: the page isn't built</title>
+<style>
+  :root { color-scheme: light dark; --text: #1a1a1a; --muted: #555; --back: #fff; --code: #f0f0f0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --text: #e8e8e8; --muted: #aaa; --back: #161616; --code: #2a2a2a; }
+  }
+  body { margin: 0; background: var(--back); color: var(--text); font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 36rem; margin: 15vh auto 0; padding: 0 16px; }
+  h1 { font-size: 1.4rem; margin: 0 0 1rem; }
+  p { color: var(--muted); }
+  code { background: var(--code); padding: 0.1rem 0.3rem; font-size: 0.95em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Agentry's page isn't built</h1>
+  <p>This server was built without its page, so there is nothing to show here. Agentry's API still answers.</p>
+  <p>To build the page, run <code>make ui</code> at the repo's root (it needs Node 24), then build and start the server again, for example with <code>make build</code>.</p>
+</main>
+</body>
+</html>

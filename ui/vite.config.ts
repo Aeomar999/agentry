@@ -12,7 +12,7 @@ export default defineConfig({
   // Served from this machine, not over the internet, so large bundles are
   // fine: the app is one, and Monaco (VS Code's editor) is a second, loaded
   // only by the pages that show a file.
-  build: { outDir: "../internal/web/dist", emptyOutDir: true, chunkSizeWarningLimit: 2500 },
+  build: { outDir: "../internal/web/static/dist", emptyOutDir: true, chunkSizeWarningLimit: 2500 },
   server: {
     proxy: { "/api": { target: "http://127.0.0.1:7800", ws: true } },
   },

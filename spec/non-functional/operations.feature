@@ -515,9 +515,9 @@ Feature: Operations
 
   @OPS-27 @manual
   Scenario: The Makefile's targets build the UI, the binary, the worker builds, run the checks and package the zips
-    # Makefile: all = ui build workers; ui = cd ui && npm ci && npm run build; build = go build -o bin/agentry ./cmd/agentry
+    # Makefile: all = ui build workers; ui = cd ui && npm ci && npm run build, then git rev-parse HEAD into internal/web/static/dist/built-from; build = go build -o bin/agentry ./cmd/agentry
     # Makefile: WORKER_PLATFORMS = darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64, built with CGO_ENABLED=0 to bin/agentry-<os>-<arch>
-    # Makefile: test = go vet ./... && go test ./... then cd ui && npm run lint; package = ui, then go run ./tools/packaging; desktop = go run ./tools/packaging desktop, with no ui, so it packages the committed internal/web/dist
+    # Makefile: test = internal/web/static/dist/index.html (make ui, only when it is missing), spec/check, go vet ./... && go test ./... then cd ui && npm run lint; package = ui, then go run ./tools/packaging; desktop = go run ./tools/packaging desktop, with no ui, so it packages the committed internal/web/dist
     # Steps:
     # 1. Run make -n all, make -n test and make -n package and read the commands.
     # 2. Run make build and check bin/agentry.
@@ -528,7 +528,7 @@ Feature: Operations
     When make workers runs
     Then bin holds 6 worker builds, one per platform, beside bin/agentry
     When make test runs
-    Then it runs go vet, go test and the UI's lint, and fails if any fails: yes
+    Then it builds the UI first only when internal/web/static/dist/index.html is missing, then runs go vet, go test and the UI's lint, and fails if any fails: yes
     When make package runs
     Then it builds the UI first and then runs the packaging program: yes
     When make desktop runs
@@ -560,6 +560,16 @@ Feature: Operations
     Then the start is refused, saying it is the live sessions folder, and the attach is refused: yes
     And nothing is written to the live sessions folder
     # not under test, checked by hand: sessionstest gives each test package its own folder and fails a run that leaves a session or process behind (internal/platform/sessions/sessionstest/sessionstest.go)
+
+  @OPS-46 @test
+  Scenario: A server built without the UI says how to build it, and its API still answers
+    # internal/web/page.go embeds internal/web/static; the built page in internal/web/static/dist is git-ignored, and internal/web/static/notbuilt.html is committed
+    # internal/web/page_test.go TestServesTheNotBuiltPageWithoutTheUI serves from a tree with no dist; TestTheNotBuiltPageSaysHowToBuildIt reads the committed page
+    Given a binary built with go build from a clone where make ui has not run
+    When the browser opens /, /tasks or any other page path
+    Then it gets the page notbuilt.html with status 200, saying the page isn't built and to run make ui with Node 24, then build again: yes
+    And GET /api/tasks with the token still answers 200: yes
+    # not under test, checked by hand: a binary built after make ui serves the real page (internal/web/api_test.go TestServesTheUI, which skips when the page isn't built)
 
   # How a release is packaged
 

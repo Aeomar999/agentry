@@ -125,7 +125,7 @@ Checked by: `spec/check`, which fails on an em-dash anywhere under `spec/`; the 
 
 ## 8. go vet, go test and the UI's checks are green
 
-`go test ./...` passes at the repo root (README.md, Work on it). The Makefile's `test` target runs `go vet ./... && go test ./...`, then `cd ui && npm run lint`, which is `tsc --noEmit && prettier --check src` (the UI's type and format checks; README.md, Work on it). CI's check stage runs on `golang:1.27-bookworm` for every merge request and every commit on `dev`: it fails if `internal/web/dist/index.html` is missing, then runs `go vet ./...` and `go test ./...`; the UI is built and committed in `internal/web/dist`, so the pipeline needs no Node (`.gitlab-ci.yml`). The build and deploy stages run only after check passes.
+`go test ./...` passes at the repo root (README.md, Work on it). The Makefile's `test` target builds the page with `make ui` when `internal/web/static/dist/index.html` is missing, then runs `spec/check` and `go vet ./... && go test ./...`, then `cd ui && npm run lint`, which is `tsc --noEmit && prettier --check src` (the UI's type and format checks; README.md, Work on it). CI's check stage runs on `golang:1.27-bookworm` for every merge request and every commit on `dev`: it fails if `internal/web/dist/index.html` is missing, then runs `go vet ./...` and `go test ./...`; the UI is built and committed in `internal/web/dist`, so the pipeline needs no Node (`.gitlab-ci.yml`). The build and deploy stages run only after check passes.
 
 Checked by: `make test` on the branch before it is merged, and the pipeline on `dev`; `make spec` for the spec folder, which story 7 of the spec epic wires into `test` and CI.
 

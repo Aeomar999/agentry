@@ -97,15 +97,16 @@ The desktop app is the same Agentry, its server and its page, in a window of its
 
 ### From the source
 
-You need Go 1.27 and git.
+You need Go 1.27 and git, and Node 24 to build the page.
 
 ```sh
+make ui                                     # build the page, which the binary embeds
 go build -o bin/agentry ./cmd/agentry
 ./bin/agentry open                          # start in the background and open the browser
 ./bin/agentry serve -repo /path/to/repo     # or run it in the foreground
 ```
 
-`serve` prints a link with the page's token in it (`open` prints one per address, as above), which signs the browser in and stays the same across restarts. The UI is built into the binary, so this needs no Node; to change the UI, see [Work on it](#work-on-it). `make package` makes the zips above, for every system, from any one machine, into `release/`. [Make a release](#make-a-release) says how they get published.
+`serve` prints a link with the page's token in it (`open` prints one per address, as above), which signs the browser in and stays the same across restarts. The UI is built into the binary, so running it needs no Node. A binary built without `make ui` serves a page saying the UI isn't built and how to build it; to change the UI, see [Work on it](#work-on-it). `make package` makes the zips above, for every system, from any one machine, into `release/`. [Make a release](#make-a-release) says how they get published.
 
 - **Repo:** `-repo` sets the default repo for new tasks; the page can name another, or make a new one.
 - **Data:** `-data` moves `~/.agentry`.
@@ -369,7 +370,7 @@ token = "..."
 What Agentry does is written down in [spec/](spec/README.md) as Given, When, Then scenarios: one file for each kind of user, and one for each quality, such as reliability and security. `spec/check` (or `make spec`) checks that every scenario has its ID, its check tag and a result that can be checked; it runs in `make test` and in CI. Agents build from the spec and audit against it.
 
 ```sh
-make test       # go vet, go test, and the UI's type and format checks
+make test       # go vet, go test, and the UI's type and format checks; builds the UI first if it isn't built
 make            # rebuild the UI, then the binary
 make workers    # the builds other machines download, next to bin/agentry
 make package    # the zips for every system, in release/
@@ -377,7 +378,7 @@ make desktop    # the desktop app, in release/: Linux and Windows on Linux, the 
 make release-check  # before publishing: checks release/ against the tag, writes SHA256SUMS
 ```
 
-The UI lives in `ui/`: React, TypeScript, Vite and Tailwind, built into `internal/web/dist`, which is committed. `cd ui && npm run dev` serves it with live reload against a running `agentry serve`. Its components go `atoms` (spend the design tokens in `src/styles/globals.css`), `molecules`, `organisms` (own state) and one template, `AdminShell`, that every page renders in. The figures in `docs/diagrams` are drawn by `docs/diagrams/source/figures.py`.
+The UI lives in `ui/`: React, TypeScript, Vite and Tailwind, built by `make ui` into `internal/web/static/dist`, which is not committed. `cd ui && npm run dev` serves it with live reload against a running `agentry serve`. Its components go `atoms` (spend the design tokens in `src/styles/globals.css`), `molecules`, `organisms` (own state) and one template, `AdminShell`, that every page renders in. The figures in `docs/diagrams` are drawn by `docs/diagrams/source/figures.py`.
 
 Each folder in `internal/` does one job, and folders only depend on the ones below them:
 - `events` lists what can happen.
