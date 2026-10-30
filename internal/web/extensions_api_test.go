@@ -20,9 +20,9 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/settings/settingsfile"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
-	"gitlab.com/dev.chempa/agentry/internal/settingsfile"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
 

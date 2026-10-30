@@ -12,10 +12,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/connections"
+	"gitlab.com/dev.chempa/agentry/internal/domain/settings"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
-	"gitlab.com/dev.chempa/agentry/internal/settings"
 )
 
 // Equal checks the state against a replay of the store's log, which stays

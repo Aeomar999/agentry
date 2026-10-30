@@ -1,7 +1,7 @@
 Feature: Tasks and the board
   Adding a task, the board and its columns, the Tasks page, a task's page,
   running limits, search, the keys and the archive.
-  # Sources: internal/domain/tasks, internal/archive, internal/settings,
+  # Sources: internal/domain/tasks, internal/archive, internal/domain/settings,
   # internal/coordinator/slots.go, internal/web/api.go, internal/web/board_api.go,
   # internal/web/erase_api.go, internal/web/archives.go,
   # internal/web/settings_api.go, ui/src/pages/TasksPage.tsx,
@@ -320,7 +320,7 @@ Feature: Tasks and the board
   @TASK-28 @user @test
   Scenario: Most running at once is set on the Tasks page
     # internal/web/settings_api_test.go TestYouSetTheMostTasksRunningAtOnce
-    # from 1 to 100, 0 for no limit: internal/settings/settings.go line 33, MostRunningTasks
+    # from 1 to 100, 0 for no limit: internal/domain/settings/settings.go line 33, MostRunningTasks
     # presets 1, 2, 3, 4, 5, 8, 10: ui/src/lib/limits.ts line 87
     Given the Tasks page with no limit set
     When the user picks 2 in "Most running at once"

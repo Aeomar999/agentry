@@ -9,7 +9,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
-	"gitlab.com/dev.chempa/agentry/internal/settings"
+	"gitlab.com/dev.chempa/agentry/internal/domain/settings"
 )
 
 // settingsView is your settings as the page shows and changes them.

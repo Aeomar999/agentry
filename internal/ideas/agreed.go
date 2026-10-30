@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
-	"gitlab.com/dev.chempa/agentry/internal/settings"
+	"gitlab.com/dev.chempa/agentry/internal/domain/settings"
 )
 
 // Name is the extension's name, which a team template lists to make its

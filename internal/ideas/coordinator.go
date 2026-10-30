@@ -9,9 +9,9 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/settings"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
-	"gitlab.com/dev.chempa/agentry/internal/settings"
 )
 
 // A Visionaries session ends with the features it suggests, on its done

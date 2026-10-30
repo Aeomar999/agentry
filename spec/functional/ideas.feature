@@ -1,6 +1,6 @@
 Feature: Ideas
   The Visionaries suggest features as ideas; the user accepts or dismisses each one.
-  # Sources: internal/ideas, internal/settings, internal/web/settings_api.go,
+  # Sources: internal/ideas, internal/domain/settings, internal/web/settings_api.go,
   # ui/src/extensions/ideas and their tests.
 
   # ---- The Ideas page --------------------------------------------------------
@@ -189,7 +189,7 @@ Feature: Ideas
   Scenario: Auto-accept is off until you turn it on, and starting them counts only with it
     # internal/web/settings_api_test.go TestYouTurnAutoAcceptingIdeasOnAndOff and TestYouChooseTheAutoAcceptRule
     # internal/ideas/agreed_test.go TestAgentryAcceptsOnlyWhatTheSettingAndTheVisionariesAllow and TestAgentryStartsOnlyWhileTheSettingsSay
-    # the defaults: internal/settings/settings.go line 46
+    # the defaults: internal/domain/settings/settings.go line 46
     Given settings never changed
     When they are read
     Then visionariesOnEpicClose is yes, autoAcceptIdeas and autoStartIdeas are no, and autoAcceptRule is everyoneBacked

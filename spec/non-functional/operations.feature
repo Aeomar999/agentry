@@ -134,7 +134,7 @@ Feature: Operations
     # cmd/agentry/serve.go -data default: filepath.Join(home, ".agentry"); cmd/agentry/open.go the same; the launchers pass no -data
     # cmd/agentry/open.go -repo default: filepath.Join(home, "Agentry"), made at the first start
     # cmd/agentry/serve.go: agentry.db, state.snapshot, files, repos, worktrees, ui-token, hook-token, desk-token, helper-token
-    # cmd/agentry/policy.go policyFile = policy.toml, settingsFile = features.toml, which is read and not written (internal/settingsfile/settingsfile.go Open, gone); internal/webpush/webpush.go File = push.json
+    # cmd/agentry/policy.go policyFile = policy.toml, settingsFile = features.toml, which is read and not written (internal/domain/settings/settingsfile/settingsfile.go Open, gone); internal/webpush/webpush.go File = push.json
     # internal/platform/tlsca/ca.go Folder = tls; internal/platform/client/client.go ServerFile = server.json
     # cmd/agentry/serve_lock.go serve.lock; cmd/agentry/open.go serve.log and serve.pid
     # internal/platform/sessions/proc_unix.go sessionsDir: the temporary folder, agentry-<uid>; proc_windows.go: the user cache folder, agentry\sessions
@@ -156,7 +156,7 @@ Feature: Operations
 
   @OPS-42 @test
   Scenario: A saved features.toml reaches a running feature with no restart, and a removed one is said once
-    # internal/settingsfile/settingsfile_test.go TestAnEditReachesSettingsHandedOutBefore, TestARemovedFileIsSaidOnce, TestAMissingFileIsNoSettings and TestABrokenFileAtTheStartIsNoSettings
+    # internal/domain/settings/settingsfile/settingsfile_test.go TestAnEditReachesSettingsHandedOutBefore, TestARemovedFileIsSaidOnce, TestAMissingFileIsNoSettings and TestABrokenFileAtTheStartIsNoSettings
     Given a feature that read its settings from features.toml, which is watched
     When the file is saved with a new value, then removed, then put back
     Then the feature reads the new value with no restart, and once the file is removed its secrets are gone: yes
