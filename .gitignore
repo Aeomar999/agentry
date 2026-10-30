@@ -17,3 +17,6 @@ node_modules/
 
 # The built page: `make ui` writes it, and the binary embeds it
 internal/web/static/dist/
+
+# Launch videos: the brag skill writes them here
+brag-output/
