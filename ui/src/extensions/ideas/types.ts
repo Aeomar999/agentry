@@ -1,6 +1,6 @@
 import type { BoardColumn } from "@/api/types";
 
-// A feature a Visionaries session suggested (internal/ideas/routes.go ideaView).
+// A feature a Visionaries session suggested (internal/extensions/ideas/routes.go ideaView).
 export interface Idea {
   id: string;
   title: string;
@@ -40,7 +40,7 @@ export interface IdeaAcceptance {
 }
 
 // The open task an idea looks like, which an accept without anyway is
-// refused for (internal/ideas/routes.go duplicateView, in the 409's body).
+// refused for (internal/extensions/ideas/routes.go duplicateView, in the 409's body).
 export interface IdeaDuplicate {
   id: string;
   title: string;

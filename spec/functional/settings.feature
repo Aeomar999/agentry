@@ -12,7 +12,7 @@ Feature: Settings
   Scenario: The Settings page lists the features that are off, with the way to turn each on, and what the log holds that this build skipped
     # ui/src/pages/SettingsPage.test.tsx "on a fresh install, lists Ideas with its why and Ask the visionaries", "doesn't list a visible feature, and says nothing is off", "says nothing until the manifest is read", "shows one tally line per prefix and per type", "ignores a feature only the server knows" and "shows a feature with no button by its label and why alone"
     # the page header and the Privacy panel: ui/src/pages/SettingsPage.tsx lines 33 and 53 to 67; the heading "Features that are off" is not asserted
-    # the why is the server's sentence, internal/ideas/extension.go line 66; the page test's fixture carries a shorter one, ui/src/pages/SettingsPage.test.tsx lines 37 and 52
+    # the why is the server's sentence, internal/extensions/ideas/extension.go line 66; the page test's fixture carries a shorter one, ui/src/pages/SettingsPage.test.tsx lines 37 and 52
     Given a fresh install, with no Visionaries team
     When the Settings page is shown
     Then Ideas is shown among the features that are off, with the server's why and the button "Ask the visionaries"

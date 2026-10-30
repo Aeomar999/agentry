@@ -7,7 +7,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/extensions/ideas"
 )
 
 func TestCheckShapeAndWriter(t *testing.T) {

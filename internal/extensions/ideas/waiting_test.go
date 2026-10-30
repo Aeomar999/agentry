@@ -16,7 +16,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/settings"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/extensions/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/mcp"
 	"gitlab.com/dev.chempa/agentry/internal/platform/client"
 )

@@ -8,7 +8,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
-	"gitlab.com/dev.chempa/agentry/internal/schedules"
+	"gitlab.com/dev.chempa/agentry/internal/extensions/schedules"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
 

@@ -1,6 +1,6 @@
 Feature: Ideas
   The Visionaries suggest features as ideas; the user accepts or dismisses each one.
-  # Sources: internal/ideas, internal/domain/settings, internal/web/settings_api.go,
+  # Sources: internal/extensions/ideas, internal/domain/settings, internal/web/settings_api.go,
   # ui/src/extensions/ideas and their tests.
 
   # ---- The Ideas page --------------------------------------------------------
@@ -8,7 +8,7 @@ Feature: Ideas
   @IDEA-01 @user @manual
   Scenario: Ideas is in the sidebar under Work, with the count of open ideas
     # the Work section, Tasks then Plan, then each feature's item with its badge: ui/src/components/organisms/Sidebar.tsx lines 14 to 22 and 65 to 77
-    # the Ideas item: ui/src/extensions/ideas/index.tsx line 10; its badge counts the open ideas: internal/ideas/routes_test.go TestIdeasBadgeCountsOpenIdeas
+    # the Ideas item: ui/src/extensions/ideas/index.tsx line 10; its badge counts the open ideas: internal/extensions/ideas/routes_test.go TestIdeasBadgeCountsOpenIdeas
     # the page header: ui/src/extensions/ideas/IdeasPage.tsx lines 64 to 66
     Given a Visionaries team and 2 open ideas
     When the sidebar is shown
@@ -20,7 +20,7 @@ Feature: Ideas
 
   @IDEA-02 @user @test
   Scenario: Open ideas are grouped by the session that suggested them, newest session first
-    # internal/ideas/routes_test.go TestIdeasListNewestSessionFirst
+    # internal/extensions/ideas/routes_test.go TestIdeasListNewestSessionFirst
     # the groups on the page: ui/src/extensions/ideas/IdeasPage.tsx lines 106 to 124 and 304 to 312, sessionsOf
     Given task-1, an older session in one repo, and task-2, a newer session in another
     And task-2 suggested an idea, then task-1 one, then task-2 another
@@ -60,9 +60,9 @@ Feature: Ideas
 
   @IDEA-05 @user @test
   Scenario: Ideas shows while a Visionaries team or an idea is there, and the page says what it is otherwise
-    # internal/ideas/routes_test.go TestIdeasHiddenWithNoTeamAndNoIdeas, TestIdeasOnWithTheVisionariesTeam, TestIdeasKeptForTheirIdeasWhenTheTeamIsRemoved and TestIdeasBadgeCountsOpenIdeas
+    # internal/extensions/ideas/routes_test.go TestIdeasHiddenWithNoTeamAndNoIdeas, TestIdeasOnWithTheVisionariesTeam, TestIdeasKeptForTheirIdeasWhenTheTeamIsRemoved and TestIdeasBadgeCountsOpenIdeas
     # ui/src/extensions/ideas/view.test.ts "is off with no ideas and no team, and on with the team", "is on with ideas and no team" and "settles when no template turns Ideas on, on with ideas"
-    # internal/ideas/extension_test.go TestIdeasIsOnByTheTeamsTemplate, for the why
+    # internal/extensions/ideas/extension_test.go TestIdeasIsOnByTheTeamsTemplate, for the why
     # not under test, checked by hand: the Ideas page's off view, which shows what Ideas is and only the button "Ask the visionaries", or with no template that turns Ideas on reads "This Agentry has no team template that turns Ideas on, so there is no team to ask." and offers no button: ui/src/extensions/ideas/IdeasPage.tsx lines 155 to 167; ui/src/extensions/ideas/AskVisionaries.tsx lines 10 to 24
     Given no Visionaries team and no ideas
     When the features are read
@@ -94,7 +94,7 @@ Feature: Ideas
 
   @IDEA-07 @user @test
   Scenario: Accept makes a task or an epic in the idea's repo, in your Backlog, with your note
-    # internal/ideas/ideas_test.go TestAcceptMakesABacklogTaskInTheIdeasRepo and TestAnIdeaIsAcceptedOrDismissedOnce; internal/ideas/routes_test.go TestYouAcceptAnIdeaOnce
+    # internal/extensions/ideas/ideas_test.go TestAcceptMakesABacklogTaskInTheIdeasRepo and TestAnIdeaIsAcceptedOrDismissedOnce; internal/extensions/ideas/routes_test.go TestYouAcceptAnIdeaOnce
     # README.md, Ideas
     Given an open idea "Search the board" in a repo, suggested as a task
     When the user accepts it as an epic with the note "Yes, soon"
@@ -127,9 +127,9 @@ Feature: Ideas
 
   @IDEA-09 @user @test
   Scenario: Accept and start makes the task In progress, with the budget you give
-    # internal/ideas/routes_test.go TestYouAcceptAndStartAnIdea and TestATaskFromAnIdeaYouAcceptTakesTheServersLimits
-    # internal/ideas/ideas_test.go TestAcceptAndStartMakesATaskOutOfTheBacklog and TestAgentryCantAcceptAndStart
-    # 5,000,000 tokens and 12 turns are the test server's limits: internal/ideas/routes_test.go line 256
+    # internal/extensions/ideas/routes_test.go TestYouAcceptAndStartAnIdea and TestATaskFromAnIdeaYouAcceptTakesTheServersLimits
+    # internal/extensions/ideas/ideas_test.go TestAcceptAndStartMakesATaskOutOfTheBacklog and TestAgentryCantAcceptAndStart
+    # 5,000,000 tokens and 12 turns are the test server's limits: internal/extensions/ideas/routes_test.go line 256
     Given a server whose defaults are 5,000,000 tokens and 12 turns, and open ideas to accept
     When the user accepts 1 with start and a budget of 700
     Then the task is made In progress, not parked, with a budget of exactly 700 and the server's 12 turns
@@ -147,9 +147,9 @@ Feature: Ideas
 
   @IDEA-10 @user @test
   Scenario: An idea that looks like an open task makes none until you say anyway
-    # internal/ideas/routes_test.go TestAnIdeaLikeAnOpenTaskIsRefusedUntilYouSayAnyway
+    # internal/extensions/ideas/routes_test.go TestAnIdeaLikeAnOpenTaskIsRefusedUntilYouSayAnyway
     # ui/src/extensions/ideas/IdeaDialogs.test.tsx "shows the open task an idea looks like, and makes another only when you say anyway" and "Cancel leaves the idea open, sending nothing more"
-    # the titles share more than half their words, past the filler words: internal/ideas/duplicate.go line 121, SameTitleAbove 0.5
+    # the titles share more than half their words, past the filler words: internal/extensions/ideas/duplicate.go line 121, SameTitleAbove 0.5
     # the banner "It looks like an open task", its words and the buttons: ui/src/extensions/ideas/IdeaDialogs.tsx lines 76 to 92; the test asserts the link and the requests, not the words
     Given the idea "Make a ship the user chose actually push, and count it shipped only after the push" accepted as task-2
     And the open idea "Make a ship the user chose push, and count it shipped only when it pushed" in the same repo
@@ -164,9 +164,9 @@ Feature: Ideas
 
   @IDEA-11 @user @test
   Scenario: Dismiss puts the idea in the history with your reason
-    # internal/ideas/routes_test.go TestYouDismissAnIdea and TestAnUnknownIdeaIsNotFound; internal/ideas/ideas_test.go TestDismissKeepsYourNote
+    # internal/extensions/ideas/routes_test.go TestYouDismissAnIdea and TestAnUnknownIdeaIsNotFound; internal/extensions/ideas/ideas_test.go TestDismissKeepsYourNote
     # the dialog "Dismiss “<title>”" with Reason, Dismiss and Keep, and the toast "Dismissed “<title>”" with "It is in the history.": ui/src/extensions/ideas/IdeaDialogs.tsx lines 205 to 229
-    # the words "no such idea": internal/ideas/routes.go lines 143 and 152; the test asserts the 404 only
+    # the words "no such idea": internal/extensions/ideas/routes.go lines 143 and 152; the test asserts the 404 only
     Given an open idea "Dark mode"
     When the user dismisses it with the note " The OS does it "
     Then the idea is dismissed with exactly the note "The OS does it" and a decidedAt
@@ -181,14 +181,14 @@ Feature: Ideas
     When the open task it looks like is found
     Then a done task counts: no, a task in another repo counts: no, and a task in the Backlog counts: yes
     And of 2 candidates the closest title wins, and on a tie the 1 made first
-    # internal/ideas/duplicate_test.go TestOnlyAnOpenTaskInTheReposCounts
+    # internal/extensions/ideas/duplicate_test.go TestOnlyAnOpenTaskInTheReposCounts
 
   # ---- Auto-accept and duplicates --------------------------------------------
 
   @IDEA-13 @user @test
   Scenario: Auto-accept is off until you turn it on, and starting them counts only with it
     # internal/web/settings_api_test.go TestYouTurnAutoAcceptingIdeasOnAndOff and TestYouChooseTheAutoAcceptRule
-    # internal/ideas/agreed_test.go TestAgentryAcceptsOnlyWhatTheSettingAndTheVisionariesAllow and TestAgentryStartsOnlyWhileTheSettingsSay
+    # internal/extensions/ideas/agreed_test.go TestAgentryAcceptsOnlyWhatTheSettingAndTheVisionariesAllow and TestAgentryStartsOnlyWhileTheSettingsSay
     # the defaults: internal/domain/settings/settings.go line 46
     Given settings never changed
     When they are read
@@ -207,7 +207,7 @@ Feature: Ideas
 
   @IDEA-14 @user @test
   Scenario: Which ideas count as agreed: Everyone backed it, or Nobody doubted it
-    # internal/ideas/agreed_test.go TestAnIdeaIsAgreedWhenEveryViewpointBacksIt and TestAnIdeaNobodyDoubtedIsAgreedWithTwoBackers; internal/ideas/routes_test.go TestAnOpenIdeaSaysWhyItWasntAutoAccepted
+    # internal/extensions/ideas/agreed_test.go TestAnIdeaIsAgreedWhenEveryViewpointBacksIt and TestAnIdeaNobodyDoubtedIsAgreedWithTwoBackers; internal/extensions/ideas/routes_test.go TestAnOpenIdeaSaysWhyItWasntAutoAccepted
     # the 4 viewpoints of the Visionaries template, product-strategist, user-advocate, technologist and skeptic, under visionary-lead: internal/domain/agents/teams.go lines 71 to 79
     # the page's line: ui/src/extensions/ideas/IdeaCard.tsx line 39
     Given the Visionaries team with its 4 viewpoints
@@ -224,8 +224,8 @@ Feature: Ideas
 
   @IDEA-15 @user @test
   Scenario: Agentry never accepts a duplicate, and says which idea it repeats
-    # internal/ideas/agreed_test.go TestAgentryAcceptsNoIdeaYouHadBefore and TestTheRulesRefuseAgentryADuplicate; internal/ideas/duplicate_test.go TestAnIdeaLooksLikeAnOpenTaskWithACloseTitle
-    # the same title once case, punctuation and filler words are dropped, or more than 35% shared words in the problems and proposals, each at least 10 words: internal/ideas/duplicate.go lines 66 to 72, 144 and 148
+    # internal/extensions/ideas/agreed_test.go TestAgentryAcceptsNoIdeaYouHadBefore and TestTheRulesRefuseAgentryADuplicate; internal/extensions/ideas/duplicate_test.go TestAnIdeaLooksLikeAnOpenTaskWithACloseTitle
+    # the same title once case, punctuation and filler words are dropped, or more than 35% shared words in the problems and proposals, each at least 10 words: internal/extensions/ideas/duplicate.go lines 66 to 72, 144 and 148
     # README.md, Ideas: "Under either rule Agentry never accepts a duplicate"
     Given an open idea "Search the board" every viewpoint backed
     When another idea " search the Board" in the same repo was dismissed earlier
@@ -256,11 +256,11 @@ Feature: Ideas
 
   @IDEA-17 @agent @test
   Scenario: The Visionaries' ideas land in Ideas from the lead's done decision, for the user to decide
-    # internal/ideas/ideas_test.go TestASuggestionComesFromATask; the done decision: internal/coordinator/ideas_test.go TestAVisionariesDoneKeepsItsIdeas; once: TestADoneNamingOneTitleTwiceKeepsOneIdea in the same file
+    # internal/extensions/ideas/ideas_test.go TestASuggestionComesFromATask; the done decision: internal/coordinator/ideas_test.go TestAVisionariesDoneKeepsItsIdeas; once: TestADoneNamingOneTitleTwiceKeepsOneIdea in the same file
     Given the visionary-lead's done decision carries "ideas", each with a title, the problem, the proposal and a size of S, M or L
     When the loop applies the decision
     Then each idea is kept once, from that task and about its repo
     And an idea with an empty title, a size "XL", a kind "story", from a task that does not exist, or from an agent not working on the task is refused
     And only the user accepts or dismisses an idea, never an agent
-    # IdeasFormat and suggest: internal/ideas/coordinator.go; the user decides: TestOnlyYouAcceptOrDismiss in internal/ideas/ideas_test.go;
+    # IdeasFormat and suggest: internal/extensions/ideas/coordinator.go; the user decides: TestOnlyYouAcceptOrDismiss in internal/extensions/ideas/ideas_test.go;
     # the skeptic's verdict closes the session: internal/domain/agents/defaults/visionaries/skeptic.md

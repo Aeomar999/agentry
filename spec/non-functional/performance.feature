@@ -124,7 +124,7 @@ Feature: Performance
 
   @PERF-16 @test
   Scenario: Listing ideas reads the state in memory and sends no query to the database
-    # internal/ideas/routes_test.go TestListingIdeasSendsNoQuery
+    # internal/extensions/ideas/routes_test.go TestListingIdeasSendsNoQuery
     Given a server with 2 ideas suggested in 2 repos, 1 of them then dismissed through the API
     When GET /api/ideas and GET /api/ideas?repo=<the open idea's repo> are read
     Then the first lists both, newest first, and the second only the open one

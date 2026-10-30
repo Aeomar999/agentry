@@ -117,7 +117,7 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **reviewer**: the Software team's checker that reads the change and ends its report with a verdict.
 - **rule**: one line of a profile, read top to bottom, the first match deciding allow, ask or deny; it matches tools, commands, paths, where and redirects, and has a `why` the page shows.
 - **scenario**: one behaviour in a feature file, in Given, When, Then form, tagged with an ID and one check tag; the rules are in spec/README.md.
-- **schedule**: a feature whose streams make a task at a set time, daily, on weekdays or on some days, in a time zone; on dev it registers its events and nothing on the page uses it yet (internal/schedules, docs/design/schedules.md).
+- **schedule**: a feature whose streams make a task at a set time, daily, on weekdays or on some days, in a time zone; on dev it registers its events and nothing on the page uses it yet (internal/extensions/schedules, docs/design/schedules.md).
 - **secret**: a value in a feature's secrets table in features.toml, such as a git host's token; it never reaches the log, the snapshot, the page or the API, and no agent may read the file.
 - **session**: one agent's terminal session, kept by a small host process so it runs on when Agentry restarts, which the page watches live; also a Visionaries session, the task whose ideas come out of it.
 - **settings**: the user's choices for how Agentry works, kept in the log's settings stream and changed from the Ideas page or `PUT /api/settings`: the follow-up sessions, auto-accept, its rule and the most tasks running at once.

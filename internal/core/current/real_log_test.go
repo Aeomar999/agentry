@@ -13,7 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/settings"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/extensions/ideas"
 )
 
 // Test 3: every prefix of a real log. On a copy of a real agentry.db, named

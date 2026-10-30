@@ -1,7 +1,7 @@
 Feature: Agentry from Claude Code
   Plain claude in any repo hands work to Agentry through its MCP tools and hears back from it.
   # Sources: cmd/agentry/mcp.go, cmd/agentry/claudecode.go, internal/mcp,
-  # internal/ideas/tools.go, internal/domain/connections, internal/web/integrations_api.go
+  # internal/extensions/ideas/tools.go, internal/domain/connections, internal/web/integrations_api.go
   # and their tests.
 
   # ---- Installing the integration --------------------------------------------
@@ -390,7 +390,7 @@ Feature: Agentry from Claude Code
     Given 1 open idea in this repo and 3 ideas accepted, dismissed or in another repo
     When Claude calls list_ideas
     Then 1 idea is listed, with its state, title, size, kind, the task it was suggested in, its problem and its feature
-    # internal/ideas/tools.go listIdeas: the problem and feature lines are each cut at 300 characters (tasks.OneLine)
+    # internal/extensions/ideas/tools.go listIdeas: the problem and feature lines are each cut at 300 characters (tasks.OneLine)
     And who backed and who doubted it are named: yes
     When Claude calls list_ideas with state all
     Then this repo's accepted and dismissed ideas are listed too: accepted ones say what they became, such as epic-30, and dismissed ones say dismissed with the user's note
@@ -398,19 +398,19 @@ Feature: Agentry from Claude Code
     Then every repo's ideas are listed: yes
     When Claude calls list_ideas with a state that is not open, accepted, dismissed or all
     Then the tool fails, naming the 4 states there are
-    # internal/ideas/tools_test.go TestListIdeasShowsTheOpenOnesUnlessAsked; the unknown state: TestTheArgumentsAreSentAsGiven
+    # internal/extensions/ideas/tools_test.go TestListIdeasShowsTheOpenOnesUnlessAsked; the unknown state: TestTheArgumentsAreSentAsGiven
 
   @TOOLS-38 @claude-code @test
   Scenario: accept_idea is the user's decision, asked through Claude Code
     Given an open idea, and Claude Code able to ask the user
     When Claude calls accept_idea for it
     Then Claude Code asks the user 1 time, showing the problem and the feature, with start to choose
-    # not under test, checked by hand: the kind and a note to choose too (internal/ideas/tools.go lines 132 and 133)
+    # not under test, checked by hand: the kind and a note to choose too (internal/extensions/ideas/tools.go lines 132 and 133)
     And when the user accepts with a kind and a note, 1 accept is posted with that kind and note, and the reply names the task-N it became with a link
     And when the user chooses leave open, declines or closes the question, 0 posts are sent and the reply says nothing was written
     When the user accepts with start
     Then 1 accept is posted with start, and the reply says the task started
-    # internal/ideas/tools_test.go TestTheUserDecidesOnAnIdea; the feature: TestAnIdeaWithoutSizeOrTask; start: TestAcceptingAnIdeaCanStartItsTask
+    # internal/extensions/ideas/tools_test.go TestTheUserDecidesOnAnIdea; the feature: TestAnIdeaWithoutSizeOrTask; start: TestAcceptingAnIdeaCanStartItsTask
 
   @TOOLS-39 @claude-code @test
   Scenario: Without elicitation accept_idea and dismiss_idea act on the arguments as the user's decision
@@ -422,12 +422,12 @@ Feature: Agentry from Claude Code
     When Claude calls accept_idea with a kind that is neither task nor epic
     Then the tool fails with the server's reason, an idea becomes a task or an epic: yes
     # not under test, checked by hand: 0 tasks are made; the fake server refuses the kind
-    # internal/ideas/tools_test.go TestWithoutElicitationTheArgumentsAreTheDecision; the kind refused: TestTheArgumentsAreSentAsGiven
+    # internal/extensions/ideas/tools_test.go TestWithoutElicitationTheArgumentsAreTheDecision; the kind refused: TestTheArgumentsAreSentAsGiven
 
   @TOOLS-40 @claude-code @test
   Scenario: An idea that looks like an open task makes none until the user chooses to anyway
     Given an open idea whose title is close to an open task's, and Claude Code able to ask the user
-    # internal/ideas/duplicate.go SameTitleAbove: titles sharing more than 0.5 of their words look alike
+    # internal/extensions/ideas/duplicate.go SameTitleAbove: titles sharing more than 0.5 of their words look alike
     When Claude calls accept_idea for it and the user accepts
     Then the server refuses the accept with status 409, naming the open task
     And Claude Code asks the user a 2nd time, showing that task with 1 link, whether to make another anyway
@@ -438,14 +438,14 @@ Feature: Agentry from Claude Code
     Then the reply names the 1 open task it looks like, says nothing was written, and says to call accept_idea again with anyway
     When Claude calls accept_idea with anyway
     Then the accept is posted with anyway and the task is made: yes
-    # internal/ideas/tools_test.go TestAnIdeaLikeAnOpenTaskIsTheUsersToMakeAnyway; the server's 409: internal/ideas/routes_test.go TestAnIdeaLikeAnOpenTaskIsRefusedUntilYouSayAnyway
+    # internal/extensions/ideas/tools_test.go TestAnIdeaLikeAnOpenTaskIsTheUsersToMakeAnyway; the server's 409: internal/extensions/ideas/routes_test.go TestAnIdeaLikeAnOpenTaskIsRefusedUntilYouSayAnyway
 
   @TOOLS-41 @claude-code @test
   Scenario: dismiss_idea is the user's decision, asked through Claude Code
     Given an open idea, and Claude Code able to ask the user
     When Claude calls dismiss_idea for it
     Then Claude Code asks the user: yes
-    # not under test, checked by hand: it asks 1 time, with a note to give so the Visionaries don't suggest it again (internal/ideas/tools.go line 229)
+    # not under test, checked by hand: it asks 1 time, with a note to give so the Visionaries don't suggest it again (internal/extensions/ideas/tools.go line 229)
     And when the user dismisses with a note, 1 dismiss is posted with it and the reply says the user dismissed the idea
     And when the user chooses leave open, 0 posts are sent
     When Claude calls dismiss_idea for an idea accepted already
@@ -455,7 +455,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: the idea is kept as it was and no task is made; the fake server refuses both
     When Claude calls accept_idea for an id no idea has
     Then the tool fails, saying no idea with that id
-    # internal/ideas/tools_test.go TestTheUserDecidesOnAnIdea
+    # internal/extensions/ideas/tools_test.go TestTheUserDecidesOnAnIdea
 
   @TOOLS-42 @claude-code @test
   Scenario: The ideas tools are listed only while the Ideas feature shows
@@ -466,7 +466,7 @@ Feature: Agentry from Claude Code
     When the Visionaries team is added, so the feature turns on
     Then the session sends notifications/tools/list_changed 1 time
     And tools/list has all 3 ideas tools: yes
-    # internal/ideas/mcp_test.go TestAgentryMCPListsTheIdeasToolsOnlyWhileIdeasShows; no tool and its name, and list_changed 1 time: internal/mcp/extensions_test.go TestAnExtensionBringsItsToolsWhenItShows, for any feature
+    # internal/extensions/ideas/mcp_test.go TestAgentryMCPListsTheIdeasToolsOnlyWhileIdeasShows; no tool and its name, and list_changed 1 time: internal/mcp/extensions_test.go TestAnExtensionBringsItsToolsWhenItShows, for any feature
 
   # ---- Hearing from Agentry --------------------------------------------------
 
@@ -498,7 +498,7 @@ Feature: Agentry from Claude Code
     And when all open ideas are in this repo, the line ends (list_ideas), with all added: no
     And an idea the user decides on changes the line's key: no, so it is news 0 times
     And an idea Agentry accepted for the user by their rule is counted: no
-    # internal/ideas/waiting_test.go TestOpenIdeasWaitForYou; this repo and (list_ideas): TestOpenIdeasPointAtTheirRepo
+    # internal/extensions/ideas/waiting_test.go TestOpenIdeasWaitForYou; this repo and (list_ideas): TestOpenIdeasPointAtTheirRepo
 
   @TOOLS-46 @claude-code @manual
   Scenario: SessionStart and UserPromptSubmit tell Claude what waits for the user

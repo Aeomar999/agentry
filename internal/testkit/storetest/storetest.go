@@ -13,8 +13,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/rules"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
-	"gitlab.com/dev.chempa/agentry/internal/schedules"
+	"gitlab.com/dev.chempa/agentry/internal/extensions/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/extensions/schedules"
 )
 
 // Open opens the log at path with the core's event types, the rules and a

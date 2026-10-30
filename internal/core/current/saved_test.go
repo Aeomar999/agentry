@@ -10,7 +10,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/connections"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/extensions/ideas"
 )
 
 // The state built from a real store, with the times and JSON values the log
