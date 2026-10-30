@@ -51,9 +51,22 @@ func isWholePath(text string, start, end int) bool {
 	return false
 }
 
-// afterPrefix says whether before ends with a path's start: module/, ./ or ../.
+// afterPrefix says whether before ends with a path's start: module/, or
+// ./ or ../ (as many ../ as it likes) at the start of a word, so neither
+// x./internal/store nor ui/../internal/store is one.
 func afterPrefix(before string) bool {
-	return strings.HasSuffix(before, module+"/") || strings.HasSuffix(before, "./")
+	if strings.HasSuffix(before, module+"/") {
+		return true
+	}
+	rest, ok := strings.CutSuffix(before, "./")
+	if !ok {
+		return false
+	}
+	rest = strings.TrimSuffix(rest, ".")
+	for strings.HasSuffix(rest, "../") {
+		rest = strings.TrimSuffix(rest, "../")
+	}
+	return startsWord(rest)
 }
 
 // startsWord says whether a path can start right after before: at the

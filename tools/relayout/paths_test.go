@@ -37,6 +37,10 @@ func TestReplacePathOnlyWhereAPathStarts(t *testing.T) {
 		"example.com/other/internal/events":                              "example.com/other/internal/events",
 		"$(go env X)/internal/events":                                    "$(go env X)/internal/events",
 		".internal/events":                                               ".internal/events",
+		"x./internal/events":                                             "x./internal/events",
+		"x../internal/events":                                            "x../internal/events",
+		"ui/../internal/events":                                          "ui/../internal/events",
+		"(../../internal/events)":                                        "(../../internal/core/events)",
 	} {
 		if got := replacePath(text, "internal/events", "internal/core/events"); got != want {
 			t.Errorf("replacePath(%q) = %q, want %q", text, got, want)
