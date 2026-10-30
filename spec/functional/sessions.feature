@@ -1,30 +1,30 @@
 Feature: Sessions
   A turn goes on with an agent's earlier session, starts fresh or forks one,
   and its live terminal.
-  # Sources: internal/platform/sessions, internal/platform/terminal, internal/tasks/resume.go,
+  # Sources: internal/platform/sessions, internal/platform/terminal, internal/domain/tasks/resume.go,
   # internal/turns, ui/src/components/organisms/TerminalView.tsx and their tests.
 
   # ---- Going on with a session -----------------------------------------------
 
   @SESSION-01 @coordinator @test
   Scenario: A turn goes on with the agent's last session on the task when it can
-    # internal/tasks/resume_test.go TestATurnResumesOnlyTheSameAgentsSessionOnTheSameEngineAndMachine
+    # internal/domain/tasks/resume_test.go TestATurnResumesOnlyTheSameAgentsSessionOnTheSameEngineAndMachine
     Given the agent's last turn on the task ended with a report, on the same engine and the same machine, with a session id
     When its next turn on the task starts
     Then it resumes exactly that session
     And its brief is the resumed one, with no "## The task" section, shorter than the whole brief
     And it starts fresh, saying why, when any of these holds: first turn, last turn failed, last turn stopped by the user, work moved to another machine, another engine, no session id, or the session's context is over 150,000 tokens
-    # MaxResumedContext = 150_000: internal/tasks/resume.go; the shorter brief: internal/coordinator/resumed_brief_test.go TestAResumedBriefIsShorterThanTheWholeOne and TestTheLoopBriefsATurnAsItStarts
+    # MaxResumedContext = 150_000: internal/domain/tasks/resume.go; the shorter brief: internal/coordinator/resumed_brief_test.go TestAResumedBriefIsShorterThanTheWholeOne and TestTheLoopBriefsATurnAsItStarts
 
   @SESSION-02 @coordinator @test
   Scenario: A story's first turn can go on with a sibling story's session
-    # internal/tasks/share_test.go TestAFirstTurnOnAStoryGoesOnWithTheLatestSessionOfASibling and TestASiblingsSessionIsHeldToTheSameRules
+    # internal/domain/tasks/share_test.go TestAFirstTurnOnAStoryGoesOnWithTheLatestSessionOfASibling and TestASiblingsSessionIsHeldToTheSameRules
     Given an epic with stories, and the agent has had no turn on this story yet
     When the agent's first turn on this story starts
     Then it goes on with the agent's latest ended turn's session on any sibling story, held to the same rules as its own
     And the brief says this is a new task, with its own worktree and branch, and only this task's trail is shown, from its start
     And once the agent has had a turn on this story, its own latest session is used, even when a sibling's is newer
-    # the brief: internal/coordinator/carried_brief_test.go TestABriefFromASiblingsSessionSaysItIsANewTask; own first: internal/tasks/share_test.go TestAStorysOwnSessionWinsOverANewerSiblings
+    # the brief: internal/coordinator/carried_brief_test.go TestABriefFromASiblingsSessionSaysItIsANewTask; own first: internal/domain/tasks/share_test.go TestAStorysOwnSessionWinsOverANewerSiblings
 
   @SESSION-03 @coordinator @test
   Scenario: A busy session is forked, never resumed in place
@@ -34,7 +34,7 @@ Feature: Sessions
     Then the turn goes on with a copy of the session, marked forked, and the original is kept by the open turn
     And 2 stories starting at once from 1 session never both resume it in place: 1 goes on in place and 1 forks
     # not under test, checked by hand: the one that forks is the later
-    # SessionBusy: internal/tasks/resume.go; the race: internal/turns/share_test.go TestTwoStoriesStartingAtOnceFromOneSessionNeverBothResumeIt
+    # SessionBusy: internal/domain/tasks/resume.go; the race: internal/turns/share_test.go TestTwoStoriesStartingAtOnceFromOneSessionNeverBothResumeIt
 
   @SESSION-04 @coordinator @test
   Scenario: With session resume off, every turn starts fresh

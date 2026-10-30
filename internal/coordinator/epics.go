@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 )
 
 // An epic is a goal too big for one story. Its coordinator splits it into

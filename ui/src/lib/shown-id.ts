@@ -1,6 +1,6 @@
 // An epic shows as epic-N wherever the page names it, so you can tell it
 // from a story or a task on its own. Only what you read changes: links,
-// keys and the API keep task-N, as in internal/tasks/shown.go.
+// keys and the API keep task-N, as in internal/domain/tasks/shown.go.
 
 const TASK = "task-";
 const EPIC = "epic-";

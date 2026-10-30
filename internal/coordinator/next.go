@@ -8,7 +8,7 @@ import (
 	"unicode/utf8"
 
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 )
 
 // The loop's safety stops: without them a coordinator that keeps sending work

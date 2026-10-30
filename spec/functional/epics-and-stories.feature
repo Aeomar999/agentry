@@ -1,7 +1,7 @@
 Feature: Epics and stories
   A goal too big for one change is an epic, split into stories that wait in the
   Backlog, ordered in Plan, and closed once every story is done.
-  # Sources: internal/tasks, internal/coordinator/epics.go,
+  # Sources: internal/domain/tasks, internal/coordinator/epics.go,
   # internal/web/epics_api.go, ui/src/pages/PlanPage.tsx, ui/src/lib/epics.ts and
   # their tests.
 
@@ -28,7 +28,7 @@ Feature: Epics and stories
     And each story is kept at the same budget and limit of turns as the epic
     And the Writing team's story goes to that team's coordinator once the user starts it, its description and brief saying it is a story of the epic
     # not under test, checked by hand: the other stories say so too; the test reads the Writing team's story only
-    # a story's limits: internal/tasks/limits.go NewLimits; "parked": "backlog": internal/coordinator/loop.go split
+    # a story's limits: internal/domain/tasks/limits.go NewLimits; "parked": "backlog": internal/coordinator/loop.go split
 
   @EPIC-03 @coordinator @manual
   Scenario: A split adds 1 to 12 stories

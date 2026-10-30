@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks/waitlist"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
-	"gitlab.com/dev.chempa/agentry/internal/waitlist"
 )
 
 // listWaiting answers everything waiting for you, about ?repo= ("" when not

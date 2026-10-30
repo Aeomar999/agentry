@@ -56,7 +56,7 @@ Feature: Codex token count
   @PROP-27 @test @to-observability
   Scenario: A task worked by both engines sums every turn's tokens
     # @OBS-01: a task's tokens are the sum of its turns'
-    # test: internal/tasks/split_test.go (to write)
+    # test: internal/domain/tasks/split_test.go (to write)
     Given a task whose turn-1 ran on Claude Code and used 53,174 tokens, and whose turn-2 ran on Codex and used 21,000
     When the task is read from the log
     Then the task's tokens used are exactly 74,174

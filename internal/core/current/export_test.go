@@ -1,6 +1,6 @@
 package current
 
-import "gitlab.com/dev.chempa/agentry/internal/tasks"
+import "gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 
 // ArchiveInPlace keeps a task as its summary alone, as its marker would,
 // with no marker in the log and the position where it was: for the

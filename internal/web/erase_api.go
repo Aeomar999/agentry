@@ -15,7 +15,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/core/rules"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 )
 
 // erased is what erasing a task answers: when, and what of it may be left

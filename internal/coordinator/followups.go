@@ -7,8 +7,8 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // When you close an epic, Agentry starts one Visionaries session about it:

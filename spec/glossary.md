@@ -62,7 +62,7 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **gate**: where every action an agent takes goes before it runs: the engine's hook posts it to the server, the policy judges it, and anything short of a clear yes blocks it, the server being down included.
 - **handoff**: one pass of a task between the coordinator and an agent, a brief one way and a report back; the Handoffs tab shows each as a card.
 - **Handoffs tab**: the task page's list of every brief and report between the coordinator and its agents.
-- **held**: a task parked in To do or the Backlog until the user moves it on, its status on the page; also an ask the hook gave up waiting on, kept for the user after the turn moved on (internal/tasks).
+- **held**: a task parked in To do or the Backlog until the user moves it on, its status on the page; also an ask the hook gave up waiting on, kept for the user after the turn moved on (internal/domain/tasks).
 - **helper**: the user's own Claude Code session beside a task, in its worktree on the machine the work is on; it changes no files and sends the coordinator a change only when the user asks, with `agentry send` (internal/machines).
 - **hook**: `agentry hook`, which the engine calls before each action and at each signal; it posts to the server with the hook token and exits 2 on any failure, so a killed or slow hook blocks.
 - **idea**: a feature a Visionaries session suggests for a repo: the problem, the proposal, why now, a size, the risks and which agents backed or doubted it; the user accepts it as a task or an epic, or dismisses it.
@@ -102,7 +102,7 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **question**: what a coordinator asks the user, with options or a page of its own, shown in Questions and in Claude Code; the task waits in Needs you until the user answers.
 - **Questions**: the dock's first tab, everything waiting for the user from every task, oldest first: approvals, coordinators' questions, budget and turn-limit stops, and agents stuck on a prompt.
 - **queued**: a started task waiting for a slot while as many tasks as `maxRunningTasks` allows have a turn open; it takes one as it frees, in priority order.
-- **rank**: a task's place in the user's priority order, a number between its neighbours so two never tie (internal/tasks).
+- **rank**: a task's place in the user's priority order, a number between its neighbours so two never tie (internal/domain/tasks).
 - **reader**: what follows the log from a position at its own pace, each with its own cursor; a slow reader never holds up a writer (internal/core/store).
 - **read model**: the in-memory state of every stream, built from the log at every start and changed only as each event commits, so it can never disagree with what happened; every read of the page goes to it (internal/core/current).
 - **read-mostly**: the Visionaries' shipped profile: read-only, plus reading the task board.
@@ -131,7 +131,7 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **snapshot**: the read model written to a file so a start reads it and applies only the events after it; a cache, thrown away whenever it might disagree with the log (internal/core/current).
 - **spec**: this folder: Agentry's behaviour today as scenarios, with this glossary and the constraints; `spec/check` and `make spec` check it.
 - **stage**: one step of a task's path, the agent that had it and how many turns it took; the board's columns are the stages of the work.
-- **status**: the one word the page shows for a task: working, needs you, done or held (internal/tasks).
+- **status**: the one word the page shows for a task: working, needs you, done or held (internal/domain/tasks).
 - **status bar**: the bar at the bottom of the page, with Terminal to open the dock and how many tasks wait for the user.
 - **status line**: Claude Code's line showing `agentry · 1 needs you · 3 running` on a machine connected from the Integrations page.
 - **store**: the package that keeps the log: it runs every proposal's checks under one lock, appends it, and writes the archive, erase and redact markers (internal/core/store).
@@ -154,7 +154,7 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **token, hook**: the token `agentry hook` posts hook calls with, and nothing else; denied to every agent (internal/platform/hookcall).
 - **token, UI**: the page's token, printed in the link `agentry serve` prints, which signs a browser in and opens the page and the API; the agents never get it.
 - **top bar**: the bar at the top of the page, with the theme, Install app and the person button's menu: Sign in another device, Notifications on this device and Sign out.
-- **trail**: the handoffs of a task in order, as the page shows them and as the coordinator's brief lists them (internal/tasks).
+- **trail**: the handoffs of a task in order, as the page shows them and as the coordinator's brief lists them (internal/domain/tasks).
 - **trust page**: `/trust/` on the server, reached over plain http before a device trusts the CA, with the fingerprint, the CA to download and the steps for each system.
 - **turn**: one agent working once in the task's worktree, from a brief to a report, in a fresh engine session or going on with its last one; each turn's tokens, status and time show on the page.
 - **turns**: a task's turn limit: the turns it may have without the user's answer before it stops and asks for guidance, `-max-turns` (24 by default) or the task's own, changed at any time or made unlimited; turn limit means the same.

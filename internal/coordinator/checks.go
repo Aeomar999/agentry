@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 )
 
 // A coordinator can't finish a task until its work is checked. The agents

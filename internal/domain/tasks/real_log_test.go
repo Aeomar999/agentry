@@ -7,8 +7,8 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/current"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
 
@@ -18,7 +18,7 @@ import (
 // copy, which it copies again so the run never writes to it:
 //
 //	D=$(mktemp -d); sqlite3 "file:$HOME/.agentry/agentry.db?mode=ro" "VACUUM INTO '$D/agentry.db'"
-//	AGENTRY_BENCH_DB=$D/agentry.db go test ./internal/tasks -run TestARealLogReplays -v -count=1
+//	AGENTRY_BENCH_DB=$D/agentry.db go test ./internal/domain/tasks -run TestARealLogReplays -v -count=1
 func TestARealLogReplays(t *testing.T) {
 	source := os.Getenv("AGENTRY_BENCH_DB")
 	if source == "" {

@@ -642,10 +642,10 @@ func TestATargetTagOutsideProposalsFails(t *testing.T) {
 
 func TestEveryPathAFeaturesSourcesNamesExists(t *testing.T) {
 	repo := map[string]string{
-		"../internal/tasks/task.go":    "package tasks\n",
-		"../ui/src/pages/TaskPage.tsx": "",
-		"../README.md":                 "# Agentry\n",
-		"../scripts/build.sh":          "",
+		"../internal/domain/tasks/task.go": "package tasks\n",
+		"../ui/src/pages/TaskPage.tsx":     "",
+		"../README.md":                     "# Agentry\n",
+		"../scripts/build.sh":              "",
 	}
 	feature := func(sources string) string {
 		return strings.Replace(goodScenario, "  # Sources: internal/web and its tests.\n", sources+"\n", 1)
@@ -653,22 +653,22 @@ func TestEveryPathAFeaturesSourcesNamesExists(t *testing.T) {
 	for name, c := range map[string]struct{ sources, want string }{
 		"no Sources": {"", "tasks-and-board.feature:1: no # Sources: line under the description"},
 		"a good sentence over lines": {
-			"  # Sources: internal/tasks, internal/web/api_test.go,\n  # ui/src/pages/TaskPage.tsx, README.md and their\n  # tests.\n", ""},
+			"  # Sources: internal/domain/tasks, internal/web/api_test.go,\n  # ui/src/pages/TaskPage.tsx, README.md and their\n  # tests.\n", ""},
 		"a missing path": {
-			"  # Sources: internal/tasks, internal/nope and their tests.\n",
+			"  # Sources: internal/domain/tasks, internal/nope and their tests.\n",
 			"tasks-and-board.feature:3: Sources names internal/nope, which doesn't exist"},
 		"a missing path on a later line": {
-			"  # Sources: internal/tasks,\n  # ui/src/pages/Gone.tsx and its tests.\n",
+			"  # Sources: internal/domain/tasks,\n  # ui/src/pages/Gone.tsx and its tests.\n",
 			"tasks-and-board.feature:4: Sources names ui/src/pages/Gone.tsx, which doesn't exist"},
 		"a missing file in a folder that exists": {
-			"  # Sources: internal/tasks/gone.go and its tests.\n",
-			"tasks-and-board.feature:3: Sources names internal/tasks/gone.go, which doesn't exist"},
+			"  # Sources: internal/domain/tasks/gone.go and its tests.\n",
+			"tasks-and-board.feature:3: Sources names internal/domain/tasks/gone.go, which doesn't exist"},
 		"the full stop ends it": {
-			"  # Sources: internal/tasks and their tests.\n  # internal/nope is a later comment, not a source\n", ""},
+			"  # Sources: internal/domain/tasks and their tests.\n  # internal/nope is a later comment, not a source\n", ""},
 		"a blank line ends it": {
-			"  # Sources: internal/tasks,\n\n  # internal/nope\n", ""},
+			"  # Sources: internal/domain/tasks,\n\n  # internal/nope\n", ""},
 		"an unlisted top folder": {
-			"  # Sources: internal/tasks, scripts/build.sh and their tests.\n",
+			"  # Sources: internal/domain/tasks, scripts/build.sh and their tests.\n",
 			"tasks-and-board.feature:3: cited path scripts/build.sh is under scripts/, a top folder rootFolders does not list"},
 		"a typo in the top folder": {
 			"  # Sources: intenal/tasks and their tests.\n",
@@ -677,23 +677,23 @@ func TestEveryPathAFeaturesSourcesNamesExists(t *testing.T) {
 			"  # Sources: Internal/tasks and their tests.\n",
 			"tasks-and-board.feature:3: Sources names Internal/tasks, which doesn't exist"},
 		"a bare file name": {
-			"  # Sources: internal/tasks, TaskPage.tsx and their tests.\n",
+			"  # Sources: internal/domain/tasks, TaskPage.tsx and their tests.\n",
 			"tasks-and-board.feature:3: Sources names TaskPage.tsx, which isn't at the repo root; name the path from the repo root"},
 		"a plain word": {
-			"  # Sources: internal/tasks with ui/src/pages/TaskPage.tsx and their tests.\n",
+			"  # Sources: internal/domain/tasks with ui/src/pages/TaskPage.tsx and their tests.\n",
 			`tasks-and-board.feature:3: Sources names with, which isn't a path; a Sources sentence holds only paths and "and their/its tests", ending with a full stop`},
 		"a rule ends a sentence with no full stop": {
-			"  # Sources: internal/tasks and their tests\n  # ---- The board ----\n", ""},
+			"  # Sources: internal/domain/tasks and their tests\n  # ---- The board ----\n", ""},
 		"a path from ./": {
-			"  # Sources: ./internal/tasks and their tests.\n",
-			"tasks-and-board.feature:3: Sources names ./internal/tasks; name the path from the repo root, without ./"},
+			"  # Sources: ./internal/domain/tasks and their tests.\n",
+			"tasks-and-board.feature:3: Sources names ./internal/domain/tasks; name the path from the repo root, without ./"},
 		"a folder below the top in the wrong case": {
 			"  # Sources: internal/Tasks and their tests.\n",
 			"tasks-and-board.feature:3: Sources names internal/Tasks, which doesn't exist"},
 		"a folder with a slash at the end": {
-			"  # Sources: internal/tasks/ and their tests.\n", ""},
+			"  # Sources: internal/domain/tasks/ and their tests.\n", ""},
 		"only a slash": {
-			"  # Sources: internal/tasks, / and their tests.\n",
+			"  # Sources: internal/domain/tasks, / and their tests.\n",
 			"tasks-and-board.feature:3: Sources names /, which isn't a path into the repo; name it from the repo root, with no empty, . or .. part"},
 		"a leading slash": {
 			"  # Sources: /internal/tasks and their tests.\n",
@@ -705,8 +705,8 @@ func TestEveryPathAFeaturesSourcesNamesExists(t *testing.T) {
 			"  # Sources: internal/./tasks and their tests.\n",
 			"tasks-and-board.feature:3: Sources names internal/./tasks, which isn't a path into the repo"},
 		"a .. part": {
-			"  # Sources: internal/tasks/../tasks and their tests.\n",
-			"tasks-and-board.feature:3: Sources names internal/tasks/../tasks, which isn't a path into the repo"},
+			"  # Sources: internal/domain/tasks/../tasks and their tests.\n",
+			"tasks-and-board.feature:3: Sources names internal/domain/tasks/../tasks, which isn't a path into the repo"},
 		"a .. part out of an unlisted top folder": {
 			"  # Sources: scripts/../internal/tasks and their tests.\n",
 			"tasks-and-board.feature:3: Sources names scripts/../internal/tasks, which isn't a path into the repo"},

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/platform/client"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // What waits for you, from any task, as one line each (an extension's lines as

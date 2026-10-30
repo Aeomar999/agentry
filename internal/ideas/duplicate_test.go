@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // taskList is a fake of the tasks an idea is checked against, in order; a nil

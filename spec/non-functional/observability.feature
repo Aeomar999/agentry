@@ -7,7 +7,7 @@ Feature: Observability
     When the task is read from the log
     Then the task's tokens used are exactly the sum of the 2 turns' tokens
     # not under test, checked by hand: the sum is shown on the task's page (ui/src/pages/TaskPage.tsx line 373), in the list (ui/src/pages/TasksPage.tsx line 116) and on its card (ui/src/components/molecules/TaskCard.tsx line 78)
-    # README.md, Use it, Budgets and turn limits; internal/tasks/split_test.go TestATurnWithOnlyATotalHasNoSplit
+    # README.md, Use it, Budgets and turn limits; internal/domain/tasks/split_test.go TestATurnWithOnlyATotalHasNoSplit
 
   @OBS-02 @test
   Scenario: The catalogue refuses a proposal of the wrong shape or from the wrong writer
@@ -258,7 +258,7 @@ Feature: Observability
     Then turn-1's split is exactly 4, 12,800, 40,000 and 370, its context 26,801, and its engine session the one session.started named
     And turn-2 has no split, no session and a context of 0: nothing is made up
     And the task's split is turn-1's and its unsplit tokens are exactly 1,000
-    # internal/tasks/split_test.go TestATurnKeepsItsEngineSessionAndSplit and TestATurnWithOnlyATotalHasNoSplit
+    # internal/domain/tasks/split_test.go TestATurnKeepsItsEngineSessionAndSplit and TestATurnWithOnlyATotalHasNoSplit
 
   @OBS-27 @test
   Scenario: The task page shows each turn's split under its total

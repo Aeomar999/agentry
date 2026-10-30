@@ -107,7 +107,7 @@ Feature: Output gate
 
   @PROP-74 @test @to-compatibility
   Scenario: On Claude Code, PostToolUse is where a result is judged
-    # PostToolUse fires once a tool call succeeded, with its result (internal/platform/engines/claude.go claudeReports, internal/tasks/task.go Pushed)
+    # PostToolUse fires once a tool call succeeded, with its result (internal/platform/engines/claude.go claudeReports, internal/domain/tasks/task.go Pushed)
     # test: internal/platform/engines/engines_test.go (to write), with recorded payloads
     Given an agent on Claude Code whose profile has rules for results
     When its session is prepared
@@ -118,7 +118,7 @@ Feature: Output gate
 
   @PROP-75 @test @to-compatibility
   Scenario: Where an engine cannot replace or withhold a result, a hold, a redaction or a block ends the session first
-    # docs/design/proofs.md, proof 07: Codex has the same hook events and fields; its PreToolUse can only deny and needs a reason; its PostToolUse fires for a command that failed too, with no exit code (internal/tasks/task.go Pushed)
+    # docs/design/proofs.md, proof 07: Codex has the same hook events and fields; its PreToolUse can only deny and needs a reason; its PostToolUse fires for a command that failed too, with no exit code (internal/domain/tasks/task.go Pushed)
     # test: internal/platform/engines/engines_test.go and internal/hooks/output_test.go (to write)
     Given an agent on an engine whose PostToolUse cannot replace or withhold what the agent sees
     When a rule holds, redacts or blocks a result

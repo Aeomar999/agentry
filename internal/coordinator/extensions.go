@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // An extension takes part in the loop through its Coordinator hook, for the

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 )
 
 // question is one thing waiting for you, from any task: an action the

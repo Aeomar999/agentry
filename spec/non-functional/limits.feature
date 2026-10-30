@@ -47,7 +47,7 @@ Feature: Limits
     And the one from the unlimited task has no budget and no turn limit
     And the one from no task takes the defaults, 5,000,000 tokens and 24 turns
     And with unlimited defaults, the one from no task has no budget and no turn limit
-    # README.md, Use it; internal/tasks/limits_test.go TestANewTaskTakesItsSourcesLimitsElseTheDefaults
+    # README.md, Use it; internal/domain/tasks/limits_test.go TestANewTaskTakesItsSourcesLimitsElseTheDefaults
 
   @LIM-06 @test
   Scenario: Raising the budget on the page answers the budget stop
@@ -64,7 +64,7 @@ Feature: Limits
     Then the coordinator's next move asks the user, not a turn: yes
     And the question says "24 of its 24 turns"
     And after the user's answer the next move is a turn: yes
-    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/coordinator/loop.go line 325); the question goes on " without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on." (internal/coordinator/next.go line 65); the answer sets the count of turns since it to 0 (internal/tasks/apply.go line 463); the answer hands the task to the coordinator (internal/tasks/apply.go line 464)
+    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/coordinator/loop.go line 325); the question goes on " without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on." (internal/coordinator/next.go line 65); the answer sets the count of turns since it to 0 (internal/domain/tasks/apply.go line 463); the answer hands the task to the coordinator (internal/domain/tasks/apply.go line 464)
     # README.md, Use it; internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
 
   @LIM-08 @test
@@ -124,8 +124,8 @@ Feature: Limits
     Then the coordinator's next move asks the user, not a turn: yes
     And the question is "3 issues in a row, the last: " followed by the issue's reason and ". Fix what's wrong and answer, and the coordinator carries on."
     And a retry still counts as an issue, so retries are bounded at 3
-    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/coordinator/loop.go line 325); a turn that ends normally, or the user's answer, sets the count of issues in a row to 0 (internal/tasks/apply.go lines 386 and 463)
-    # README.md, How a task moves; internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou; the retry: internal/tasks/retry_fresh_test.go TestARetryFreshIssueHandsTheSameStepBack and internal/coordinator/next_test.go TestIssuesInARowEndingInARetryQuoteTheIssue
+    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/coordinator/loop.go line 325); a turn that ends normally, or the user's answer, sets the count of issues in a row to 0 (internal/domain/tasks/apply.go lines 386 and 463)
+    # README.md, How a task moves; internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou; the retry: internal/domain/tasks/retry_fresh_test.go TestARetryFreshIssueHandsTheSameStepBack and internal/coordinator/next_test.go TestIssuesInARowEndingInARetryQuoteTheIssue
 
   @LIM-15 @test
   Scenario: Done tasks are archived after 30 days unless the flag says otherwise
@@ -221,7 +221,7 @@ Feature: Limits
     When it is cut
     Then it ends with " [...]", exactly once
     And text that fits is kept whole, with no marker
-    # README.md, How a task moves; internal/tasks/shorten_test.go TestShortenCutsBetweenCharacters
+    # README.md, How a task moves; internal/domain/tasks/shorten_test.go TestShortenCutsBetweenCharacters
 
   @LIM-26 @manual
   Scenario: What a brief quotes is cut at a fixed size

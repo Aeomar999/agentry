@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 )
 
 // Sharing files between this machine and a task, from Claude Code.

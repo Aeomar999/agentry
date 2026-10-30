@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 )
 
 func TestEveryStepLeadsToItsTurn(t *testing.T) {

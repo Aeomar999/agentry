@@ -2,7 +2,7 @@ package rules
 
 import (
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 )
 
 // Archiving moves a done task's rows out of the live log into a blob and

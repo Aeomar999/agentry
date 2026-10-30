@@ -485,10 +485,10 @@ Feature: Agentry from Claude Code
     When the lines waiting for the user are read
     Then the epic's line reads epic-N: the epic, its title, is ready to close (close_epic), with 1 tool named
     And a question's line reads epic-N or task-N, who asks, and the question, as 2 lines name their task
-    # internal/waitlist/waitlist.go Line: an approval ends with (review_approvals), cut at 140 characters; a copy says answer_question with Copy it asks the user, cut at 200
-    # internal/waitlist/waitlist.go Line: an agent stuck on a prompt is cut at 120 characters; a question at 160, with Agentry's own stops named as Agentry
+    # internal/domain/tasks/waitlist/waitlist.go Line: an approval ends with (review_approvals), cut at 140 characters; a copy says answer_question with Copy it asks the user, cut at 200
+    # internal/domain/tasks/waitlist/waitlist.go Line: an agent stuck on a prompt is cut at 120 characters; a question at 160, with Agentry's own stops named as Agentry
     And the approving answers Close the epic and Copy it are the coordinator's own 2 words: yes
-    # internal/waitlist/waitlist_test.go TestALineNamesAnEpicAsEpicN and TestTheApprovingAnswersAreTheCoordinators
+    # internal/domain/tasks/waitlist/waitlist_test.go TestALineNamesAnEpicAsEpicN and TestTheApprovingAnswersAreTheCoordinators
 
   @TOOLS-45 @claude-code @test
   Scenario: Open ideas wait for the user as one line

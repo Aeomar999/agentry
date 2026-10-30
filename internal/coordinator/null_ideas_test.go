@@ -3,8 +3,8 @@ package coordinator
 import (
 	"testing"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // A Software done whose "ideas" is null carries no ideas: it goes through

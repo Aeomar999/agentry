@@ -53,7 +53,7 @@ Feature: Shipping through GitHub, and email
 
   @PROP-33 @user @test @to-new-pull-requests
   Scenario: The approved, finished push of the task branch opens exactly 1 pull request into dev
-    # docs/design/t-019-shipping.md sections 2 and 3, steps 5 to 8; the push is read as Task.PushTo, over the parser of the waiting line (internal/tasks/waiting.go plainPush)
+    # docs/design/t-019-shipping.md sections 2 and 3, steps 5 to 8; the push is read as Task.PushTo, over the parser of the waiting line (internal/domain/tasks/waiting.go plainPush)
     # test: internal/githost/job_test.go (to write), with a fake GitHub
     Given git on for the repo, and the deployer's approved push of agentry/task-121 with its result in the log
     When the job's next pass reads the task
@@ -63,7 +63,7 @@ Feature: Shipping through GitHub, and email
 
   @PROP-34 @coordinator @test @to-coordinator-and-handoffs
   Scenario: The task is done at the push, as today, and its pull request opens just after
-    # docs/design/t-019-shipping.md section 4, decision 5 in section 12; the coordinator finishes once a ship turn pushed (internal/coordinator/checks.go recordOf, internal/tasks/task.go Pushed), @TURN-14
+    # docs/design/t-019-shipping.md section 4, decision 5 in section 12; the coordinator finishes once a ship turn pushed (internal/coordinator/checks.go recordOf, internal/domain/tasks/task.go Pushed), @TURN-14
     # test: internal/coordinator/next_test.go (to write)
     Given a ship turn whose push of the task branch was approved and finished
     When the coordinator decides done
@@ -75,7 +75,7 @@ Feature: Shipping through GitHub, and email
   @PROP-35 @user @test @to-new-pull-requests
   Scenario: A push that does not ship the task branch opens nothing
     # docs/design/t-019-shipping.md section 2: Task.PushTo, readPush skipping a dry run
-    # test: internal/tasks/waiting_test.go and internal/githost/job_test.go (to write)
+    # test: internal/domain/tasks/waiting_test.go and internal/githost/job_test.go (to write)
     Given git on for the repo
     When a task's ship turn pushed to dev, ran git push -n or git push --dry-run, or ran a push the parser cannot read
     Then 0 pull requests are opened and 0 git events are written for it

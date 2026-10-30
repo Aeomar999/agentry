@@ -3,7 +3,7 @@ package watchdog
 import (
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 )
 
 func TestDifferentSearchesAreNotALoop(t *testing.T) {

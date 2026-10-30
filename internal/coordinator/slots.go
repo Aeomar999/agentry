@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 )
 
 // Slots are the turns the board may run at once, settings.MaxRunningTasks,

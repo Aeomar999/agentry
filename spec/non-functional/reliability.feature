@@ -8,7 +8,7 @@ Feature: Reliability
     Then the watchdog raises an issue saying the process exited, and stops the session: yes
     And no turn is left open, so the coordinator gets the issue: yes
     # not under test, checked by hand: the watchdog checks once a second (internal/watchdog/watchdog.go line 73); the test calls Check with the clock moved on
-    # internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace; the coordinator gets it: internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
+    # internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace; the coordinator gets it: internal/domain/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
 
   # Every number below comes from the code; the comment on each names its
   # file and constant. The watchdog checks every task with an open turn
@@ -28,7 +28,7 @@ Feature: Reliability
     And it raises an issue saying the agent's process exited: yes
     And the open turn has ended, so the task goes back to its coordinator: yes
     # not under test, checked by hand: the issue goes on "(crashed or was killed)" (internal/watchdog/watchdog.go line 134)
-    # internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace; the coordinator gets it: internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
+    # internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace; the coordinator gets it: internal/domain/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
 
   @REL-03 @test
   Scenario: A turn with no event for 10 minutes is a stall

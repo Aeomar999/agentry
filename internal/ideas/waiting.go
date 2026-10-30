@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // openIdeas is one entry for every open idea, of every repo: how many, and

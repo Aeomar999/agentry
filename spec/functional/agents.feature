@@ -144,13 +144,13 @@ Feature: The agents' turns
 
   @TURN-14 @agent @test
   Scenario: Agentry counts a turn as pushed only by an approved git push that finished
-    # internal/tasks/pushed_test.go TestOnlyAFinishedApprovedPushIsPushed
+    # internal/domain/tasks/pushed_test.go TestOnlyAFinishedApprovedPushIsPushed
     Given a turn's actions
     When Agentry asks whether the turn pushed the work
     Then yes only for an action whose command starts with git push, approved, with a result
     And a denied push, a push with no result yet, and git status each count as no
-    # not under test, checked by hand: a push wrapped in timeout or chained after cd is not seen, which is why the prompt gives the exact command: internal/tasks/task.go line 397
-    # Pushed: internal/tasks/task.go; a done task shows Shipped only then: internal/tasks/summary_test.go TestOnlyATaskWithAFinishedApprovedPushIsPushed
+    # not under test, checked by hand: a push wrapped in timeout or chained after cd is not seen, which is why the prompt gives the exact command: internal/domain/tasks/task.go line 397
+    # Pushed: internal/domain/tasks/task.go; a done task shows Shipped only then: internal/domain/tasks/summary_test.go TestOnlyATaskWithAFinishedApprovedPushIsPushed
 
   @TURN-15 @agent @test
   Scenario: A ship the user chose needs no earlier review, and counts only once the push went through

@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"strings"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/platform/client"
 	"gitlab.com/dev.chempa/agentry/internal/platform/schema"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // Ideas' MCP tools, run in agentry mcp over the HTTP API (routes.go). Claude

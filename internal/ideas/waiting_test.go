@@ -13,12 +13,12 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/mcp"
 	"gitlab.com/dev.chempa/agentry/internal/platform/client"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // What waits for you, pinned on a log of every kind: the core's entries

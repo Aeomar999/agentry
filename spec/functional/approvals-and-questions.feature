@@ -1,6 +1,6 @@
 Feature: Approvals and questions
   What waits for the user: actions the policy held, and the questions coordinators ask.
-  # Sources: internal/hooks, internal/waitlist, internal/tasks/waiting.go,
+  # Sources: internal/hooks, internal/domain/tasks/waitlist, internal/domain/tasks/waiting.go,
   # internal/web/questions_api.go, internal/web/waiting_api.go,
   # ui/src/components/organisms/NeedsYouPanel.tsx,
   # ui/src/components/organisms/QuestionsPanel.tsx and their tests.
@@ -40,7 +40,7 @@ Feature: Approvals and questions
     And the action is held and undecided, the task is in Needs you, and 0 hook calls still wait on it
     And the task's waiting line reads exactly "Waiting for you to approve the push to dev"
     # the hook's deadline is 1790 seconds, GateTimeoutSeconds 1800 less 10: internal/turns/turns.go environment, internal/platform/engines/engine.go;
-    # the server answers 5 seconds before it: internal/hooks/handler.go replyMargin; the line: internal/tasks/waiting_test.go TestAHeldPushNamesItsBranch
+    # the server answers 5 seconds before it: internal/hooks/handler.go replyMargin; the line: internal/domain/tasks/waiting_test.go TestAHeldPushNamesItsBranch
     # the test holds a curl command, which goes through the same hold as any ask
 
   @APPROVE-04 @agent @test
@@ -52,7 +52,7 @@ Feature: Approvals and questions
     And the same push asked for again after that is asked about again
     And a policy denial still denies it, another agent's identical request is asked, and a pass not used in that turn is gone
     # TestAPassDoesntOverrideADenial, TestAPassIsOnlyForTheAgentThatAsked, TestAPassEndsWithTheAgentsNextTurn, TestALateDenialGivesNoPass in the same file;
-    # PassFor: internal/tasks/task.go
+    # PassFor: internal/domain/tasks/task.go
 
   # ---- Questions to the user -------------------------------------------------
 

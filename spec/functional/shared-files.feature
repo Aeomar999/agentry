@@ -1,6 +1,6 @@
 Feature: Shared files
   Files that are not in git, shared with a task in .agentry/files, that follow it from machine to machine.
-  # Sources: internal/sharedfiles, internal/tasks/files.go,
+  # Sources: internal/sharedfiles, internal/domain/tasks/files.go,
   # internal/coordinator/files.go, internal/web/shared_api.go,
   # ui/src/components/organisms/SharedFiles.tsx and their tests.
 
@@ -55,7 +55,7 @@ Feature: Shared files
     # not under test, checked by hand: the time it was left is recorded too (SharedFile.At)
     And the coordinator's next brief lists it as "out/report.csv (9 bytes, from engineer)"
     And a file the user shares is in the next agent's .agentry/files when its turn starts, and a file a turn removed is shared no more
-    # a shared file is Name, Hash, Size, By, At, From: internal/tasks/files.go SharedFile
+    # a shared file is Name, Hash, Size, By, At, From: internal/domain/tasks/files.go SharedFile
 
   @FILES-05 @coordinator @manual
   Scenario: A story's worktree has its epic's files under .agentry/files/epic, to read

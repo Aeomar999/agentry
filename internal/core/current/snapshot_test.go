@@ -19,11 +19,11 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks/taskstest"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
-	"gitlab.com/dev.chempa/agentry/internal/tasks/taskstest"
 )
 
 // fixtureLogs are the logs every snapshot test runs over: every kind of
@@ -74,7 +74,7 @@ func proposalsOf(log []events.Event) []events.Proposal {
 
 // storyNews is an epic whose story finishes while its coordinator's turn is
 // open: the epic's next reply hands the news back to the coordinator
-// (internal/tasks/apply.go, StoryDone). Then the story is removed.
+// (internal/domain/tasks/apply.go, StoryDone). Then the story is removed.
 func storyNews() []events.Proposal {
 	started := proposal("task-1", worker, events.TurnStarted, map[string]any{"agent": "tech-lead", "hash": "h"})
 	started.Correlation = "turn-1"

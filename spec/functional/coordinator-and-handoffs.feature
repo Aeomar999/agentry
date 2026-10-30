@@ -1,7 +1,7 @@
 Feature: The coordinator and its handoffs
   An ordinary agent that reads every report and ends each turn with a decision the loop carries out:
   a task's life, briefs, reports, issues, safety stops and limits.
-  # Sources: internal/coordinator, internal/watchdog, internal/tasks,
+  # Sources: internal/coordinator, internal/watchdog, internal/domain/tasks,
   # internal/web/chat_api.go, ui/src/components/organisms/CoordinatorChat.tsx and
   # their tests.
 
@@ -33,7 +33,7 @@ Feature: The coordinator and its handoffs
 
   @HANDOFF-04 @coordinator @test
   Scenario: An unfinished plan carries over to the agent's next turn
-    # internal/tasks/plan_test.go TestAnUnfinishedPlanCarriesOn
+    # internal/domain/tasks/plan_test.go TestAnUnfinishedPlanCarriesOn
     Given an agent's last turn on the task left a plan with 1 or more steps not ticked
     When the agent's next turn on the task starts
     Then that plan is the one the next turn carries on, kept as it was, with the turn it came from
@@ -58,7 +58,7 @@ Feature: The coordinator and its handoffs
 
   @HANDOFF-07 @coordinator @test
   Scenario: An assign to an agent that does not exist is an issue
-    # internal/coordinator/next_test.go TestNext; goes back to the coordinator: internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
+    # internal/coordinator/next_test.go TestNext; goes back to the coordinator: internal/domain/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
     Given the coordinator's turn ended with an assign to "designer", and the roster has no agent of that name
     When the loop reads the decision
     Then no turn starts
@@ -135,13 +135,13 @@ Feature: The coordinator and its handoffs
 
   @HANDOFF-14 @coordinator @test
   Scenario: An issue goes back to the coordinator
-    # internal/coordinator/next_test.go TestNext; internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
+    # internal/coordinator/next_test.go TestNext; internal/domain/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
     # the count: internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou, where 3 issues raised read "3 issues in a row"
     Given the watchdog raised an issue "the agent's process exited" on a task
     When the loop reads the task
     Then the next turn is the coordinator's and its handoff is exactly the issue's reason
     And the task's count of issues in a row goes up by 1
-    # IssuesInARow + 1 on IssueRaised: internal/tasks/apply.go
+    # IssuesInARow + 1 on IssueRaised: internal/domain/tasks/apply.go
 
   @HANDOFF-15 @coordinator @test
   Scenario: A crashed agent is an issue within seconds
@@ -196,14 +196,14 @@ Feature: The coordinator and its handoffs
 
   @HANDOFF-21 @coordinator @test
   Scenario: A resumed session that did not start is retried fresh once
-    # internal/coordinator/retry_fresh_test.go TestAFailedResumeIsRetriedFreshOnce; internal/tasks/retry_fresh_test.go TestARetryFreshIssueHandsTheSameStepBack
+    # internal/coordinator/retry_fresh_test.go TestAFailedResumeIsRetriedFreshOnce; internal/domain/tasks/retry_fresh_test.go TestARetryFreshIssueHandsTheSameStepBack
     Given an agent's turn went on with its last session, and the process exited before taking the prompt
     When the watchdog sees it after the 3 second grace
     Then it raises an issue saying the resumed session didn't start, and the same agent gets the same step again, fresh
     And the coordinator has no turn of its own before the retry
     And the coordinator is only told
     And the retry still counts as 1 issue towards the issues in a row
-    # retryFresh: internal/watchdog/watchdog.go checkTurn; the same step handed back: internal/tasks/apply.go IssueRaised
+    # retryFresh: internal/watchdog/watchdog.go checkTurn; the same step handed back: internal/domain/tasks/apply.go IssueRaised
 
   @HANDOFF-22 @coordinator @manual
   Scenario: An agent's report of a blocker is a report, not an issue
@@ -212,19 +212,19 @@ Feature: The coordinator and its handoffs
     Then the 12 reports raised 0 issues, and the stop is the "turns" limit, with the words "24 of its 24 turns"
     And the issues limit is reached only by 3 issues raised with no turn ending between them
     # an issue is raised only for a failed turn or a usage limit that lasts: internal/hooks/handler.go, the UsageLimited and TurnFailed cases
-    # a turn that ends with a report sets IssuesInARow to 0: internal/tasks/apply.go turn.ended
+    # a turn that ends with a report sets IssuesInARow to 0: internal/domain/tasks/apply.go turn.ended
     # the stop on "turns" alone: internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou, which writes the reports to the log and runs no hook
     # Steps: on a task with Max turns 24, have the coordinator assign the engineer and the engineer end each turn with
     # the report "still broken", 12 times over. Open the task's Events tab: no issue.raised row, and the last
     # task.needs_you row has "limit":"turns" and the question "This task has had 24 of its 24 turns without finishing"
-    # (internal/coordinator/next.go). The page says Waiting for you and Turns since your answer reads "24 of 24 turns", in red (internal/tasks/summary.go atTurnLimit; ui/src/pages/TaskPage.tsx line 386).
+    # (internal/coordinator/next.go). The page says Waiting for you and Turns since your answer reads "24 of 24 turns", in red (internal/domain/tasks/summary.go atTurnLimit; ui/src/pages/TaskPage.tsx line 386).
 
   # ---- Safety stops and limits -----------------------------------------------
 
   @HANDOFF-23 @user @test
   Scenario: Raising the budget or the turn limit while stopped at it is the answer
     # internal/web/api_test.go TestRaisingTheBudgetLetsATaskGoOn and TestRaisingTheTurnLimitLetsATaskGoOn
-    # internal/web/api.go lines 222 to 275; internal/tasks/task.go lines 145 to 163, StoppedAt
+    # internal/web/api.go lines 222 to 275; internal/domain/tasks/task.go lines 145 to 163, StoppedAt
     Given task-1 stopped at its budget of 200,000 tokens, with 210,000 used
     When the user sets the budget to 1,000,000
     Then the reply is exactly {"answered":true,"budget":1000000}
@@ -270,7 +270,7 @@ Feature: The coordinator and its handoffs
     When it has had 24 turns with no answer from the user
     Then no turn starts
     And the user is asked, with the words "24 of its 24 turns", and the stop is marked as the "turns" limit
-    # DefaultMaxTurns = 24: internal/tasks/task.go; the stop at TurnsSinceAnswer >= MaxTurns: internal/tasks/task.go AtTurnLimit
+    # DefaultMaxTurns = 24: internal/domain/tasks/task.go; the stop at TurnsSinceAnswer >= MaxTurns: internal/domain/tasks/task.go AtTurnLimit
 
   @HANDOFF-27 @coordinator @test
   Scenario: Each task has its own limit of turns, set when it is made
@@ -288,7 +288,7 @@ Feature: The coordinator and its handoffs
     When it has had 40 turns with no answer from the user
     Then the next turn starts and the user is not asked
     And a task stopped at its limit, then changed to 0, runs on
-    # MaxTurns > 0 is the condition: internal/tasks/task.go AtTurnLimit; "0 for no limit": cmd/agentry/serve.go -max-turns and -budget
+    # MaxTurns > 0 is the condition: internal/domain/tasks/task.go AtTurnLimit; "0 for no limit": cmd/agentry/serve.go -max-turns and -budget
 
   @HANDOFF-29 @coordinator @test
   Scenario: The budget stop asks the user once the task has used it
@@ -298,7 +298,7 @@ Feature: The coordinator and its handoffs
     Then no turn starts
     And the user is asked, with the words "110k tokens of its 100k budget", and the stop is marked as the "budget" limit
     And after the user answers, the stop is no longer marked and the next turn is the coordinator's, so it can wrap up
-    # AtBudget is Budget > 0 and TokensUsed >= Budget: internal/tasks/task.go; the stop needs TurnsSinceAnswer > 0: internal/coordinator/next.go Next
+    # AtBudget is Budget > 0 and TokensUsed >= Budget: internal/domain/tasks/task.go; the stop needs TurnsSinceAnswer > 0: internal/coordinator/next.go Next
     # the server's default budget is 5,000,000 tokens, flag -budget: cmd/agentry/serve.go
 
   @HANDOFF-30 @coordinator @test
@@ -317,14 +317,14 @@ Feature: The coordinator and its handoffs
     When the user answers
     Then the next turn starts, no longer stopped by the limit
     # not under test, checked by hand: the turns since the answer and the issues in a row are both 0
-    # task.answered sets TurnsSinceAnswer and IssuesInARow to 0: internal/tasks/apply.go
+    # task.answered sets TurnsSinceAnswer and IssuesInARow to 0: internal/domain/tasks/apply.go
 
   @HANDOFF-32 @coordinator @manual
   Scenario: A turn that ends normally resets the issues in a row
     Given a task with 2 issues in a row
     When an agent's turn ends with a report
     Then the issues in a row are 0, and 3 more issues are needed before the user is asked
-    # turn.ended sets IssuesInARow to 0: internal/tasks/apply.go
+    # turn.ended sets IssuesInARow to 0: internal/domain/tasks/apply.go
     # Steps: on a task, let 2 turns crash (kill the agent's process), then let 1 turn end with a report;
     # let 2 more turns crash: the task stays in its column, the Tasks page does not list it under Needs you
     # and its page does not say Waiting for you; a 3rd crash in a row lists it under Needs you, its page says
@@ -396,7 +396,7 @@ Feature: The coordinator and its handoffs
     Given the engineer changed the work after the last check, and the user moved the task to Shipping
     When the deployer's turn that the move asked for pushes the work, and the coordinator then decides done
     Then the task is done with no new check: the push counts as the user taking the work as it was
-    # the turn is marked shipped: internal/tasks/task.go Turn.Shipped; shipped in workRecord, and a change before it raises no objection: internal/coordinator/checks.go recordOf, unchecked
+    # the turn is marked shipped: internal/domain/tasks/task.go Turn.Shipped; shipped in workRecord, and a change before it raises no objection: internal/coordinator/checks.go recordOf, unchecked
     # Steps: on a task whose branch was reviewed and then changed, drag it to Shipping; let the deployer's turn push;
     # end the coordinator's next turn with {"action": "done", "summary": "Shipped."} and check the task is Done with no reviewer turn between.
 

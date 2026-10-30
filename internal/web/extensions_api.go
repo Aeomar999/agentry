@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // listFeatures answers whether the page shows each extension, and why, worked

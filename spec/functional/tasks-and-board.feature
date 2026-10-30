@@ -1,7 +1,7 @@
 Feature: Tasks and the board
   Adding a task, the board and its columns, the Tasks page, a task's page,
   running limits, search, the keys and the archive.
-  # Sources: internal/tasks, internal/archive, internal/settings,
+  # Sources: internal/domain/tasks, internal/archive, internal/settings,
   # internal/coordinator/slots.go, internal/web/api.go, internal/web/board_api.go,
   # internal/web/erase_api.go, internal/web/archives.go,
   # internal/web/settings_api.go, ui/src/pages/TasksPage.tsx,
@@ -48,7 +48,7 @@ Feature: Tasks and the board
   Scenario: The token budget and turn limit default to the server's, and Unlimited is allowed
     # internal/web/api_test.go TestANewTaskHasItsLimits
     # 5,000,000 tokens: cmd/agentry/serve.go line 102, the -budget flag's default
-    # 24 turns: internal/tasks/task.go line 112, DefaultMaxTurns
+    # 24 turns: internal/domain/tasks/task.go line 112, DefaultMaxTurns
     Given a server whose default budget is 5,000,000 tokens
     When the user adds a task without choosing a budget or a turn limit
     Then the task's budget is exactly 5,000,000 tokens and its turn limit is the server's default
@@ -183,7 +183,7 @@ Feature: Tasks and the board
   @TASK-15 @user @test
   Scenario: The board's columns, with the Backlog only when asked
     # ui/src/components/organisms/TaskBoard.test.tsx
-    # the 6 columns in order: internal/tasks/column.go line 39
+    # the 6 columns in order: internal/domain/tasks/column.go line 39
     Given a board whose columns are backlog, todo, in-progress, review, shipping and done
     And "Show the backlog" is not pressed
     When the board is shown
