@@ -90,10 +90,11 @@ Measured on `fc373495` (lines are Go, without tests / tests):
 
   Today exactly one line of Go code breaks these layers:
   `coordinator/followups.go` calls `ideas.Visionaries`, a runtime package
-  naming an extension. `docs/design/extensions.md` already plans to replace
-  it with a `features.Coordinator` hook (`extensions.Coordinator` in the
-  target). (Tests import upward freely, as Go's
-  external test packages may.)
+  naming an extension. The hook that replaces it already exists,
+  `features.Coordinator` (`internal/features/features.go:160`;
+  `extensions.Coordinator` after step 1a); only this call is left to move
+  onto it, as `docs/design/extensions.md` plans. (Tests import upward
+  freely, as Go's external test packages may.)
 - `tasks`, `current` and `coordinator` are tightly bound, but as a chain, not
   a cycle: `coordinator` imports `current`, `current` imports `tasks`. Each
   sits on its own layer, so they can live in different folders.
@@ -520,7 +521,7 @@ Every step but step 10 changes no behaviour, builds, passes `make test` and
 | Step | What | Kind |
 |---|---|---|
 | 1 | This document | doc |
-| 1a | Rename the framework in place: `internal/features` → `internal/extensions`, `ui/src/features` → `ui/src/extensions`, and the Go names with `gopls rename`; its paths in `spec/` rewritten as a move's are; `features.toml`, `/api/features` and its JSON keep their names | rename, no behaviour change |
+| 1a | Rename the framework in place: `internal/features` → `internal/extensions`, `ui/src/features` → `ui/src/extensions`, the Go and UI names, and `@/features` imports; the package name in `spec/constraints.md` section 1 and `spec/glossary.md`, and `internal/features` paths in `spec/`; `features.toml`, `/api/features` and its JSON keep their names | rename, no behaviour change |
 | 2 | The import test, with the flat names after step 1a in its table; drop the two old `imports_test.go`; rewrite `spec/constraints.md` line 77 | test only |
 | 3 | `# Sources:` lines in the 12 feature files without one; `spec/check` fails on a Sources path that doesn't exist | spec and check |
 | 4 | `testkit` and `tools`: `storetest`, `deeptest`, `speccheck`, `packaging` | move |
@@ -592,9 +593,38 @@ feature for the framework; `features.Route`, `features.Tool`,
 `features.Core` and `features.Coordinator` need only the new qualifier,
 `extensions.`. The folders `internal/features` and `ui/src/features` become
 `internal/extensions` and `ui/src/extensions`, and `internal/ideas` and
-`internal/schedules` stay where they are until step 8. It leaves
-`features.toml`, `/api/features` and its JSON as they are (section 4), so
-the step changes no behaviour.
+`internal/schedules` stay where they are until step 8.
+
+`tools/relayout` doesn't exist yet at step 1a, so the step names everything
+else it rewrites:
+
+- `spec/`: the bare package name `features` becomes `extensions` in
+  `spec/constraints.md` section 1 (line 7, "the leaves, `events`, `features`
+  and `httpapi`"; line 31, the package's own entry; line 64, `httpapi`
+  "imports only events and features"; and `go test ./internal/features` on
+  line 77), and the framework's entry in `spec/glossary.md` (line 56). Line
+  77 has the reviewer compare section 1 with the packages, so a miss there
+  is caught by no test. Every `internal/features` path in `spec/` (such as
+  `spec/constraints.md` line 97 and
+  `spec/proposals/extensions-github-and-email.feature`) is rewritten by
+  whole path segments, as item 3 of the script above says.
+- The UI: `@/features` imports become `@/extensions` (in `App.tsx`,
+  `Sidebar.tsx`, `AdminShell.tsx`, `SettingsPage.tsx` and its test,
+  `TaskPage.tsx` and `TasksPage.tsx` today). A rewrite of `ui/src/features`
+  doesn't match the alias, but `tsc` catches a miss.
+- Other names: those that mean the framework or its plug-ins are renamed,
+  for example Go's `features.Reader`, `features.StreamsOf`,
+  `storetest.WithFeatures()` and the coordinator's `Loop.Features` field,
+  files such as `internal/mcp/features.go` and
+  `internal/web/features_api_test.go`, and the UI's `FEATURES`,
+  `useFeatures`, `visibleFeatures`, `hiddenFeatures` and `FeatureUI`. Names
+  that mirror the JSON of `GET /api/features` or `features.toml`, such as
+  `FeatureLine` and `FeaturesReply` in `ui/src/api/types.ts` and a
+  template's `features` field, keep theirs.
+
+It leaves `features.toml`, `/api/features` and its JSON as they are
+(section 4), so the step changes no behaviour, and section 6's "Package
+names don't change in a move" stays true for every move after it.
 
 Old design docs under `docs/design/` keep the paths they were written with;
 they record what was true then.
