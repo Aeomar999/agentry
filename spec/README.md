@@ -175,7 +175,7 @@ The last line is `go run` reporting the exit code.
 
 ## Code with no spec yet
 
-The packages under `internal/domain` and `internal/extensions` that no feature file's Sources names yet, one per line as a path from the repo root in backquotes. The rules:
+The packages under `internal/domain` and `internal/extensions` that no feature file's Sources names yet, one per line as a path from the repo root in backquotes. The check reads every line under this heading that starts with a dash and a backquote as an entry, so no other line here starts that way. The rules:
 
 - The list may only shrink. When a feature file's Sources names an entry, the entry comes off in the same change.
 - The checker keeps what the list held when this rule came in, `noSpecYet` in `tools/speccheck/specified.go`, and it shrinks with the list.

@@ -29,7 +29,7 @@ Feature: Schedules
   Scenario: A change carries the whole schedule, so a field it leaves out goes back to its default
     # internal/extensions/schedules/schedule_test.go TestEachTypeFoldsWhatItSays, the case "changed"
     Given a weekly schedule with a description, start, a budget of 5 and a turn limit of 40, that has made 1 run, task-1
-    When a schedule.changed makes it "Weekly tidy", daily at 03:30 in Asia/Kolkata, for the team ops, with no description, start, budget or turn limit
+    When a schedule.changed makes it "Weekly tidy", daily at 03:30 in Asia/Kolkata, for the repo /s and the team ops, with no description, start, budget or turn limit
     Then the title, repo, team and rule are exactly the changed ones
     And the description is empty, start is not set, and the budget and turn limit are not set, so the server's defaults hold
     And Since moves to the change's time, and the 1 run and its task-1 are kept
@@ -102,7 +102,7 @@ Feature: Schedules
   @SCHED-10 @user @test
   Scenario: Folding one event at a time agrees with folding the whole stream, and never changes the schedule it started from
     # internal/extensions/schedules/schedule_test.go TestNextAgreesWithFromEvents and TestEachTypeFoldsWhatItSays
-    Given a stream of 12 events: a pause before the schedule exists, the schedule.created, a firing, 3 skips, a pause, a change, a resume, an unknown type, a Run now and a removal
+    Given a stream of 12 events: in log order, a pause before the schedule exists, the schedule.created, a firing, a skip as open, a skip as unrecorded, a pause, a change, a resume, an unknown type, a Run now, a skip as refused and a removal
     When it is folded one event at a time
     Then after each event the schedule is the same as folding the stream up to it in one go
     And the schedule each step started from is not changed, the tasks it named included
@@ -155,7 +155,7 @@ Feature: Schedules
   @SCHED-15 @user @test
   Scenario: A slot in a gap that ends at midnight runs at 00:00 on the next day
     # internal/extensions/schedules/rule_test.go TestNextMovesASlotInAGapEndingAtMidnightToTheNextDay
-    Given a rule every week on sat at 23:30 in America/Nuuk, whose clocks skip from Saturday 23:00 to Sunday 00:00 on 29 Mar 2026
+    Given a rule every week on sat at 23:30 in America/Nuuk, whose clocks skip from Saturday 23:00 to Sunday 00:00 on the night of 28 to 29 Mar 2026
     When the next slot is asked for on Saturday 28 Mar
     Then the slot is Sunday at 00:00, -01:00
     And the next one is the Saturday after, 4 Apr, at 23:30
