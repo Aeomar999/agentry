@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/webpush"
 )

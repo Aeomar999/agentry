@@ -353,7 +353,7 @@ Feature: Agentry from Claude Code
     Then it is refused with status 409, saying the story isn't an epic
     # not under test, checked by hand: the epic's stories are kept as they were
     # internal/web/epics_api.go: an epic id no task has is refused with no task <id>; a done epic with <id> is done; reopen it to add stories
-    # internal/rules/task_rules.go notAnEpic, inNoEpic, notItself: an epic can't be a story of another, a story is taken out of its epic first, a task can't be a story of itself
+    # internal/core/rules/task_rules.go notAnEpic, inNoEpic, notItself: an epic can't be a story of another, a story is taken out of its epic first, a task can't be a story of itself
     # internal/web/api_test.go TestTasksAreFiledUnderEpics
 
   @TOOLS-34 @claude-code @test

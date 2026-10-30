@@ -4,8 +4,8 @@ import (
 	"strings"
 	"sync"
 
-	"gitlab.com/dev.chempa/agentry/internal/current"
-	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/core/current"
+	"gitlab.com/dev.chempa/agentry/internal/core/store"
 )
 
 // Redactions are the secrets you redacted from the agents' knowledge while

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 )
 
 // Signing in a device that doesn't have the token, such as the installed

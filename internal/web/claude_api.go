@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 )
 
 // claudeMessage is a message to the coordinator that you asked Claude, in a

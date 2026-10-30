@@ -97,18 +97,18 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **priority**: the user's order of tasks, set by dragging a card up or down its column or a row in the list; a new task starts first, and the board and the list both sort by it.
 - **profile**: a named list of rules in policy.toml that one or more agents follow: read-only, read-mostly, developer, network-diagnosis, autonomous or allow-everything, or one the user writes.
 - **prompt**: an agent's standing instructions, given at the start of every turn and edited on its page; also the question an engine itself shows in the terminal, which the watchdog flags as waiting for the user when no one answers it.
-- **proposal**: an event offered to the store, which runs the checks and appends it, or appends a rejection in its place (internal/store).
+- **proposal**: an event offered to the store, which runs the checks and appends it, or appends a rejection in its place (internal/core/store).
 - **push**: a browser notification from Agentry, subscribed under Notifications on this device and needing an https public URL; also the git push the deployer runs, which always asks.
 - **question**: what a coordinator asks the user, with options or a page of its own, shown in Questions and in Claude Code; the task waits in Needs you until the user answers.
 - **Questions**: the dock's first tab, everything waiting for the user from every task, oldest first: approvals, coordinators' questions, budget and turn-limit stops, and agents stuck on a prompt.
 - **queued**: a started task waiting for a slot while as many tasks as `maxRunningTasks` allows have a turn open; it takes one as it frees, in priority order.
 - **rank**: a task's place in the user's priority order, a number between its neighbours so two never tie (internal/tasks).
-- **reader**: what follows the log from a position at its own pace, each with its own cursor; a slow reader never holds up a writer (internal/store).
-- **read model**: the in-memory state of every stream, built from the log at every start and changed only as each event commits, so it can never disagree with what happened; every read of the page goes to it (internal/current).
+- **reader**: what follows the log from a position at its own pace, each with its own cursor; a slow reader never holds up a writer (internal/core/store).
+- **read model**: the in-memory state of every stream, built from the log at every start and changed only as each event commits, so it can never disagree with what happened; every read of the page goes to it (internal/core/current).
 - **read-mostly**: the Visionaries' shipped profile: read-only, plus reading the task board.
 - **read-only**: the shipped profile of the reviewer and coordinator: reading, `go vet` and the tests, no file changes from the shell.
 - **redact**: replacing one text with `[redacted]` in every row that holds it, on a task's page, an agent's page or everywhere under Privacy in Settings; the log records who, when, why and which rows, never the text, and nothing undoes it.
-- **rejection**: the event the store writes in place of a proposal a check refused (internal/store).
+- **rejection**: the event the store writes in place of a proposal a check refused (internal/core/store).
 - **release**: a GitHub release made from a tag on dev, with one zip per kind of computer from `make package`.
 - **repo**: the git repository a task works in: the default repo, a folder on the machine, a git address Agentry clones into `~/.agentry/repos`, a `.zip` or `.tar.gz` link, or a new repo Agentry makes.
 - **report**: an agent's final message at the end of a turn, which goes back to the coordinator; the brief asks for what changed, how it was tested and what is left.
@@ -128,15 +128,15 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **Shipping**: the board column that means ship it now: the coordinator hands the task to an agent of its team that ships work, which still runs the tests and build first.
 - **sign-in code**: a code such as `ABCD-EFGH`, with a QR code, that a signed-in device shows under Sign in another device; it works once, for 5 minutes, and wrong codes are limited to five a minute from one address.
 - **slot**: one of the `maxRunningTasks` turns that may be open at once; a task holds one while any agent has a turn open on it.
-- **snapshot**: the read model written to a file so a start reads it and applies only the events after it; a cache, thrown away whenever it might disagree with the log (internal/current).
+- **snapshot**: the read model written to a file so a start reads it and applies only the events after it; a cache, thrown away whenever it might disagree with the log (internal/core/current).
 - **spec**: this folder: Agentry's behaviour today as scenarios, with this glossary and the constraints; `spec/check` and `make spec` check it.
 - **stage**: one step of a task's path, the agent that had it and how many turns it took; the board's columns are the stages of the work.
 - **status**: the one word the page shows for a task: working, needs you, done or held (internal/tasks).
 - **status bar**: the bar at the bottom of the page, with Terminal to open the dock and how many tasks wait for the user.
 - **status line**: Claude Code's line showing `agentry · 1 needs you · 3 running` on a machine connected from the Integrations page.
-- **store**: the package that keeps the log: it runs every proposal's checks under one lock, appends it, and writes the archive, erase and redact markers (internal/store).
+- **store**: the package that keeps the log: it runs every proposal's checks under one lock, appends it, and writes the archive, erase and redact markers (internal/core/store).
 - **story**: a task of one goal, on one branch, checked before it is done; a story cannot be split, so an epic has only one level of them.
-- **stream**: the events of one thing, a task, an idea, a schedule, or the agents, templates, workers, policy or settings, named by its ID; the read model keeps the state of each (internal/events).
+- **stream**: the events of one thing, a task, an idea, a schedule, or the agents, templates, workers, policy or settings, named by its ID; the read model keeps the state of each (internal/core/events).
 - **summary**: what a coordinator writes when a task is done, kept with the task and sent back to its epic or to the task that asked for it.
 - **Take control**: the live terminal's button that lets the one viewer in control type into the agent's session, and hand it back.
 - **task**: what the user describes in their own words and a coordinator hands from agent to agent until the work is checked and done; shown as task-N, worked in its own worktree on its own branch.

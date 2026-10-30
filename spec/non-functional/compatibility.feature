@@ -135,8 +135,8 @@ Feature: Compatibility
     When the adapters' names and the rules' known engines are compared, and an agent names another engine
     Then the adapters' names and the rules' known engines are the same list, and adapters named claude and codex are found: yes
     And an agent with another engine is refused by the rules: yes
-    # not under test, checked by hand: the list is claude and codex alone (internal/rules/agent_rules.go line 15), and the refusal says "unknown engine" (line 92)
-    # README.md, What you need (Codex works too); internal/platform/engines/engines_test.go TestTheRulesKnowExactlyTheEnginesThereAreAdaptersFor and TestParseHookGivesTheSameSignalsOnBothEngines; internal/rules/rules_test.go TestAgentRules
+    # not under test, checked by hand: the list is claude and codex alone (internal/core/rules/agent_rules.go line 15), and the refusal says "unknown engine" (line 92)
+    # README.md, What you need (Codex works too); internal/platform/engines/engines_test.go TestTheRulesKnowExactlyTheEnginesThereAreAdaptersFor and TestParseHookGivesTheSameSignalsOnBothEngines; internal/core/rules/rules_test.go TestAgentRules
 
   @COMPAT-13 @test
   Scenario: Claude Code is started in never-ask mode with Agentry's own settings file

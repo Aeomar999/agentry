@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/schedules"
-	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
 

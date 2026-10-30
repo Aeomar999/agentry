@@ -4,10 +4,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
-	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
 const policyFile = "policy.toml"

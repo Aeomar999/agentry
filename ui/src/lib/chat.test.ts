@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { LogEvent, TaskDetail } from "@/api/types";
 import { CHAT_TYPES, chatOf } from "./chat";
-import catalogue from "../../../internal/events/types.go?raw";
+import catalogue from "../../../internal/core/events/types.go?raw";
 
 // Every type of event the log has, from the Go catalogue itself, so a new
 // type is checked too.

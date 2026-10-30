@@ -6,7 +6,7 @@ package settings
 import (
 	"slices"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // Settings are your choices for how Agentry works.

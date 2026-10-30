@@ -65,13 +65,13 @@ Feature: Workers
     Then it is refused: yes
     When an agent is given a worker that never joined under Runs on
     Then it is refused: yes
-    # not under test, checked by hand: the refusal names the workers that have joined (internal/rules/worker_rules.go line 53)
+    # not under test, checked by hand: the refusal names the workers that have joined (internal/core/rules/worker_rules.go line 53)
     When the user removes a worker an agent runs on
     Then it is refused: yes
-    # not under test, checked by hand: the refusal names the agent and says to take the worker off its workers first (internal/rules/worker_rules.go line 102)
+    # not under test, checked by hand: the refusal names the agent and says to take the worker off its workers first (internal/core/rules/worker_rules.go line 102)
     When the agent's Runs on is cleared and the worker removed
     Then it is removed: yes
-    # internal/rules/worker_rules_test.go TestWorkerRules
+    # internal/core/rules/worker_rules_test.go TestWorkerRules
 
   @MACHINE-06 @worker @test
   Scenario: Joining over https checks the server's CA before the code is sent

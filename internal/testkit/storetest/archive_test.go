@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
-	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
 // A task the state can't hand out, archived already or with its stream

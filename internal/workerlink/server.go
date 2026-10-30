@@ -10,10 +10,10 @@ import (
 
 	"github.com/coder/websocket"
 
-	"gitlab.com/dev.chempa/agentry/internal/current"
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/current"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
-	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 

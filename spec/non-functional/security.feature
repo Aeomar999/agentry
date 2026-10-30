@@ -60,7 +60,7 @@ Feature: Security
     Then an action.held event is recorded exactly once
     And the agent is told no, with the words that the command is held for the user's approval
     And the action is kept in Needs you for the user to approve or deny
-    # README.md, What happens to one action; internal/hooks/handler_test.go TestAnAskThatTimesOutIsHeldForTheUser; once: internal/rules/rules_test.go TestOnlyYouDecideAHeldAction refuses a second action.held
+    # README.md, What happens to one action; internal/hooks/handler_test.go TestAnAskThatTimesOutIsHeldForTheUser; once: internal/core/rules/rules_test.go TestOnlyYouDecideAHeldAction refuses a second action.held
 
   @SEC-08 @test
   Scenario: Only the agent whose turn is running passes the gate
@@ -556,7 +556,7 @@ Feature: Security
     And the log records which rows changed, never the secret nor its hash
     And a turn that was running keeps the secret out of what it writes back: yes
     # not under test, checked by hand: the held secrets are in memory only, gone when the server restarts and kept nowhere on disk (internal/hooks/redactions.go line 17)
-    # README.md, Archiving, erasing and redacting; internal/store/redact_test.go TestRedactRewritesOnlyTheSecret; internal/hooks/redactions_test.go TestASecretIsLetGoOnceEveryTurnRunningThenHasEnded
+    # README.md, Archiving, erasing and redacting; internal/core/store/redact_test.go TestRedactRewritesOnlyTheSecret; internal/hooks/redactions_test.go TestASecretIsLetGoOnceEveryTurnRunningThenHasEnded
 
   @SEC-62 @test
   Scenario: Agentry's own CA signs a server certificate that is renewed in time

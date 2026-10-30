@@ -55,7 +55,7 @@ Feature: Output gate
 
   @PROP-69 @agent @test @to-policy
   Scenario: A redacted result reaches the agent with each matching text replaced by [redacted]
-    # the marker the user's redaction writes: @SET-02 (internal/store/redact.go)
+    # the marker the user's redaction writes: @SET-02 (internal/core/store/redact.go)
     # test: internal/hooks/output_test.go (to write)
     Given a rule "keys never reach a model" that redacts results that have a text of the form "sk-live-*"
     When cat config.yaml prints 40 lines, 2 of them holding a key of that form
@@ -75,7 +75,7 @@ Feature: Output gate
 
   @PROP-71 @test @to-observability
   Scenario: Each decision on a result is logged with its rule, never the result's text
-    # actions and their decisions are events by the policy (internal/events/catalogue.go action.approved, action.denied); action.result holds no text today (internal/hooks/handler.go)
+    # actions and their decisions are events by the policy (internal/core/events/catalogue.go action.approved, action.denied); action.result holds no text today (internal/hooks/handler.go)
     # test: internal/hooks/output_test.go (to write)
     Given one result held and let through, one redacted twice and one blocked
     When the task's Actions tab is shown

@@ -8,7 +8,7 @@ import (
 	"math"
 	"unicode/utf8"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // Patch is a new version of a text, stored as what it keeps of the version

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/current"
-	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/httpapi"
-	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/core/current"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/core/store"
 )
 
 // Redacting a secret across the whole log, for one pasted widely

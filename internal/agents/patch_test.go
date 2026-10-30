@@ -8,7 +8,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // logged is a proposal as the log hands it back, through JSON: numbers come

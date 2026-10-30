@@ -3,7 +3,7 @@ package tasks
 import (
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // An Erasure is all an erased task keeps: its id, which no task takes

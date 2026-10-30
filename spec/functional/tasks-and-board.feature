@@ -131,7 +131,7 @@ Feature: Tasks and the board
   @TASK-11 @user @test
   Scenario: Labels are trimmed, lowercased and kept short
     # internal/web/api_test.go TestTasksCarryLabels
-    # at most 12 labels of 1 to 32 characters: internal/rules/task_rules.go lines 156 and 160
+    # at most 12 labels of 1 to 32 characters: internal/core/rules/task_rules.go lines 156 and 160
     Given a server with no tasks
     When the user adds a task with the labels "Bug", " auth ", "bug" and ""
     Then the task carries exactly 2 labels, bug and auth

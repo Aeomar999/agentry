@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // ValidName says whether name may be an agent's name: lowercase letters,

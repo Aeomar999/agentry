@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/workspace"
 	"gitlab.com/dev.chempa/agentry/internal/workers"

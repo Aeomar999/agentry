@@ -4,7 +4,7 @@ import (
 	"maps"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // State is whether a schedule makes tasks.

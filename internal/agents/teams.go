@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // A team template is a ready-made team for one kind of work: a coordinator

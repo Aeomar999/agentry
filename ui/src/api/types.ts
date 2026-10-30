@@ -464,7 +464,7 @@ export interface FeaturesReply {
   unknown?: UnknownEvents[] | null;
 }
 
-// Events the server skipped or didn't understand (internal/current Unknown),
+// Events the server skipped or didn't understand (internal/core/current Unknown),
 // in GET /api/features: those of one stream prefix from an extension this
 // build doesn't have, or those of one type it doesn't know.
 export interface UnknownEvents {

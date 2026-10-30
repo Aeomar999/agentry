@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"modernc.org/sqlite"
 )
 

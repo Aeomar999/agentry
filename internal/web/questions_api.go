@@ -6,7 +6,7 @@ import (
 	"slices"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 

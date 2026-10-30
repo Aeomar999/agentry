@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/core/rules"
 	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
-	"gitlab.com/dev.chempa/agentry/internal/rules"
 )
 
 func engine(t *testing.T, name string) engines.Engine {

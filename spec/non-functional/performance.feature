@@ -7,7 +7,7 @@ Feature: Performance
     When 1,200 events are written
     Then the writes take 0.07 seconds, as measured on 2026-10-16
     And the reader then reads all 1,200 back, in order
-    # go test ./internal/store -run Reader
+    # go test ./internal/core/store -run Reader
 
   @PERF-02 @benchmark
   Scenario: A fresh server answers its page within 0.1 second of starting
@@ -41,7 +41,7 @@ Feature: Performance
     Then the first start logs "there is no snapshot", so the whole log is replayed, and the leftover file is not there afterwards
     And the snapshot state.snapshot is in the data dir with mode 0600 after the first stop
     And the second start does not log "replayed": it goes on from the snapshot
-    # cmd/agentry/serve_test.go TestServeKeepsTheSnapshotAcrossARestart; internal/current/resume.go Restore logs the fallbacks
+    # cmd/agentry/serve_test.go TestServeKeepsTheSnapshotAcrossARestart; internal/core/current/resume.go Restore logs the fallbacks
 
   @PERF-06 @test
   Scenario: A snapshot is written after enough events, or after the interval with at least one
@@ -51,7 +51,7 @@ Feature: Performance
     And the interval with no event adds 0 writes
     And after 1 event, the interval and Close there are exactly 3 writes in all
     And the next start goes on from the last snapshot's position and does not log "replayed"
-    # internal/current/writer_test.go TestTheWriterWritesAfterEnoughEventsOrTimeWithAnEvent; the shipped counts are in the scenario below
+    # internal/core/current/writer_test.go TestTheWriterWritesAfterEnoughEventsOrTimeWithAnEvent; the shipped counts are in the scenario below
 
   @PERF-07 @manual
   Scenario: The shipped snapshot writer writes every 10,000 events or every 10 minutes
@@ -59,7 +59,7 @@ Feature: Performance
     When 10,000 events are applied since the last snapshot, or 10 minutes pass with at least 1 event applied in them
     Then the snapshot file's modification time moves exactly once for that run of events or that interval
     And 10 minutes with 0 events applied moves it 0 times
-    # internal/current/writer.go snapshotEvery = 10_000 and snapshotInterval = 10 minutes; no test asserts the shipped numbers, writer_test.go sets its own
+    # internal/core/current/writer.go snapshotEvery = 10_000 and snapshotInterval = 10 minutes; no test asserts the shipped numbers, writer_test.go sets its own
 
   @PERF-08 @test
   Scenario: A proposal is not held up by a snapshot write under way
@@ -68,17 +68,17 @@ Feature: Performance
     Then the proposal commits within 5 seconds, without waiting for the writer
     And the state's position moves by exactly 1
     And once the write is released a snapshot at the new event's position is written: yes
-    # internal/current/writer_test.go TestAProposalCommitsWhileTheWriterIsMidWrite; the writer holds no lock of the store's, internal/current/writer.go
+    # internal/core/current/writer_test.go TestAProposalCommitsWhileTheWriterIsMidWrite; the writer holds no lock of the store's, internal/core/current/writer.go
 
   @PERF-09 @manual
   Scenario: Startup on a real log is measured by the user with the startup benchmark
     Given a read-only copy of a real agentry.db, which no agent may read, and AGENTRY_BENCH_DB naming the copy
-    When the user runs, from the repo root, AGENTRY_BENCH_DB=<copy>/agentry.db go test ./internal/current -run TestStartupBench -v -count=1 -timeout 30m
+    When the user runs, from the repo root, AGENTRY_BENCH_DB=<copy>/agentry.db go test ./internal/core/current -run TestStartupBench -v -count=1 -timeout 30m
     Then the test grows a synthetic log of 1 GB from the copy, 10 with AGENTRY_BENCH_GB=10, and fails if its mix of events differs from the copy's by more than 5 percent
     And it reports the time from store.Open to Loaded on a fresh state, the fastest of 3 runs, against the full replay limit of 2.5 seconds at 1 GB and 5 seconds up to 10 GB
     And it reports the live file's size and the heap the state holds against their formulas, the snapshot tail of 10,000 events, startup from a snapshot of the working set on 1 and 2 cores, and a snapshot write on 1 core
     And it fails on no target: every target is logged, not asserted; it fails only on the mix, a broken stream, a synthetic log with no working set, or an AGENTRY_BENCH_GB or AGENTRY_BENCH_WORKING value that is not a number above 0
-    # docs/design/log-growth.md section 6; internal/current/startup_bench_test.go TestStartupBench, skipped without AGENTRY_BENCH_DB; the limits are logged in internal/current/snapshot_bench_test.go benchSnapshots
+    # docs/design/log-growth.md section 6; internal/core/current/startup_bench_test.go TestStartupBench, skipped without AGENTRY_BENCH_DB; the limits are logged in internal/core/current/snapshot_bench_test.go benchSnapshots
 
   @PERF-10 @benchmark
   Scenario: The state holds under 1 KB of heap per archived task
@@ -86,7 +86,7 @@ Feature: Performance
     When the state holding only those summaries is measured after a garbage collection
     Then the heap per archived task is under 1,000 bytes, the limit the test logs it against: 818, 829 and 824 bytes in 3 runs
     And the state lists exactly 1,000 summaries
-    # docs/design/log-growth.md section 6, Target 5; measured 2026-10-25 with GOTOOLCHAIN=local GOPROXY=off GOFLAGS=-mod=mod timeout 600 go test ./internal/current -run TestTheSummaryHeapBenchRunsOnAFixture -v -count=1, which prints the bytes after runtime.GC: 818 B at commit 3c1976b5 (engineer), 829 B (reviewer) and 824 B at 6d3f2dcb (engineer); the number varies by run, the test fails on the count only, not the bytes
+    # docs/design/log-growth.md section 6, Target 5; measured 2026-10-25 with GOTOOLCHAIN=local GOPROXY=off GOFLAGS=-mod=mod timeout 600 go test ./internal/core/current -run TestTheSummaryHeapBenchRunsOnAFixture -v -count=1, which prints the bytes after runtime.GC: 818 B at commit 3c1976b5 (engineer), 829 B (reviewer) and 824 B at 6d3f2dcb (engineer); the number varies by run, the test fails on the count only, not the bytes
 
   @PERF-11 @test
   Scenario: A command with far too many values is judged within a second

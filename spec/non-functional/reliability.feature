@@ -114,7 +114,7 @@ Feature: Reliability
 
   @REL-10 @test
   Scenario: An engine stopped at its usage limit leaves the turn open and limited, with the reset time
-    # internal/events/catalogue.go TurnLimited fields: agent, error, details, resetsAt
+    # internal/core/events/catalogue.go TurnLimited fields: agent, error, details, resetsAt
     Given a running turn whose engine reports a StopFailure with error rate_limit and a message saying the limit resets at 3am UTC
     When the hook call is handled
     Then the last event of the task is turn.limited with error rate_limit and resetsAt at 3:00 UTC
@@ -288,7 +288,7 @@ Feature: Reliability
   @REL-22 @test
   Scenario: A second start goes on from the snapshot the first one wrote
     # cmd/agentry/serve.go snapshotFile = state.snapshot, in the data folder beside the log
-    # internal/current/writer.go: the last snapshot is written when the server closes
+    # internal/core/current/writer.go: the last snapshot is written when the server closes
     Given an empty data folder with an unfinished snapshot write left in it
     When the server starts
     Then it logs that there is no snapshot, so the whole log is replayed
@@ -300,7 +300,7 @@ Feature: Reliability
 
   @REL-23 @test
   Scenario: A snapshot that cannot be trusted is thrown away and the whole log is replayed
-    # internal/current/resume.go Restore and Resume; a torn or corrupt file is kept as state.snapshot.bad
+    # internal/core/current/resume.go Restore and Resume; a torn or corrupt file is kept as state.snapshot.bad
     Given a log and a snapshot written at position 12 by build-1
     When the snapshot is missing, or written by build-2, or is a folder, or cannot be read
     Then the state resumed from the snapshot: no, and the log says why
@@ -310,19 +310,19 @@ Feature: Reliability
     Then the state resumed from the snapshot: no
     When an event after the snapshot breaks a stream the snapshot holds
     Then the whole log is replayed and the stream is broken afterwards: no
-    # internal/current/snapshot_test.go TestEveryFallbackReplaysTheWholeLogAndSaysWhy
+    # internal/core/current/snapshot_test.go TestEveryFallbackReplaysTheWholeLogAndSaysWhy
 
   @REL-24 @test
   Scenario: Starting from a snapshot gives the same state as replaying the whole log
-    # internal/current/equal.go Equal compares every stream
+    # internal/core/current/equal.go Equal compares every stream
     Given a fixture log, with a story's news among its events
     When a snapshot is written at every position of the log and a state is resumed from each
     Then each resumed state equals the state replayed from the whole log: yes
-    # internal/current/snapshot_test.go TestASnapshotAtEveryPositionEqualsAReplay
+    # internal/core/current/snapshot_test.go TestASnapshotAtEveryPositionEqualsAReplay
 
   @REL-25 @test
   Scenario: The snapshot is written after its count of events, or at its interval with at least 1 event, and at close
-    # internal/current/writer.go snapshotEvery = 10,000 events, snapshotInterval = 10 minutes
+    # internal/core/current/writer.go snapshotEvery = 10,000 events, snapshotInterval = 10 minutes
     Given a snapshot writer running beside the state
     When as many events as its count have been applied since the last snapshot
     Then 1 snapshot is written
@@ -334,12 +334,12 @@ Feature: Reliability
     Then it writes 1 last snapshot, which the next start goes on from: yes
     When the writer closes with 0 events applied since the last snapshot
     Then it writes 0 snapshots
-    # not under test, checked by hand: serve's writer counts 10,000 events and waits 10 minutes (internal/current/writer.go lines 17, 18); the test sets 3 events and ticks by hand
-    # internal/current/writer_test.go TestTheWriterWritesAfterEnoughEventsOrTimeWithAnEvent, TestCloseWritesASnapshotTheNextStartGoesOnFrom
+    # not under test, checked by hand: serve's writer counts 10,000 events and waits 10 minutes (internal/core/current/writer.go lines 17, 18); the test sets 3 events and ticks by hand
+    # internal/core/current/writer_test.go TestTheWriterWritesAfterEnoughEventsOrTimeWithAnEvent, TestCloseWritesASnapshotTheNextStartGoesOnFrom
 
   @REL-26 @benchmark
   Scenario: Starting from a snapshot is fast however long the log is
-    # internal/current/snapshot_bench_test.go startupLimit = 500 ms, startupLimitOne = 750 ms, tailLimit = 100 ms, tailEvents = 10,000
+    # internal/core/current/snapshot_bench_test.go startupLimit = 500 ms, startupLimitOne = 750 ms, tailLimit = 100 ms, tailEvents = 10,000
     Given a log of 1 GB of history, its done tasks archived, and a snapshot of the working set
     When the state is opened from the snapshot on 2 or more cores
     Then the open takes at most 500 ms, and the snapshot body's decode, the main part of it, measured 0.10 s on 2 cores and 0.08 s on 8
@@ -347,15 +347,15 @@ Feature: Reliability
     Then the open takes at most 750 ms, and the body's decode measured 0.14 s
     When the snapshot is 10,000 events behind the log
     Then applying the tail adds at most 100 ms
-    # Measured by TestStartupBench in internal/current/startup_bench_test.go on a copy of a real log grown to 1 GB
-    # of history, run with AGENTRY_BENCH_DB=<copy>/agentry.db go test ./internal/current -run TestStartupBench -v -count=1 -timeout 30m.
+    # Measured by TestStartupBench in internal/core/current/startup_bench_test.go on a copy of a real log grown to 1 GB
+    # of history, run with AGENTRY_BENCH_DB=<copy>/agentry.db go test ./internal/core/current -run TestStartupBench -v -count=1 -timeout 30m.
     # Measured in October 2026 during the log-growth build, on a 1 GB synthetic log grown from the 19 October copy:
     # a 201.7 MB body (128.5 MB of working-set tasks, 90,000 summaries), written as gob (127.7 MB, 64 streams),
     # decodes in 0.14 / 0.10 / 0.08 s on 1 / 2 / 8 cores. That decode is the main part of the open; the numbers are
     # in docs/design/log-growth.md, section "Measured in build step 2: gob".
-    # The limits are the constants in internal/current/snapshot_bench_test.go; TestTheSnapshotBenchRunsOnASmallLog
+    # The limits are the constants in internal/core/current/snapshot_bench_test.go; TestTheSnapshotBenchRunsOnASmallLog
     # runs the same measurement on a small log in every go test run.
-    # internal/current/startup_bench_test.go
+    # internal/core/current/startup_bench_test.go
 
   # Bounded disk use and archiving
 
@@ -409,27 +409,27 @@ Feature: Reliability
 
   @REL-30 @test
   Scenario: Archiving moves a task's rows into one file and leaves a marker with its summary
-    # internal/store/archive.go Archive; the blob is kept by sharedfiles.Disk under the data folder's files
+    # internal/core/store/archive.go Archive; the blob is kept by sharedfiles.Disk under the data folder's files
     Given a done task with N rows in the live log
     When it is archived
     Then the live log holds 0 of those rows and 1 task.archived marker in their place
     And the marker names a blob that holds the N rows, and the task's summary: yes
     When the delete would remove other than N rows
     Then the whole archive is undone, marker and all: yes
-    # README.md, Archiving, erasing and redacting; internal/store/archive_test.go TestArchiveMovesTheRowsIntoTheBlob, TestADeleteOfTheWrongCountUndoesTheArchive
+    # README.md, Archiving, erasing and redacting; internal/core/store/archive_test.go TestArchiveMovesTheRowsIntoTheBlob, TestADeleteOfTheWrongCountUndoesTheArchive
 
   @REL-52 @test
   Scenario: A delete of rows no task.archived marker covers is refused by the database
-    # internal/store/archive.go: the log is append-only by trigger; only a marker in the same transaction lets its own rows go
+    # internal/core/store/archive.go: the log is append-only by trigger; only a marker in the same transaction lets its own rows go
     Given a live log with a task's rows in it and no task.archived marker for them
     When a statement deletes all of the log's rows, or the row at position 1
     Then each delete is refused by the database as append-only: yes
-    # not under test, checked by hand: the trigger aborts the whole statement, so 0 rows are gone (internal/store/store.go line 64)
-    # README.md, Archiving, erasing and redacting; internal/store/archive_test.go TestAStrayDeleteIsRefused
+    # not under test, checked by hand: the trigger aborts the whole statement, so 0 rows are gone (internal/core/store/store.go line 64)
+    # README.md, Archiving, erasing and redacting; internal/core/store/archive_test.go TestAStrayDeleteIsRefused
 
   @REL-31 @test
   Scenario: An archived task still opens as it was, and takes no new events
-    # internal/web/archives.go reads the blob and the live rows back; internal/rules refuse every event but task.unarchived
+    # internal/web/archives.go reads the blob and the live rows back; internal/core/rules refuse every event but task.unarchived
     Given a task archived with its history
     When its page is read
     Then it reads as before archiving, marked archived with the date: yes
@@ -439,7 +439,7 @@ Feature: Reliability
 
   @REL-53 @test
   Scenario: An archived task takes no event but task.unarchived
-    # internal/rules/rules.go: on an archived stream every event but task.unarchived is refused; event.redacted is refused with its own reason
+    # internal/core/rules/rules.go: on an archived stream every event but task.unarchived is refused; event.redacted is refused with its own reason
     Given a task archived with its history, read back once
     When a message is sent to it, or its labels or its rank are set
     Then each request is refused: yes, and none is answered 200
@@ -448,16 +448,16 @@ Feature: Reliability
 
   @REL-32 @test
   Scenario: Reopening an archived task brings its rows back first
-    # internal/store/unarchive.go Unarchive inserts the rows at their own positions and appends task.unarchived
+    # internal/core/store/unarchive.go Unarchive inserts the rows at their own positions and appends task.unarchived
     Given an archived done task
     When it is moved off Done on the board, or its coordinator is told something
     Then task.unarchived is appended and its rows are back at their own positions: yes
     And it reopens as any done task does: yes
-    # README.md, Archiving, erasing and redacting; internal/web/unarchive_test.go TestMovingAnArchivedTaskBackToWorkReopensIt, TestSayingSomethingToAnArchivedTaskReopensIt; the positions: internal/store/unarchive_test.go TestUnarchivePutsTheRowsBackAsTheyWere
+    # README.md, Archiving, erasing and redacting; internal/web/unarchive_test.go TestMovingAnArchivedTaskBackToWorkReopensIt, TestSayingSomethingToAnArchivedTaskReopensIt; the positions: internal/core/store/unarchive_test.go TestUnarchivePutsTheRowsBackAsTheyWere
 
   @REL-50 @test
   Scenario: A reopen whose unarchiving is refused writes nothing
-    # internal/store/unarchive.go Unarchive
+    # internal/core/store/unarchive.go Unarchive
     Given an archived done task whose unarchiving the store refuses
     When it is moved off Done on the board
     Then 0 events are written
@@ -465,7 +465,7 @@ Feature: Reliability
 
   @REL-33 @test
   Scenario: After a round that archived, the space goes back to the disk and a snapshot is asked for
-    # internal/archive/archive.go afterArchiving; internal/store/vacuum.go GiveBackSpace and VacuumOnce
+    # internal/archive/archive.go afterArchiving; internal/core/store/vacuum.go GiveBackSpace and VacuumOnce
     Given a round that archived at least 1 task
     Then the store gives its free pages back and empties the WAL 1 time
     And 1 snapshot is asked for
@@ -474,7 +474,7 @@ Feature: Reliability
     Given a log file made before incremental vacuum whose one full VACUUM failed
     When the next round runs
     Then the VACUUM is tried again: yes
-    # README.md, Archiving, erasing and redacting; internal/archive/archive_test.go TestOnlyARoundThatArchivedGivesBackSpaceAndSnapshots, TestAFailedVacuumIsTriedAgainAtTheNextRound; the WAL: internal/store/vacuum_test.go TestGiveBackSpaceShrinksTheFileAndTheWAL
+    # README.md, Archiving, erasing and redacting; internal/archive/archive_test.go TestOnlyARoundThatArchivedGivesBackSpaceAndSnapshots, TestAFailedVacuumIsTriedAgainAtTheNextRound; the WAL: internal/core/store/vacuum_test.go TestGiveBackSpaceShrinksTheFileAndTheWAL
 
   @REL-34 @benchmark
   Scenario: An archived task opens in time

@@ -9,7 +9,7 @@ import (
 	"slices"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // UserTemplate is a team you saved as a template of your own: its agents

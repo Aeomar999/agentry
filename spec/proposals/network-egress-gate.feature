@@ -121,7 +121,7 @@ Feature: Network egress gate
 
   @PROP-88 @test @to-observability
   Scenario: Each host an agent reached, asked about or was refused is on the Actions tab, once per turn
-    # actions and their decisions are events in the task's stream (internal/events/catalogue.go action.requested, action.asked, action.approved, action.denied)
+    # actions and their decisions are events in the task's stream (internal/core/events/catalogue.go action.requested, action.asked, action.approved, action.denied)
     # test: internal/egress/proxy_test.go (to write)
     Given a turn that opened 50 connections to 1 allowlisted host, 1 to a host the user allowed once and 1 the user denied
     When the task's Actions tab is shown

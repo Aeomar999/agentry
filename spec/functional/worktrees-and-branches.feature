@@ -69,7 +69,7 @@ Feature: Worktrees and branches
     Then it is accepted: yes
     When a move is recorded while a turn runs
     Then it is refused: yes
-    # internal/rules/worker_rules_test.go TestWorkMovesOnlyToAnotherMachine
+    # internal/core/rules/worker_rules_test.go TestWorkMovesOnlyToAnotherMachine
 
   # ---- The Workspace ---------------------------------------------------------
 

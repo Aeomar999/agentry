@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 var update = flag.Bool("update", false, "rewrite the files in testdata from what the code gives now")

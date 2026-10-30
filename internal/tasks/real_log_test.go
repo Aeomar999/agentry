@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/current"
+	"gitlab.com/dev.chempa/agentry/internal/core/current"
+	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
-	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // EveryEvent is a log of one task, task-1, that has every event a task

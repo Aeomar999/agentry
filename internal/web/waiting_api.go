@@ -3,8 +3,8 @@ package web
 import (
 	"net/http"
 
+	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
-	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/waitlist"
 )
 

@@ -3,7 +3,7 @@ package extensions
 import (
 	"fmt"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // Checked is log for the extension f, whose types are registered: it refuses,

@@ -1,7 +1,7 @@
 package schedules
 
 import (
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // A schedule's stream, named by its ID (schedule-N): what you made it say,

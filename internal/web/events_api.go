@@ -7,8 +7,8 @@ import (
 	"slices"
 	"strconv"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 )
 
 // A task's events a page at a time, so the page needn't take a long task's

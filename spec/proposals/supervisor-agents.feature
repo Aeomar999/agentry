@@ -35,7 +35,7 @@ Feature: Supervisor agents
 
   @PROP-55 @user @test @to-teams-and-templates
   Scenario: The permission is refused on a coordinator
-    # a coordinator assigns already: the rules let it (internal/rules/task_rules.go byTheCoordinator)
+    # a coordinator assigns already: the rules let it (internal/core/rules/task_rules.go byTheCoordinator)
     # test: internal/agents/custom_test.go and internal/web/api_test.go (to write)
     Given the Kitchen team
     When an agent is saved with coordinates true and assigns true
@@ -89,8 +89,8 @@ Feature: Supervisor agents
 
   @PROP-60 @agent @test @to-coordinator-and-handoffs
   Scenario: A supervisor's assign gets the checks the coordinator's gets, and a refused one is an issue for the coordinator
-    # the checks on task.assigned: internal/rules/task_rules.go (noOpenTurn, noQuestionOpen, notToTheCoordinator, notUndoingYourMove) and internal/rules/agent_rules.go assigneeExists; a refused assign is an issue: @HANDOFF-07
-    # test: internal/rules/rules_test.go and internal/coordinator/next_test.go (to write)
+    # the checks on task.assigned: internal/core/rules/task_rules.go (noOpenTurn, noQuestionOpen, notToTheCoordinator, notUndoingYourMove) and internal/core/rules/agent_rules.go assigneeExists; a refused assign is an issue: @HANDOFF-07
+    # test: internal/core/rules/rules_test.go and internal/coordinator/next_test.go (to write)
     Given the reviewer of the Software team may assign
     When its report ends with an assign to an agent of the Writing team, to no agent of that name, to the coordinator, or to itself
     # "reviewer can't assign the task to itself" is a new check: notToTheCoordinator covers only the coordinator
@@ -103,8 +103,8 @@ Feature: Supervisor agents
 
   @PROP-61 @test @to-security
   Scenario: An agent that may not assign cannot, whatever its report says
-    # @HANDOFF-41: an assignment by any agent other than the coordinator is refused (internal/rules/task_rules.go byTheCoordinator); the permission is read from the roster under the store's lock
-    # test: internal/rules/rules_test.go (to write)
+    # @HANDOFF-41: an assignment by any agent other than the coordinator is refused (internal/core/rules/task_rules.go byTheCoordinator); the permission is read from the roster under the store's lock
+    # test: internal/core/rules/rules_test.go (to write)
     Given the engineer, which may not assign
     When its report ends with an assign to the deployer
     Then nothing is assigned, the report goes back to the coordinator, and 0 task.assigned events are written
@@ -116,7 +116,7 @@ Feature: Supervisor agents
   @PROP-62 @test @to-security
   Scenario: The permission gives no other right
     # docs/design/extensions.md section 3: a supervisor is an ordinary agent; every tool call is judged with the agent's own profile (internal/policy)
-    # test: internal/policy/default_test.go and internal/rules/rules_test.go (to write)
+    # test: internal/policy/default_test.go and internal/core/rules/rules_test.go (to write)
     Given the reviewer, under read-only, may assign
     When it edits a file or pushes
     Then each is judged by read-only and denied, exactly as for a reviewer that may not assign: yes
@@ -134,7 +134,7 @@ Feature: Supervisor agents
 
   @PROP-64 @test @to-compatibility
   Scenario: Agents, templates and logs from before read as agents that may not assign
-    # agents.Agent and the templates gain an optional field (internal/agents/agent.go); an old log replays the same (internal/current/real_log_test.go)
+    # agents.Agent and the templates gain an optional field (internal/agents/agent.go); an old log replays the same (internal/core/current/real_log_test.go)
     # test: internal/agents/agents_test.go and internal/agents/user_templates_test.go (to write)
     Given a roster, an exported template and a log saved before supervisors were built
     When Agentry reads them

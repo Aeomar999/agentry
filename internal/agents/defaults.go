@@ -3,7 +3,7 @@ package agents
 import (
 	"embed"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 //go:embed defaults/*.md defaults/*/*.md

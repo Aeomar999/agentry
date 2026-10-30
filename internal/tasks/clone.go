@@ -4,7 +4,7 @@ import (
 	"maps"
 	"slices"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // Next is the task after e, built on a copy: t itself is left as it was, so

@@ -3,7 +3,7 @@ package tasks
 import (
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // An epic shows as epic-N wherever Agentry tells you of it, so you can tell

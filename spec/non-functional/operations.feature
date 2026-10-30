@@ -445,7 +445,7 @@ Feature: Operations
   @OPS-24 @test
   Scenario: Erasing a task removes every row of it and what copied its words, for good
     # internal/web/erase_api.go erase: POST /api/tasks/{task}/erase, with an optional reason; the page only, never the desk
-    # internal/store/erase.go Erase: the rows, the archive blobs its markers name, a task.erased marker with who, when and why
+    # internal/core/store/erase.go Erase: the rows, the archive blobs its markers name, a task.erased marker with who, when and why
     Given a done task whose summary its epic and its asker copied, with shared files of its own and one shared with another task, and a planted secret in its rows
     When it is erased
     Then the answer names the task and a time within 1 minute of now
@@ -469,7 +469,7 @@ Feature: Operations
   @OPS-25 @test
   Scenario: Redacting a text counts first, then rewrites only the rows that hold it
     # internal/web/server.go: POST /api/tasks/{task}/redact/preview and /redact, /api/agents/redact, /api/redact for the whole log
-    # internal/store/redact.go Redacted = [redacted]; redact_archived.go: unarchive, redact, archive again in a new blob, delete the old
+    # internal/core/store/redact.go Redacted = [redacted]; redact_archived.go: unarchive, redact, archive again in a new blob, delete the old
     Given a task whose description holds a secret, and a snapshot on disk that holds it too
     When the redaction is previewed
     Then the preview shows exactly the count of rows that hold the text
@@ -482,11 +482,11 @@ Feature: Operations
     Given an agent whose knowledge holds the secret in a version
     When the agents are redacted
     Then each version that holds it is written again whole without it: yes
-    # README.md, Archiving, erasing and redacting; internal/web/redact_api_test.go TestRedactingALiveTaskLeavesNoTraceOnDisk, TestRedactingAnArchivedTaskLeavesNoTraceOnDisk and TestRedactingTheAgentsKnowledgeLeavesNoTraceOnDisk; the preview's count of 2: TestARedactionWithAStaleCountIsRefused; every other byte: internal/store/redact_test.go TestRedactRewritesOnlyTheSecret; the versions: internal/store/redact_knowledge_test.go TestKnowledgeFromTheSecretOnIsWrittenAgainInFull
+    # README.md, Archiving, erasing and redacting; internal/web/redact_api_test.go TestRedactingALiveTaskLeavesNoTraceOnDisk, TestRedactingAnArchivedTaskLeavesNoTraceOnDisk and TestRedactingTheAgentsKnowledgeLeavesNoTraceOnDisk; the preview's count of 2: TestARedactionWithAStaleCountIsRefused; every other byte: internal/core/store/redact_test.go TestRedactRewritesOnlyTheSecret; the versions: internal/core/store/redact_knowledge_test.go TestKnowledgeFromTheSecretOnIsWrittenAgainInFull
 
   @OPS-40 @test
   Scenario: A redaction confirmed with a stale count is refused with 409
-    # internal/web/redact_api.go: the rows are counted again as the redaction commits, and a count that no longer holds is answered 409 naming the rows there are now; internal/store/redact.go RedactCounted
+    # internal/web/redact_api.go: the rows are counted again as the redaction commits, and a count that no longer holds is answered 409 naming the rows there are now; internal/core/store/redact.go RedactCounted
     # internal/web/redact_api_test.go TestARedactionWithAStaleCountIsRefused, TestARedactionOfAnArchivedTaskWithAStaleCountIsRefused
     Given a redaction previewed with a count, and a row that holds the text written since
     When it is confirmed with the stale count
@@ -497,7 +497,7 @@ Feature: Operations
 
   @OPS-26 @test
   Scenario: A redaction that cannot leave the rest of a row as it was is refused
-    # internal/store/redact.go: the refusals, each with its reason, before anything is written
+    # internal/core/store/redact.go: the refusals, each with its reason, before anything is written
     Given a row that holds the text in a key
     When a redaction of the text is asked for
     Then it is refused and 0 rows are written
@@ -509,7 +509,7 @@ Feature: Operations
     Then it is refused: yes
     Given a stream that is erased or archived
     Then it is refused before its rows are read: yes
-    # README.md, Archiving, erasing and redacting; internal/store/redact_test.go TestRedactRefusesARowWithTheSecretInAKey, TestASecretLeftInANumberIsRefused, TestARowNotWrittenAsTheLogWritesIsNotRedacted, TestAStringEscapedOtherwiseIsRefused, TestASecretLeftNextToRedactedIsRefused, TestARefusedRedactionWritesNothing and TestAnArchivedOrErasedStreamIsRefusedBeforeItsRows
+    # README.md, Archiving, erasing and redacting; internal/core/store/redact_test.go TestRedactRefusesARowWithTheSecretInAKey, TestASecretLeftInANumberIsRefused, TestARowNotWrittenAsTheLogWritesIsNotRedacted, TestAStringEscapedOtherwiseIsRefused, TestASecretLeftNextToRedactedIsRefused, TestARefusedRedactionWritesNothing and TestAnArchivedOrErasedStreamIsRefusedBeforeItsRows
 
   # The Makefile and the CI check
 

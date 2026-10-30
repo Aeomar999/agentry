@@ -3,7 +3,7 @@ package ideas
 import (
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // An idea's stream, named by its ID (idea-N): a feature a Visionaries

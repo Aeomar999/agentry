@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 )
 
 // message is your chat with a task's coordinator. What you say is the answer

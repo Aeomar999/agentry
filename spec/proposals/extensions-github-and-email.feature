@@ -232,7 +232,7 @@ Feature: Shipping through GitHub, and email
   @PROP-48 @test @to-compatibility
   Scenario: A log from before git, and a build without it, read as before
     # docs/design/t-019-shipping.md section 1, "Old logs, and a build without the feature"; builds on the unknown tally of @SET-01
-    # test: internal/current/slices_test.go and internal/githost/feature_test.go (to write), with a fixture log
+    # test: internal/core/current/slices_test.go and internal/githost/feature_test.go (to write), with a fixture log
     Given a log with no git events
     Then every task reads the same as without the feature: yes
     Given a build without git and a log holding 31 git.pipeline events

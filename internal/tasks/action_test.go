@@ -3,7 +3,7 @@ package tasks
 import (
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/tasks/taskstest"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/deeptest"
 )

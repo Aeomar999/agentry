@@ -416,12 +416,12 @@ Feature: The coordinator and its handoffs
 
   @HANDOFF-41 @coordinator @test
   Scenario: The coordinator cannot assign the task to itself
-    # internal/rules/rules_test.go TestATaskGoesRoundTheCoordinator
+    # internal/core/rules/rules_test.go TestATaskGoesRoundTheCoordinator
     Given a coordinator's turn has ended
     When it assigns the task to its own name
     Then the assignment is refused by the rules
     And an assignment by any agent other than the coordinator is refused too
-    # notToTheCoordinator and byTheCoordinator: internal/rules/task_rules.go
+    # notToTheCoordinator and byTheCoordinator: internal/core/rules/task_rules.go
 
   @HANDOFF-42 @coordinator @test
   Scenario: After the user moves a task to Done, the coordinator's one wrap-up turn can only summarise

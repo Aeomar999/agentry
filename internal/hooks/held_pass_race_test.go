@@ -3,7 +3,7 @@ package hooks
 import (
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // You approve a held push while the coordinator is deciding; not having

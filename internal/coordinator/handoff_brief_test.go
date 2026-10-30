@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/platform/workspace"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // The roster has spare capacity, so an append could write where a reader of

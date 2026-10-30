@@ -54,11 +54,11 @@ var newPath = map[string]string{
 	"internal/platform/workspace":             "internal/platform/workspace",
 	"internal/platform/worktrees":             "internal/platform/worktrees",
 
-	"internal/events":  "internal/core/events",
-	"internal/store":   "internal/core/store",
-	"internal/current": "internal/core/current",
-	"internal/rules":   "internal/core/rules",
-	"internal/httpapi": "internal/core/httpapi",
+	"internal/core/events":  "internal/core/events",
+	"internal/core/store":   "internal/core/store",
+	"internal/core/current": "internal/core/current",
+	"internal/core/rules":   "internal/core/rules",
+	"internal/core/httpapi": "internal/core/httpapi",
 
 	"internal/agents":      "internal/domain/agents",
 	"internal/tasks":       "internal/domain/tasks",

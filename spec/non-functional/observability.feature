@@ -15,12 +15,12 @@ Feature: Observability
     When a proposal arrives with the unknown type "task.exploded", one with a required field missing, one with no actor, a turn.started with no correlation, an agents event in a task stream, and one from a kind of actor the type does not allow
     Then the first 5 are refused with the check "shape", and the last with the check "who"
     And a task.created with its title, repo and coordinator from a human is not refused: yes
-    # not under test, checked by hand: the store runs both checks on every proposal before it writes one (internal/store/store.go lines 341 and 344), and the shape check wants an actor's kind and id (internal/events/catalogue.go line 367), so every event in the log names who wrote it
-    # README.md, How it works, How it fits together; internal/events/catalogue_test.go TestCheckShapeAndWriter
+    # not under test, checked by hand: the store runs both checks on every proposal before it writes one (internal/core/store/store.go lines 341 and 344), and the shape check wants an actor's kind and id (internal/core/events/catalogue.go line 367), so every event in the log names who wrote it
+    # README.md, How it works, How it fits together; internal/core/events/catalogue_test.go TestCheckShapeAndWriter
 
   @OBS-34 @test
   Scenario: A feature's stream prefix or event type that would collide with the core's or another feature's is refused
-    # internal/events/catalogue_test.go TestNewCatalogueRefusesWhatWouldCollide and TestARegisteredPrefixIsNotATask
+    # internal/core/events/catalogue_test.go TestNewCatalogueRefusesWhatWouldCollide and TestARegisteredPrefixIsNotATask
     Given the Ideas feature registered with its stream prefix idea-
     When another registration takes the prefix idea-, a prefix overlapping another's, a prefix a core stream starts with, a prefix task- starts with or one that starts with task-, a type both in its streams and in tasks', or stream types with no prefix
     Then each is refused, naming the prefix or the type as taken, the prefix as overlapping task-, or the types as needing a stream prefix
@@ -35,18 +35,18 @@ Feature: Observability
     Then the second task.created is refused with the check "order" and the unknown type with the check "shape"
     And each refusal is written to the log as a proposal.rejected event, the first saying who sent it and the reason "task already exists": yes
     And the task's stream of accepted events still holds exactly 1
-    # not under test, checked by hand: a rejection is in the task's stream, by system:validator, with the type and the check (internal/store/store.go lines 397 and 399)
-    # README.md, How it works, What happens to one action; internal/store/store_test.go TestProposeAppendsOrRecordsTheRejection
+    # not under test, checked by hand: a rejection is in the task's stream, by system:validator, with the type and the check (internal/core/store/store.go lines 397 and 399)
+    # README.md, How it works, What happens to one action; internal/core/store/store_test.go TestProposeAppendsOrRecordsTheRejection
 
   @OBS-04 @test
   Scenario: Every event type has a schema file its events validate against
-    Given the catalogue with the Ideas feature, and the schema files under internal/events/schemas, one per type
+    Given the catalogue with the Ideas feature, and the schema files under internal/core/events/schemas, one per type
     When an event with just what its type needs is checked against its file, and events with an empty actor id, a missing data.agent, a position of 1.5 and an "at" of "yesterday" are checked
     Then the event with just what its type needs passes for every one of the catalogue's types
     And each bad event is refused with a problem that names the field: "actor.id: want at least 1 characters", "data.agent: required field missing", "position: want an integer" and "at: want a date-time"
     And the unknown type "task.exploded" has no spec and no schema file
-    # not under test, checked by hand: there are 81 files, one per type (ls internal/events/schemas); the store checks proposals with the catalogue (internal/store/store.go lines 341 and 344), and only tests call Validate (internal/events/validate.go line 20)
-    # internal/events/validate_test.go TestAnEventValidatesAgainstItsSchema, TestAnEventValidatesAgainstSchemasOwnOutput and TestEveryCommittedSchemaChecksAnEvent
+    # not under test, checked by hand: there are 81 files, one per type (ls internal/core/events/schemas); the store checks proposals with the catalogue (internal/core/store/store.go lines 341 and 344), and only tests call Validate (internal/core/events/validate.go line 20)
+    # internal/core/events/validate_test.go TestAnEventValidatesAgainstItsSchema, TestAnEventValidatesAgainstSchemasOwnOutput and TestEveryCommittedSchemaChecksAnEvent
 
   @OBS-05 @test
   Scenario: A task's events API is its whole record, in order, rejections included

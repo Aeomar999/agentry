@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // Archived is the summary an archived task keeps: the "summary" of its

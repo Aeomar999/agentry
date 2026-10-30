@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 )
 
 // A team edit saves a whole team at once, as the team panel edits it: its

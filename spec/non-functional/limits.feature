@@ -73,8 +73,8 @@ Feature: Limits
     When an event sets its budget to -1, and another sets its turn limit to -3
     Then the budget event is refused: yes
     And the turn limit event is refused: yes
-    # not under test, checked by hand: the refusals say "a budget is a number of tokens, or 0 for no limit" and "a limit of turns is a number of turns, or 0 for no limit" (internal/rules/task_rules.go lines 135 and 143)
-    # README.md, Use it; internal/rules/rules_test.go TestBudgetsAndLimitsOfTurns
+    # not under test, checked by hand: the refusals say "a budget is a number of tokens, or 0 for no limit" and "a limit of turns is a number of turns, or 0 for no limit" (internal/core/rules/task_rules.go lines 135 and 143)
+    # README.md, Use it; internal/core/rules/rules_test.go TestBudgetsAndLimitsOfTurns
 
   @LIM-09 @test
   Scenario: The most tasks running at once is a setting from 0 to 100
@@ -168,7 +168,7 @@ Feature: Limits
     When a request's body is exactly 1,048,576 bytes, and another's is 1,048,577 bytes
     Then the body of 1,048,576 bytes is accepted
     And the body of 1,048,577 bytes is refused with HTTP 400
-    # not under test, checked by hand: a route that takes JSON has the same cap, MaxBody = 1 << 20 (internal/httpapi/httpapi.go lines 23 and 28)
+    # not under test, checked by hand: a route that takes JSON has the same cap, MaxBody = 1 << 20 (internal/core/httpapi/httpapi.go lines 23 and 28)
     # README.md, Features' settings and secrets; internal/web/extensions_api_test.go TestASignedRouteTakesABodyOfExactlyMaxBody and TestASignedRouteRefusesAnOversizedBody
 
   @LIM-20 @manual
@@ -241,7 +241,7 @@ Feature: Limits
     Then the 13 labels are refused with "at most 12 labels"
     And the label of 33 characters is refused
     And an empty label, or one with spaces around it, is refused
-    # README.md, Use it; the caps are set in internal/rules/task_rules.go
+    # README.md, Use it; the caps are set in internal/core/rules/task_rules.go
 
   @LIM-28 @test
   Scenario: The watchdog's limits on a turn

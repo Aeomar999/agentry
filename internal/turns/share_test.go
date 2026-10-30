@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/platform/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/platform/sessions/sessionstest"
-	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
