@@ -2,7 +2,7 @@ Feature: The coordinator and its handoffs
   An ordinary agent that reads every report and ends each turn with a decision the loop carries out:
   a task's life, briefs, reports, issues, safety stops and limits.
   # Sources: internal/runtime/coordinator, internal/runtime/watchdog, internal/domain/tasks,
-  # internal/web/chat_api.go, ui/src/components/organisms/CoordinatorChat.tsx and
+  # internal/domain/tasks/tasksapi/chat_api.go, ui/src/components/organisms/CoordinatorChat.tsx and
   # their tests.
 
   # ---- A task's life ---------------------------------------------------------
@@ -69,7 +69,7 @@ Feature: The coordinator and its handoffs
   @HANDOFF-08 @user @test
   Scenario: A message to the coordinator stops the turn in progress, and its reply says what it changed
     # internal/web/chat_api_test.go TestAMessageStopsTheTurnForTheCoordinator and TestTheCoordinatorsReplyComesBeforeItsDecision
-    # internal/web/chat_api.go lines 55 to 63
+    # internal/domain/tasks/tasksapi/chat_api.go lines 55 to 63
     Given the engineer's turn is in progress on task-1
     When the user sends "Use Redis, not memory." in the Coordinator tab
     Then the engineer's turn is stopped, not failed: 0 issues in a row
@@ -84,7 +84,7 @@ Feature: The coordinator and its handoffs
   @HANDOFF-09 @user @manual
   Scenario: The chat's field, its status line and the message it refuses
     # ui/src/components/organisms/CoordinatorChat.tsx lines 107 to 124, the status and the hint; line 37, the 3 suggestions
-    # a blank message: internal/web/chat_api.go lines 27 to 30
+    # a blank message: internal/domain/tasks/tasksapi/chat_api.go lines 27 to 30
     Given task-5 is open on the Coordinator tab while the engineer works
     Then the status under the coordinator's name reads exactly "engineer is working on it"
     And the hint reads exactly "Sending pauses engineer so the coordinator reads it now; engineer's work and plan carry on after."
@@ -224,7 +224,7 @@ Feature: The coordinator and its handoffs
   @HANDOFF-23 @user @test
   Scenario: Raising the budget or the turn limit while stopped at it is the answer
     # internal/web/api_test.go TestRaisingTheBudgetLetsATaskGoOn and TestRaisingTheTurnLimitLetsATaskGoOn
-    # internal/web/api.go lines 225 to 278; internal/domain/tasks/task.go lines 145 to 163, StoppedAt
+    # internal/domain/tasks/tasksapi/limits_api.go lines 15 to 62; internal/domain/tasks/task.go lines 145 to 163, StoppedAt
     Given task-1 stopped at its budget of 200,000 tokens, with 210,000 used
     When the user sets the budget to 1,000,000
     Then the reply is exactly {"answered":true,"budget":1000000}

@@ -22,10 +22,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/policyapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/settings/settingsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks/tasksapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
 	"gitlab.com/dev.chempa/agentry/internal/runtime/coordinator"
-	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 )
 
 // listTasks lists every task's summary, an archived task's too: it is done,
@@ -62,57 +62,6 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 // holds them back.
 func (s *Server) slots() coordinator.Slots {
 	return coordinator.SlotsOf(s.state.Tasks(), s.state.Roster(), s.state.Settings().MaxRunningTasks)
-}
-
-// changeRepo moves a task's work to another repo: when the turn in progress
-// ends, or at once between turns. A finished task gets its worktree of the
-// new repo here and now, its whole history counted as the task's work, so
-// its Workspace shows what was done there.
-func (s *Server) changeRepo(w http.ResponseWriter, r *http.Request) {
-	var request struct{ Repo string }
-	if !httpapi.Decode(w, r, &request) {
-		return
-	}
-	repo, reason := s.repoFor(strings.TrimSpace(request.Repo))
-	if reason != "" {
-		http.Error(w, reason, http.StatusBadRequest)
-		return
-	}
-	task, err := s.task(r.PathValue("task"))
-	if err != nil || task == nil {
-		s.noTask(w, r.PathValue("task"))
-		return
-	}
-	moved := events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.RepoChanged, Data: map[string]any{"repo": repo}}
-	if !task.IsDone || s.config.Fleet == nil {
-		httpapi.Propose(w, s.store, moved)
-		return
-	}
-	if !httpapi.ProposeOrRefuse(w, s.store, moved) {
-		return
-	}
-	here := s.config.Fleet.Of(workers.Local)
-	made, err := here.Prepare(r.Context(), machines.WorktreeRequest{Task: task.ID, Repo: repo})
-	if err != nil {
-		httpapi.Failed(w, err)
-		return
-	}
-	httpapi.Propose(w, s.store, events.Proposal{Stream: task.ID, Actor: events.Actor{Kind: events.Worker, ID: here.Name()}, Type: events.WorktreeReady,
-		Data: map[string]any{"repo": made.Repo, "worker": here.Name(), "path": made.Path, "branch": made.Branch, "base": "", "port": made.Port}})
-}
-
-// repoFor is the folder a task's work goes in, for a repo named by its
-// folder on this machine or by a git address, which is cloned here; or why
-// it can't be worked in.
-func (s *Server) repoFor(repo string) (string, string) {
-	if worktrees.IsAddress(repo) {
-		folder, err := worktrees.Clone(s.config.Clones, repo)
-		if err != nil {
-			return "", err.Error()
-		}
-		return folder, ""
-	}
-	return repo, worktrees.IsRepo(repo)
 }
 
 func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
@@ -168,7 +117,7 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	case request.Repo == "":
 		request.Repo = s.config.DefaultRepo
 	default:
-		repo, reason := s.repoFor(request.Repo)
+		repo, reason := s.tasksAPI().RepoFor(request.Repo)
 		if reason != "" {
 			http.Error(w, reason, http.StatusBadRequest)
 			return
@@ -195,7 +144,7 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	}
 	created, rejection, err := s.store.Create("task-", events.Proposal{Actor: httpapi.You, Type: events.TaskCreated, Data: map[string]any{
 		"title": request.Title, "description": request.Description,
-		"repo": request.Repo, "coordinator": coordinator.Name, "labels": cleanLabels(request.Labels),
+		"repo": request.Repo, "coordinator": coordinator.Name, "labels": tasksapi.CleanLabels(request.Labels),
 		"budget": httpapi.LimitOf(request.Budget, defaults.Budget), "maxTurns": httpapi.LimitOf(request.MaxTurns, defaults.MaxTurns),
 		"teamChosen": request.Team != "", "kind": kind, "kindChosen": request.Kind != "", "parked": parked}})
 	switch {
@@ -211,12 +160,12 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	id := created.Stream
 	var refused []string
 	for _, story := range request.Stories {
-		if why := s.fileUnder(story, id); why != "" {
+		if why := s.tasksAPI().FileUnder(story, id); why != "" {
 			refused = append(refused, story+": "+why)
 		}
 	}
 	if request.Epic != "" {
-		if why := s.fileUnder(id, request.Epic); why != "" {
+		if why := s.tasksAPI().FileUnder(id, request.Epic); why != "" {
 			refused = append(refused, why)
 		}
 	}
@@ -225,132 +174,6 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 
 // defaults are the limits a new task gets when it names none.
 func (c Config) defaults() tasks.Limits { return tasks.Limits{Budget: c.Budget, MaxTurns: c.MaxTurns} }
-
-// setBudget gives the task a new token budget, 0 (or -1) for no limit. A
-// task stopped at its budget takes it as your answer and carries on.
-func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
-	var request struct{ Budget int }
-	if !httpapi.Decode(w, r, &request) {
-		return
-	}
-	task, err := s.task(r.PathValue("task"))
-	if err != nil || task == nil {
-		s.noTask(w, r.PathValue("task"))
-		return
-	}
-	budget := httpapi.LimitOf(request.Budget, 0)
-	if !httpapi.ProposeOrRefuse(w, s.store, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TaskBudgeted, Data: map[string]any{"budget": budget}}) {
-		return
-	}
-	answered, refused := false, ""
-	if task.StoppedAt() == tasks.LimitBudget && (budget == 0 || task.TokensUsed < budget) {
-		answer := "I raised the budget to " + coordinator.Tokens(budget) + " tokens. Carry on."
-		if budget == 0 {
-			answer = "I made the budget unlimited. Carry on."
-		}
-		if answered, refused, err = s.carryOn(task, answer); err != nil {
-			httpapi.Failed(w, err)
-			return
-		}
-	}
-	httpapi.Reply(w, limitReply("budget", budget, answered, refused))
-}
-
-// setMaxTurns gives the task a new limit of turns without your answer, 0 (or
-// -1) for no limit. A task stopped at its limit takes it as your answer and
-// carries on.
-func (s *Server) setMaxTurns(w http.ResponseWriter, r *http.Request) {
-	var request struct{ MaxTurns int }
-	if !httpapi.Decode(w, r, &request) {
-		return
-	}
-	task, err := s.task(r.PathValue("task"))
-	if err != nil || task == nil {
-		s.noTask(w, r.PathValue("task"))
-		return
-	}
-	maxTurns := httpapi.LimitOf(request.MaxTurns, 0)
-	if !httpapi.ProposeOrRefuse(w, s.store, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TaskTurnsLimited, Data: map[string]any{"maxTurns": maxTurns}}) {
-		return
-	}
-	answered, refused := false, ""
-	if task.StoppedAt() == tasks.LimitTurns && (maxTurns == 0 || task.TurnsSinceAnswer < maxTurns) {
-		answer := fmt.Sprintf("I raised the turn limit to %d. Carry on.", maxTurns)
-		if maxTurns == 0 {
-			answer = "I made the turns unlimited. Carry on."
-		}
-		if answered, refused, err = s.carryOn(task, answer); err != nil {
-			httpapi.Failed(w, err)
-			return
-		}
-	}
-	httpapi.Reply(w, limitReply("maxTurns", maxTurns, answered, refused))
-}
-
-// carryOn answers the loop's stop for you, so the coordinator goes on. It
-// says whether it did, or why the rules refused it.
-func (s *Server) carryOn(task *tasks.Task, answer string) (answered bool, refused string, err error) {
-	_, rejection, err := s.store.Propose(events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TaskAnswered, Data: map[string]any{"answer": answer}})
-	switch {
-	case err != nil:
-		return false, "", err
-	case rejection != nil:
-		return false, rejection.Reason, nil
-	}
-	return true, "", nil
-}
-
-// limitReply is what a saved limit answers: the limit, whether it answered
-// the task's stop, and why not if the rules refused that answer. The limit is
-// kept either way.
-func limitReply(field string, limit int, answered bool, refused string) map[string]any {
-	body := map[string]any{field: limit, "answered": answered}
-	if refused != "" {
-		body["refused"] = refused
-	}
-	return body
-}
-
-// rank puts the task in your priority order: the page sends a rank between
-// the two tasks it was dropped between.
-func (s *Server) rank(w http.ResponseWriter, r *http.Request) {
-	var request struct{ Rank float64 }
-	if !httpapi.Decode(w, r, &request) {
-		return
-	}
-	if s.isNone(r.PathValue("task")) {
-		s.noTask(w, r.PathValue("task"))
-		return
-	}
-	httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.TaskRanked, Data: map[string]any{"rank": request.Rank}})
-}
-
-// label sets the task's labels, all of them.
-func (s *Server) label(w http.ResponseWriter, r *http.Request) {
-	var request struct{ Labels []string }
-	if !httpapi.Decode(w, r, &request) {
-		return
-	}
-	if s.isNone(r.PathValue("task")) {
-		s.noTask(w, r.PathValue("task"))
-		return
-	}
-	httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.TaskLabeled,
-		Data: map[string]any{"labels": cleanLabels(request.Labels)}})
-}
-
-// cleanLabels trims labels, lowercases them so "Bug" and "bug" are one, and
-// drops empty and repeated ones. The rules check what is left.
-func cleanLabels(labels []string) []string {
-	clean := []string{}
-	for _, label := range labels {
-		label = strings.ToLower(strings.Join(strings.Fields(label), " "))
-		if label != "" && !slices.Contains(clean, label) {
-			clean = append(clean, label)
-		}
-	}
-	return clean
-}
 
 // titleFrom stands in for a title nobody gave: the description's first
 // line, cut at a word to at most 72 characters.
@@ -540,6 +363,13 @@ func (s *Server) waitForChanges(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) task(id string) (*tasks.Task, error) { return s.state.Task(id) }
 
+// isNone is whether there is no task id, never made or erased, as
+// tasksapi's isNone says.
+func (s *Server) isNone(id string) bool {
+	task, err := s.task(id)
+	return errors.Is(err, current.ErrErased) || err == nil && task == nil
+}
+
 // shownTask is the task a read of its own is about, or nil once it has
 // answered that there is none, or that it can't be read. The state keeps
 // an archived task as its summary alone, so it is read back from its
@@ -659,6 +489,14 @@ func (s *Server) policyAPI() policyapi.API {
 func (s *Server) settingsAPI() settingsapi.API {
 	return settingsapi.API{Log: s.store, State: s.state, Store: s.store, Blobs: s.config.Blobs, Redactions: s.config.Redactions,
 		Extensions: s.config.Extensions, Forget: s.archives.forget, WriteOverOldText: s.writeOverOldText}
+}
+
+// tasksAPI is the tasks' routes as web mounts them, and the one way a
+// message to a task's coordinator is sent, filing a task under an epic
+// and finding a repo's folder too.
+func (s *Server) tasksAPI() tasksapi.API {
+	return tasksapi.API{Log: s.store, State: s.state, Fleet: s.config.Fleet, Clones: s.config.Clones,
+		Reopenable: s.reopenable, DropErasedStories: s.dropErasedStories, Reopen: s.reopen}
 }
 
 // agentsAPI is the Agents page's routes as web mounts them.

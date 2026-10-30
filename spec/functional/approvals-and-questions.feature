@@ -1,7 +1,7 @@
 Feature: Approvals and questions
   What waits for the user: actions the policy held, and the questions coordinators ask.
   # Sources: internal/domain/policy/hooks, internal/domain/tasks/waitlist, internal/domain/tasks/waiting.go,
-  # internal/web/questions_api.go, internal/web/waiting_api.go,
+  # internal/domain/tasks/tasksapi/questions_api.go, internal/web/waiting_api.go,
   # ui/src/components/organisms/NeedsYouPanel.tsx,
   # ui/src/components/organisms/QuestionsPanel.tsx and their tests.
 
@@ -11,7 +11,7 @@ Feature: Approvals and questions
   Scenario: Needs you: approve or deny an action the policy held
     # internal/web/api_test.go TestApproveOnlyWhatWasAsked
     # the panel "Needs you", reading "engineer asks to run Bash:" with the command, Approve and Deny: ui/src/components/organisms/NeedsYouPanel.tsx lines 77 to 99
-    # the routes: internal/web/server.go lines 113 and 114
+    # the routes: internal/web/server.go lines 102 and 103
     Given the engineer asked to run "git push origin HEAD:dev" and the policy asked the user
     When the task is read
     Then its needsYou reads exactly "Waiting for you to approve the push to dev" and the action is shown in its approvals
@@ -58,9 +58,9 @@ Feature: Approvals and questions
 
   @APPROVE-05 @user @test
   Scenario: Questions in the dock gathers what waits for the user, oldest first
-    # internal/web/api_test.go TestQuestionsGatherWhatWaitsForYou
+    # internal/domain/tasks/tasksapi/tasksapi_test.go TestQuestionsGatherWhatWaitsForYou
     # Ctrl+J: ui/src/lib/shortcuts.ts line 16; the tab "Questions N": ui/src/components/organisms/TerminalDock.tsx line 57
-    # oldest first: internal/web/questions_api.go line 54; the 5 kinds, labelled Approve, Question, Budget, "Max turns" and Waiting: ui/src/components/organisms/QuestionsPanel.tsx lines 20 to 26
+    # oldest first: internal/domain/tasks/tasksapi/questions_api.go line 54; the 5 kinds, labelled Approve, Question, Budget, "Max turns" and Waiting: ui/src/components/organisms/QuestionsPanel.tsx lines 20 to 26
     Given task-1's coordinator asked "Which layout?" with 2 options and a page, and task-2's policy asks about "git push"
     When the user presses Ctrl+J and opens Questions
     Then exactly 2 questions are listed, the older first

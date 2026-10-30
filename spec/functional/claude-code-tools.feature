@@ -203,7 +203,7 @@ Feature: Agentry from Claude Code
     Then the epic is made with 1 story, task-1
     And the answer says task-9: no task task-9: yes
     # not under test, checked by hand: create_task words it Not filed: (internal/mcp/tools.go line 322)
-    # internal/web/api_test.go TestTasksAreFiledUnderEpics: the epic has 2 stories once task-2 is filed too
+    # internal/domain/tasks/tasksapi/tasksapi_test.go TestTasksAreFiledUnderEpics: the epic has 2 stories once task-2 is filed too
 
   @TOOLS-19 @claude-code @test
   Scenario: create_task in a repo named by its git address works in a clone
@@ -219,7 +219,7 @@ Feature: Agentry from Claude Code
     When Claude calls tell_coordinator with the task and the user's words
     Then the message is posted to the task, and the reply says it was sent to task-N's coordinator: yes
     # not under test, checked by hand: the reply says the coordinator reads it now (internal/mcp/tools.go line 334)
-    # internal/web/chat_api.go say: with a turn open, the message is recorded and that turn is stopped, so the coordinator reads it at once
+    # internal/domain/tasks/tasksapi/chat_api.go Say: with a turn open, the message is recorded and that turn is stopped, so the coordinator reads it at once
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
 
   @TOOLS-21 @claude-code @test
@@ -353,9 +353,9 @@ Feature: Agentry from Claude Code
     When the epic is filed under the story
     Then it is refused with status 409, saying the story isn't an epic
     # not under test, checked by hand: the epic's stories are kept as they were
-    # internal/web/epics_api.go: an epic id no task has is refused with no task <id>; a done epic with <id> is done; reopen it to add stories
+    # internal/domain/tasks/tasksapi/epics_api.go: an epic id no task has is refused with no task <id>; a done epic with <id> is done; reopen it to add stories
     # internal/core/rules/task_rules.go notAnEpic, inNoEpic, notItself: an epic can't be a story of another, a story is taken out of its epic first, a task can't be a story of itself
-    # internal/web/api_test.go TestTasksAreFiledUnderEpics
+    # internal/domain/tasks/tasksapi/tasksapi_test.go TestTasksAreFiledUnderEpics
 
   @TOOLS-34 @claude-code @test
   Scenario: Every tool takes an epic as epic-N and names epics epic-N

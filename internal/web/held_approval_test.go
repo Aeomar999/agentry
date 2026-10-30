@@ -17,6 +17,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/hooks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks/tasksapi"
 	"gitlab.com/dev.chempa/agentry/internal/platform/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
@@ -120,7 +121,7 @@ func stillOpenUntilYouApprove(t *testing.T, server *httptest.Server, s *store.St
 	})
 
 	_, body := call(t, server, "GET", "/api/questions", "")
-	var questions []question
+	var questions []tasksapi.Question
 	if err := json.Unmarshal([]byte(body), &questions); err != nil {
 		t.Fatalf("Questions isn't a list: %v\n%s", err, body)
 	}

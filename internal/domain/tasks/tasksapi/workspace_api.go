@@ -1,4 +1,4 @@
-package web
+package tasksapi
 
 import (
 	"errors"
@@ -15,10 +15,10 @@ import (
 // started, and one file at a time, now or in a commit (?commit=). Read only.
 
 // workspaceOf is the task's worktree and the machine it is on, which reads it.
-func (s *Server) workspaceOf(w http.ResponseWriter, r *http.Request) (workspace.Workspace, machines.Machine, bool) {
-	task, err := s.task(r.PathValue("task"))
+func (a API) workspaceOf(w http.ResponseWriter, r *http.Request) (workspace.Workspace, machines.Machine, bool) {
+	task, err := a.State.Task(r.PathValue("task"))
 	if err != nil || task == nil {
-		s.noTask(w, r.PathValue("task"))
+		a.noTask(w, r.PathValue("task"))
 		return workspace.Workspace{}, nil, false
 	}
 	if task.Worktree == nil {
@@ -26,14 +26,14 @@ func (s *Server) workspaceOf(w http.ResponseWriter, r *http.Request) (workspace.
 		return workspace.Workspace{}, nil, false
 	}
 	machine := machines.Machine(&machines.Local{Label: workers.Local})
-	if s.config.Fleet != nil {
-		machine = s.config.Fleet.Of(task.Worktree.Worker)
+	if a.Fleet != nil {
+		machine = a.Fleet.Of(task.Worktree.Worker)
 	}
 	return workspace.Workspace{Dir: task.Worktree.Path, Base: task.Worktree.Base, Commit: r.URL.Query().Get("commit")}, machine, true
 }
 
-func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
-	ws, machine, ok := s.workspaceOf(w, r)
+func (a API) listFiles(w http.ResponseWriter, r *http.Request) {
+	ws, machine, ok := a.workspaceOf(w, r)
 	if !ok {
 		return
 	}
@@ -48,8 +48,8 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
 	httpapi.Reply(w, map[string]any{"base": ws.Base, "files": files})
 }
 
-func (s *Server) listCommits(w http.ResponseWriter, r *http.Request) {
-	ws, machine, ok := s.workspaceOf(w, r)
+func (a API) listCommits(w http.ResponseWriter, r *http.Request) {
+	ws, machine, ok := a.workspaceOf(w, r)
 	if !ok {
 		return
 	}
@@ -64,8 +64,8 @@ func (s *Server) listCommits(w http.ResponseWriter, r *http.Request) {
 	httpapi.Reply(w, commits)
 }
 
-func (s *Server) readFile(w http.ResponseWriter, r *http.Request) {
-	ws, machine, ok := s.workspaceOf(w, r)
+func (a API) readFile(w http.ResponseWriter, r *http.Request) {
+	ws, machine, ok := a.workspaceOf(w, r)
 	if !ok {
 		return
 	}

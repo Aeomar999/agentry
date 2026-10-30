@@ -252,7 +252,7 @@ Feature: Usability
     When the user presses the theme button in the top bar, "Light theme", or runs "Switch to the light theme" from the palette
     Then the html element gets the class light, every token takes its light value, and the browser's theme colour becomes #fafafa from #16181d
     And the choice is kept in localStorage under agentry-theme, so the next visit opens in the same theme, and is posted to POST /api/theme, which accepts only "light" or "dark"
-    # ui/src/lib/theme.ts lines 7-27; ui/src/components/templates/AdminShell.tsx lines 95, 149-152; organisms/TopBar.tsx line 55; internal/web/api.go lines 500-513; no test
+    # ui/src/lib/theme.ts lines 7-27; ui/src/components/templates/AdminShell.tsx lines 95, 149-152; organisms/TopBar.tsx line 55; internal/web/api.go lines 329-342; no test
 
   @USE-27 @test
   Scenario: An agent's chip is its first letter on a tint of its own colour, and you and Agentry are neutral

@@ -2,7 +2,7 @@ Feature: Epics and stories
   A goal too big for one change is an epic, split into stories that wait in the
   Backlog, ordered in Plan, and closed once every story is done.
   # Sources: internal/domain/tasks, internal/runtime/coordinator/epics.go,
-  # internal/web/epics_api.go, ui/src/pages/PlanPage.tsx, ui/src/lib/epics.ts and
+  # internal/domain/tasks/tasksapi/epics_api.go, ui/src/pages/PlanPage.tsx, ui/src/lib/epics.ts and
   # their tests.
 
   # ---- Making epics and stories ----------------------------------------------
@@ -72,7 +72,7 @@ Feature: Epics and stories
 
   @EPIC-07 @user @test
   Scenario: Filing a task under an epic, moving it and taking it out
-    # internal/web/api_test.go TestTasksAreFiledUnderEpics
+    # internal/domain/tasks/tasksapi/tasksapi_test.go TestTasksAreFiledUnderEpics
     Given 2 stories and an epic made with 1 of them
     When the user files the second story under the epic
     Then the epic lists exactly 2 stories
@@ -173,8 +173,8 @@ Feature: Epics and stories
   Scenario: Close the epic from its page, and one Visionaries session follows
     # internal/web/api_test.go TestYouCloseAnEpicYouLeftOpen and TestYouCloseAnEpic
     # internal/runtime/coordinator/followups_test.go TestClosingAnEpicStartsOneVisionariesSessionAboutIt
-    # ui/src/components/organisms/OpenEpic.tsx lines 34 to 45; internal/web/api.go lines 420 to 429
-    # the words "that is approved on the page": internal/web/api.go line 423; the test asserts the 403 only
+    # ui/src/components/organisms/OpenEpic.tsx lines 34 to 45; internal/web/api.go lines 249 to 258
+    # the words "that is approved on the page": internal/web/api.go line 252; the test asserts the 403 only
     Given an epic left open with every story done, whose page shows the panel "All 1 stories done" with the button "Close the epic"
     Then the epic is not in Questions
     When the user clicks "Close the epic"

@@ -1,4 +1,4 @@
-package web
+package tasksapi
 
 import (
 	"net/http"
@@ -13,35 +13,35 @@ import (
 // the task again, unarchived first if it is archived. Any turn in progress
 // is stopped, so the coordinator reads it at once: the agent's work stays
 // in the worktree, and its plan carries on when it is handed back.
-func (s *Server) message(w http.ResponseWriter, r *http.Request) {
+func (a API) message(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Text string }
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	s.say(w, r.PathValue("task"), request.Text, "")
+	a.Say(w, r.PathValue("task"), request.Text, "")
 }
 
-// say is what you send the coordinator of task id: typed in the chat, or
+// Say is what you send the coordinator of task id: typed in the chat, or
 // asked of Claude in the Workspace (via "claude"), which sends it for you.
-func (s *Server) say(w http.ResponseWriter, id, text, via string) {
+func (a API) Say(w http.ResponseWriter, id, text, via string) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		http.Error(w, "say something", http.StatusBadRequest)
 		return
 	}
-	task := s.reopenable(w, id)
+	task := a.Reopenable(w, id)
 	if task == nil {
 		return
 	}
 	if task.IsDone {
-		if !s.dropErasedStories(w, task) {
+		if !a.DropErasedStories(w, task) {
 			return
 		}
-		reopen := s.reopen(task, text, "")
+		reopen := a.Reopen(task, text, "")
 		if via != "" {
 			reopen.Data["via"] = via
 		}
-		httpapi.Propose(w, s.store, reopen)
+		httpapi.Propose(w, a.Log, reopen)
 		return
 	}
 	kind, field := events.TaskDirected, "text"
@@ -54,11 +54,11 @@ func (s *Server) say(w http.ResponseWriter, id, text, via string) {
 	}
 	open := task.OpenTurn()
 	if open == nil {
-		httpapi.Propose(w, s.store, said)
+		httpapi.Propose(w, a.Log, said)
 		return
 	}
-	if !httpapi.ProposeOrRefuse(w, s.store, said) {
+	if !httpapi.ProposeOrRefuse(w, a.Log, said) {
 		return
 	}
-	httpapi.Propose(w, s.store, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TurnStopped, Correlation: open.ID})
+	httpapi.Propose(w, a.Log, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TurnStopped, Correlation: open.ID})
 }

@@ -1,4 +1,4 @@
-package web
+package tasksapi
 
 import (
 	"cmp"
@@ -10,10 +10,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 )
 
-// question is one thing waiting for you, from any task: an action the
+// Question is one thing waiting for you, from any task: an action the
 // policy held, a question the coordinator asked, the budget or the limit of
 // turns, or an agent stuck on a prompt in its terminal. The Questions tab lists them.
-type question struct {
+type Question struct {
 	ID        string    `json:"id"`   // unique on the page
 	Kind      string    `json:"kind"` // "approval", "question", "budget", "turns" or "waiting"
 	Task      string    `json:"task"`
@@ -39,26 +39,26 @@ type question struct {
 	MaxTurns         int `json:"maxTurns,omitempty"`
 }
 
-func (s *Server) listQuestions(w http.ResponseWriter, r *http.Request) {
-	httpapi.Reply(w, s.questions())
+func (a API) listQuestions(w http.ResponseWriter, r *http.Request) {
+	httpapi.Reply(w, a.Questions())
 }
 
-// questions are what waits for you of every task not done, oldest first.
-func (s *Server) questions() []question {
-	questions := []question{}
-	for _, task := range s.state.Tasks() {
+// Questions are what waits for you of every task not done, oldest first.
+func (a API) Questions() []Question {
+	questions := []Question{}
+	for _, task := range a.State.Tasks() {
 		if !task.IsDone {
 			questions = append(questions, questionsOf(task)...)
 		}
 	}
-	slices.SortStableFunc(questions, func(a, b question) int { return cmp.Compare(a.At.UnixNano(), b.At.UnixNano()) }) // oldest first
+	slices.SortStableFunc(questions, func(a, b Question) int { return cmp.Compare(a.At.UnixNano(), b.At.UnixNano()) }) // oldest first
 	return questions
 }
 
-func questionsOf(t *tasks.Task) []question {
-	var questions []question
-	base := func(kind, key string) question {
-		return question{ID: t.ID + "/" + kind + "/" + key, Kind: kind, Task: t.ID, TaskTitle: t.Title, TaskKind: string(t.Kind), Context: contextOf(t)}
+func questionsOf(t *tasks.Task) []Question {
+	var questions []Question
+	base := func(kind, key string) Question {
+		return Question{ID: t.ID + "/" + kind + "/" + key, Kind: kind, Task: t.ID, TaskTitle: t.Title, TaskKind: string(t.Kind), Context: contextOf(t)}
 	}
 	for _, a := range t.WaitingForYou() {
 		q := base("approval", a.ID)

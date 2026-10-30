@@ -3,7 +3,7 @@ Feature: Tasks and the board
   running limits, search, the keys and the archive.
   # Sources: internal/domain/tasks, internal/runtime/archive, internal/domain/settings,
   # internal/runtime/coordinator/slots.go, internal/web/api.go, internal/web/board_api.go,
-  # internal/web/erase_api.go, internal/web/archives.go,
+  # internal/web/erase_api.go, internal/web/archives.go, internal/domain/tasks/tasksapi,
   # internal/domain/settings/settingsapi/settingsapi.go, ui/src/pages/TasksPage.tsx,
   # ui/src/pages/TaskPage.tsx, ui/src/components/organisms/TaskBoard.tsx,
   # ui/src/components/organisms/NewTaskForm.tsx,
@@ -35,8 +35,8 @@ Feature: Tasks and the board
   @TASK-03 @user @test
   Scenario: A task needs only a description, and its first line names it
     # internal/web/api_test.go TestATaskNeedsOnlyADescription
-    # 72 characters: internal/web/api.go line 351, titleFrom
-    # the words "describe the task": internal/web/api.go line 130; the test asserts the 400 only
+    # 72 characters: internal/web/api.go line 183, titleFrom
+    # the words "describe the task": internal/web/api.go line 85; the test asserts the 400 only
     Given a server with no tasks
     When the user adds a task with the description "Fix the login redirect" followed by a second line, and no title
     Then the task is created with exactly the title "Fix the login redirect"
@@ -85,7 +85,7 @@ Feature: Tasks and the board
 
   @TASK-07 @user @manual
   Scenario: Adding a task opens it, and adding a story leaves it in the Backlog
-    # a story is parked in the backlog at creation: internal/web/api.go line 188
+    # a story is parked in the backlog at creation: internal/web/api.go line 143
     Given the New task dialog is open
     When the user describes a task and clicks Add task
     Then a toast "Created task-N" with "The coordinator reads it next." is shown once
@@ -130,7 +130,7 @@ Feature: Tasks and the board
 
   @TASK-11 @user @test
   Scenario: Labels are trimmed, lowercased and kept short
-    # internal/web/api_test.go TestTasksCarryLabels
+    # internal/domain/tasks/tasksapi/tasksapi_test.go TestTasksCarryLabels
     # at most 12 labels of 1 to 32 characters: internal/core/rules/task_rules.go lines 156 and 160
     Given a server with no tasks
     When the user adds a task with the labels "Bug", " auth ", "bug" and ""
@@ -163,7 +163,7 @@ Feature: Tasks and the board
     Then the link counts as an address, and the archive is downloaded into a folder whose name starts with app-1.2-, which is a git repo: yes
     And the files are at the top of the repo, out of the archive's folder, and main.go is committed: yes
     And a link that answers 404 is refused, saying 404
-    # not under test, checked by hand: a task whose Another repo is such a link is fetched this way (internal/web/api.go line 103)
+    # not under test, checked by hand: a task whose Another repo is such a link is fetched this way (internal/domain/tasks/tasksapi/repo_api.go line 56)
     # README.md, Use it (Add a task)
 
   # ---- The board and its columns ---------------------------------------------
@@ -581,8 +581,8 @@ Feature: Tasks and the board
 
   @TASK-48 @user @manual
   Scenario: Change repo moves the task between turns, and the Epic list files it
-    # ui/src/pages/TaskPage.tsx lines 627 to 672, RepoEditor; internal/web/api.go lines 65 to 75
-    # ui/src/components/organisms/EpicPicker.tsx lines 12 to 14 and 27 to 35; internal/web/epics_api.go lines 67 and 73
+    # ui/src/pages/TaskPage.tsx lines 627 to 672, RepoEditor; internal/domain/tasks/tasksapi/repo_api.go lines 18 to 28
+    # ui/src/components/organisms/EpicPicker.tsx lines 12 to 14 and 27 to 35; internal/domain/tasks/tasksapi/epics_api.go lines 68 and 74
     Given a live task's Details tab
     When the user clicks Change on the Repo row
     Then a field with the current repo is shown, and "Move the task" is disabled until the path differs
@@ -630,7 +630,7 @@ Feature: Tasks and the board
   @TASK-51 @user @manual
   Scenario: A done task's page: what it still allows and what it no longer does
     # ui/src/pages/TaskPage.tsx lines 417 to 425, the Done banner; line 596, the worktree; lines 507 to 515, the terminal
-    # ui/src/components/organisms/LimitEditor.tsx lines 39 and 56; ui/src/components/organisms/CoordinatorChat.tsx line 119; internal/web/chat_api.go lines 36 to 45
+    # ui/src/components/organisms/LimitEditor.tsx lines 39 and 56; ui/src/components/organisms/CoordinatorChat.tsx line 119; internal/domain/tasks/tasksapi/chat_api.go lines 36 to 45
     # no Reopen on the page: ui/src/pages/TaskPage.tsx has none; the board's dialog: ui/src/components/organisms/TaskBoard.tsx line 283
     Given task-5 is done, moved there by the user
     When the page is shown

@@ -1,4 +1,4 @@
-package web
+package tasksapi
 
 import (
 	"errors"
@@ -16,52 +16,53 @@ import (
 // another, or with "" takes it out of the one it is in. The desk may do
 // it too: it sorts work, and approves nothing. A task or epic there is
 // none of is answered as noTask answers it: 410 once erased, else 404.
-func (s *Server) setEpic(w http.ResponseWriter, r *http.Request) {
+func (a API) setEpic(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Epic string }
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	id, epic := r.PathValue("task"), strings.TrimSpace(request.Epic)
 	for _, named := range []string{id, epic} {
-		if named != "" && s.isNone(named) {
-			s.noTask(w, named)
+		if named != "" && a.isNone(named) {
+			a.noTask(w, named)
 			return
 		}
 	}
-	if refused := s.fileUnder(id, epic); refused != "" {
+	if refused := a.FileUnder(id, epic); refused != "" {
 		http.Error(w, refused, http.StatusConflict)
 		return
 	}
 	httpapi.Reply(w, map[string]string{"task": id, "epic": request.Epic})
 }
 
-// isNone is whether there is no task id, never made or erased.
-func (s *Server) isNone(id string) bool {
-	task, err := s.task(id)
+// isNone is whether there is no task id, never made or erased, as web's
+// isNone says.
+func (a API) isNone(id string) bool {
+	task, err := a.State.Task(id)
 	return errors.Is(err, current.ErrErased) || err == nil && task == nil
 }
 
-// fileUnder makes the task a story of epic, out of any epic it was in, and
+// FileUnder makes the task a story of epic, out of any epic it was in, and
 // says why not if it can't. Each side has its own event: the story knows
 // its epic, and the epic knows its stories. The two can disagree, when an
 // erasure took the story out of its epic and then failed, or the epic was
 // erased: then only the story lets go, and filing it under the same epic
 // again files it there.
-func (s *Server) fileUnder(id, epic string) string {
-	story, err := s.task(id)
+func (a API) FileUnder(id, epic string) string {
+	story, err := a.State.Task(id)
 	if err != nil || story == nil {
 		return "no task " + id
 	}
-	if story.Epic == epic && (epic == "" || !s.unlisted(epic, id)) {
+	if story.Epic == epic && (epic == "" || !a.unlisted(epic, id)) {
 		return ""
 	}
 	if epic != "" {
-		target, err := s.task(epic)
+		target, err := a.State.Task(epic)
 		switch {
 		case errors.Is(err, current.ErrArchived):
 			// Only a done task is archived, and a done epic takes no
 			// stories, so it isn't unarchived for one: you reopen it.
-			if summary, _ := s.state.Summary(epic); summary.Kind != tasks.Epic {
+			if summary, _ := a.State.Summary(epic); summary.Kind != tasks.Epic {
 				return epic + " isn't an epic"
 			}
 			return epic + " is done; reopen it to add stories"
@@ -75,12 +76,12 @@ func (s *Server) fileUnder(id, epic string) string {
 	}
 	if old := story.Epic; old != "" {
 		var leaving []events.Proposal
-		if !s.unlisted(old, id) {
+		if !a.unlisted(old, id) {
 			leaving = append(leaving, events.Proposal{Stream: old, Actor: httpapi.You, Type: events.StoryRemoved, Data: map[string]any{"story": id}})
 		}
 		leaving = append(leaving, events.Proposal{Stream: id, Actor: httpapi.You, Type: events.EpicLeft, Data: map[string]any{"epic": old}})
 		for _, p := range leaving {
-			if refused := s.tryPropose(p); refused != "" {
+			if refused := a.tryPropose(p); refused != "" {
 				return refused
 			}
 		}
@@ -88,18 +89,18 @@ func (s *Server) fileUnder(id, epic string) string {
 	if epic == "" {
 		return ""
 	}
-	if refused := s.tryPropose(events.Proposal{Stream: id, Actor: httpapi.You, Type: events.EpicJoined, Data: map[string]any{"epic": epic}}); refused != "" {
+	if refused := a.tryPropose(events.Proposal{Stream: id, Actor: httpapi.You, Type: events.EpicJoined, Data: map[string]any{"epic": epic}}); refused != "" {
 		return refused
 	}
-	return s.tryPropose(events.Proposal{Stream: epic, Actor: httpapi.You, Type: events.StoryAdded, Data: map[string]any{
+	return a.tryPropose(events.Proposal{Stream: epic, Actor: httpapi.You, Type: events.StoryAdded, Data: map[string]any{
 		"story": id, "title": story.Title, "done": story.IsDone, "summary": story.Summary}})
 }
 
 // unlisted is whether epic is known not to list story: it is erased, or
 // its stories leave it out. An archived epic's stories are in its blob, so
 // it isn't known.
-func (s *Server) unlisted(epic, story string) bool {
-	task, err := s.task(epic)
+func (a API) unlisted(epic, story string) bool {
+	task, err := a.State.Task(epic)
 	if errors.Is(err, current.ErrErased) {
 		return true
 	}
@@ -107,8 +108,8 @@ func (s *Server) unlisted(epic, story string) bool {
 }
 
 // tryPropose writes the proposal, and returns why it was refused, or "".
-func (s *Server) tryPropose(p events.Proposal) string {
-	_, rejection, err := s.store.Propose(p)
+func (a API) tryPropose(p events.Proposal) string {
+	_, rejection, err := a.Log.Propose(p)
 	switch {
 	case err != nil:
 		return err.Error()

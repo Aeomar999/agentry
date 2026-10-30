@@ -96,19 +96,8 @@ func (s *Server) Handler() http.Handler {
 	deskToo("GET /api/tasks/{task}", s.showTask)
 	deskToo("GET /api/tasks/{task}/events", s.listEvents)
 	deskToo("POST /api/tasks/{task}/answer", s.answer)
-	deskToo("PUT /api/tasks/{task}/epic", s.setEpic)
-	deskToo("GET /api/questions", s.listQuestions)
-	api("PUT /api/tasks/{task}/labels", s.label)
-	api("PUT /api/tasks/{task}/budget", s.setBudget)
-	api("PUT /api/tasks/{task}/turns", s.setMaxTurns)
-	api("PUT /api/tasks/{task}/repo", s.changeRepo)
-	api("PUT /api/tasks/{task}/rank", s.rank)
 	api("POST /api/tasks/{task}/erase", s.erase) // never the desk's: nothing undoes it
-	api("GET /api/tasks/{task}/files", s.listFiles)
-	api("GET /api/tasks/{task}/file", s.readFile)
-	api("GET /api/tasks/{task}/commits", s.listCommits)
 	api("POST /api/tasks/{task}/direct", s.direct)
-	api("POST /api/tasks/{task}/message", s.message) // your chat with its coordinator
 	mux.Handle("POST /api/tasks/{task}/claude/message", s.requireClaude(s.claudeMessage))
 	api("POST /api/tasks/{task}/actions/{action}/approve", s.approve)
 	api("POST /api/tasks/{task}/actions/{action}/deny", s.deny)
@@ -161,6 +150,7 @@ func (s *Server) Handler() http.Handler {
 	if s.config.Desk != nil {
 		mux.Handle("GET /api/desk/terminal", s.requireUI(s.config.Desk.ServeHTTP))
 	}
+	s.mount("the tasks domain", s.tasksAPI().Routes(), mux)
 	s.mount("the settings domain", s.settingsAPI().Routes(), mux)
 	s.mount("the connections domain", connectionsapi.API{Log: s.store, State: s.state, InstallCommands: s.installCommands}.Routes(), mux)
 	s.mount("the notifications domain", notificationsapi.API{Push: s.config.Push, PublicURL: s.config.PublicURL}.Routes(), mux)

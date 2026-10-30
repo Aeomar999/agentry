@@ -1,6 +1,6 @@
 Feature: Worktrees and branches
   Each task works in its own worktree on its own branch, shown on the Workspace page.
-  # Sources: internal/platform/worktrees, internal/platform/workspace, internal/web/workspace_api.go,
+  # Sources: internal/platform/worktrees, internal/platform/workspace, internal/domain/tasks/tasksapi/workspace_api.go,
   # ui/src/pages/WorkspacePage.tsx and their tests.
 
   # ---- Worktrees and branches ------------------------------------------------

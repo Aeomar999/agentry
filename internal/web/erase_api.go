@@ -139,10 +139,10 @@ func (s *Server) keptByStories(id string) string {
 // leaveEpic takes a story out of its epic before it is erased, with the
 // epic's task.story_removed, which names only its id: once erased, the
 // story can't be loaded for the rule itsStory, and the epic would wait on
-// it for ever. A live story writes its task.epic_left too, as fileUnder
-// does, so if the erasure then fails it is out of any epic, and you may
-// file it under one again; an archived one still names its epic, which
-// fileUnder lets go of once it is unarchived. An archived epic is done
+// it for ever. A live story writes its task.epic_left too, as tasksapi's
+// FileUnder does, so if the erasure then fails it is out of any epic, and
+// you may file it under one again; an archived one still names its epic,
+// which FileUnder lets go of once it is unarchived. An archived epic is done
 // and is left as it is: unarchiving it for the removal would leave its
 // blob holding the story's words, which redactCopies takes out only of an
 // epic still archived. It returns why the removal was refused, or the
@@ -350,8 +350,8 @@ func (s *Server) writeOverOldText() []string {
 
 // noTask answers that there is no task id to act on: that an erased one
 // is gone for good, and when it went, 410, rather than that there was
-// never such a task, 404. Each names id, as setEpic's may be the task's
-// or the epic's.
+// never such a task, 404. Each names id, as tasksapi's setEpic may be
+// the task's or the epic's.
 func (s *Server) noTask(w http.ResponseWriter, id string) {
 	if erasure, erased := s.state.Erased(id); erased {
 		http.Error(w, id+" was erased on "+erasure.At.Format("2 January 2006"), http.StatusGone)

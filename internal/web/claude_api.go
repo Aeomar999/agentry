@@ -17,7 +17,7 @@ func (s *Server) claudeMessage(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	s.say(w, r.PathValue("task"), request.Text, "claude")
+	s.tasksAPI().Say(w, r.PathValue("task"), request.Text, "claude")
 }
 
 // requireClaude lets in only the token of the Claude sessions in tasks'

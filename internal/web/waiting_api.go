@@ -19,7 +19,7 @@ func (s *Server) listWaiting(w http.ResponseWriter, r *http.Request) {
 // extension says waits. Every extension is asked, hidden or not.
 func (s *Server) Waiting(repo string) []extensions.Waiting {
 	waiting := []extensions.Waiting{}
-	for _, q := range s.questions() {
+	for _, q := range s.tasksAPI().Questions() {
 		waiting = append(waiting, waitlist.Entry(waitlist.Question{Kind: q.Kind, Task: q.Task, TaskTitle: q.TaskTitle,
 			TaskKind: q.TaskKind, Agent: q.Agent, Text: q.Text, Action: q.Action, Options: q.Options}))
 	}
