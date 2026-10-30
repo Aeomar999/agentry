@@ -81,12 +81,12 @@ func TestCheckRootRefusesUIChangesThatArentCommitted(t *testing.T) {
 	newRoot(t)
 	write(t, "ui/src/main.tsx", "render(changed)\n")
 	err := checkRoot()
-	if err == nil || !strings.Contains(err.Error(), "ui/ has changes that aren't committed") || !strings.Contains(err.Error(), "ui/src/main.tsx") {
+	if err == nil || !strings.Contains(err.Error(), "ui/ has changes that aren't committed") || !strings.Contains(err.Error(), "\n M ui/src/main.tsx\n") {
 		t.Fatalf("checkRoot with an edit: %v, want it refused", err)
 	}
 	runIn(t, ".", "git", "checkout", "--", "ui")
 	write(t, "ui/src/new.tsx", "new()\n")
-	if err := checkRoot(); err == nil || !strings.Contains(err.Error(), "ui/src/new.tsx") {
+	if err := checkRoot(); err == nil || !strings.Contains(err.Error(), "\n?? ui/src/new.tsx\n") {
 		t.Fatalf("checkRoot with a new file: %v, want it refused", err)
 	}
 }

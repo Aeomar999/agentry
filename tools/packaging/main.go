@@ -131,12 +131,14 @@ func checkPageCommit(head string) error {
 
 // checkUICommitted refuses changes to ui/ that aren't committed: the page
 // may hold them, though built-from names HEAD, or may not, though the tree
-// does.
+// does. It lists the changes as git prints them, not through git(), whose
+// trim would take the leading space of the first line (" M ui/...").
 func checkUICommitted() error {
-	changes, err := git("status", "--porcelain", "--", "ui")
+	out, err := exec.Command("git", "status", "--porcelain", "--", "ui").Output()
 	if err != nil {
 		return fmt.Errorf("git status: %w", err)
 	}
+	changes := strings.TrimRight(string(out), "\n")
 	if changes != "" {
 		return fmt.Errorf("ui/ has changes that aren't committed, so the page can't be HEAD's:\n%s\ncommit them, then run `make ui`", changes)
 	}

@@ -616,7 +616,7 @@ Feature: Operations
     When a file under ui/ is changed or added and not committed
     Then it is refused, naming the file and saying to commit it, then run make ui: yes
     When only files outside ui/ are changed, and the page was built from HEAD
-    Then it is not refused
+    Then it is not refused: yes
     # not under test, checked by hand: outside a git checkout it checks only that the page is there, and says the page's commit isn't checked (tools/packaging/root_test.go TestCheckRootOutsideGitChecksOnlyThePage); the Mac build takes a page copied in from the publishing machine (README.md, Make a release)
 
   @OPS-43 @manual
