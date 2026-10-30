@@ -393,7 +393,7 @@ Feature: Workers
     Given an agent whose Runs on names 1 worker, which is offline
     When the coordinator assigns the agent
     Then the task asks the user: the agent can't run anywhere now, naming the offline worker, after 1 turn
-    # not under test, checked by hand: the question says to bring one of its workers online, or change where it runs, and answer to carry on (internal/runtime/coordinator/loop.go line 219)
+    # not under test, checked by hand: the question says to bring one of its workers online, or change where it runs, and answer to carry on (internal/runtime/coordinator/turns.go line 48)
     # internal/runtime/coordinator/loop_test.go TestAnAgentWhoseWorkersAreOfflineAsksYou
 
   @MACHINE-29 @worker @test
@@ -446,7 +446,7 @@ Feature: Workers
     When it goes offline
     Then the news for the user says the machine went offline, and the task waits until it is back: yes
     # not under test, checked by hand: it is 1 line, and a worker offline with 0 tasks on it is news: no (internal/mcp/waiting.go line 74)
-    # internal/runtime/coordinator/loop.go moveWork: when the work's machine is offline and the next agent runs elsewhere, the task asks the user to bring it online and answer
+    # internal/runtime/coordinator/worktrees.go moveWork: when the work's machine is offline and the next agent runs elsewhere, the task asks the user to bring it online and answer
     # internal/mcp/waiting_test.go TestTheNewsIsWhatIsNew
 
   @MACHINE-34 @worker @manual

@@ -75,7 +75,7 @@ Feature: Shared files
     Given a task's worktree with files in .agentry/files
     When the turn ends and the work moves
     Then the files are sent to the server as blobs by their hash, and the next worktree receives the same files: yes
-    # internal/runtime/coordinator/loop.go startOn: the last turn's files are read back where it ran before the work moves
+    # internal/runtime/coordinator/turns.go startOn: the last turn's files are read back where it ran before the work moves
     # internal/domain/sharedfiles/blobs.go MaxSize: a shared file is at most 2 GB
     # internal/domain/sharedfiles/blobs_test.go: the same bytes make the same blob, so a file kept by 2 tasks is stored 1 time
     And a shared file's name may leave .agentry/files: no

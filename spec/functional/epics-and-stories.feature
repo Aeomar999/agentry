@@ -28,7 +28,7 @@ Feature: Epics and stories
     And each story is kept at the same budget and limit of turns as the epic
     And the Writing team's story goes to that team's coordinator once the user starts it, its description and brief saying it is a story of the epic
     # not under test, checked by hand: the other stories say so too; the test reads the Writing team's story only
-    # a story's limits: internal/domain/tasks/limits.go NewLimits; "parked": "backlog": internal/runtime/coordinator/loop.go split
+    # a story's limits: internal/domain/tasks/limits.go NewLimits; "parked": "backlog": internal/runtime/coordinator/apply.go split
 
   @EPIC-03 @coordinator @manual
   Scenario: A split adds 1 to 12 stories
@@ -49,7 +49,7 @@ Feature: Epics and stories
     And a story that builds on others is not started until every one of them is done
     And a story whose "after" names itself, a story later in the list, or a number outside it, is refused
     # not under test, checked by hand: the waiting story's branch starts from a dev that has their work, and an "after" naming a task not in this epic is refused
-    # the refusal: internal/runtime/coordinator/epics_test.go TestASplitStoryAfterAStoryNotBeforeItIsRefused; blocked: internal/runtime/coordinator/loop.go
+    # the refusal: internal/runtime/coordinator/epics_test.go TestASplitStoryAfterAStoryNotBeforeItIsRefused; blocked: internal/runtime/coordinator/stories.go
 
   @EPIC-05 @coordinator @test
   Scenario: A story cannot itself be split
@@ -111,7 +111,7 @@ Feature: Epics and stories
   @EPIC-10 @user @test
   Scenario: A story that builds on another waits until that one is done
     # internal/runtime/coordinator/wrapup_test.go TestAStoryAfterAnArchivedTaskStarts
-    # a blocked story gets no turn: internal/runtime/coordinator/loop.go line 134
+    # a blocked story gets no turn: internal/runtime/coordinator/loop.go line 121
     Given a story that builds on a task not yet done
     When the loop looks at it
     Then the story is counted as blocked and cannot start
@@ -135,8 +135,8 @@ Feature: Epics and stories
 
   @EPIC-12 @user @manual
   Scenario: A story started before the one it builds on waits, then starts once
-    # a blocked story gets no worktree: internal/runtime/coordinator/loop.go line 134
-    # the epic wakes its stories without a worktree: internal/runtime/coordinator/loop.go lines 532 to 541
+    # a blocked story gets no worktree: internal/runtime/coordinator/loop.go line 121
+    # the epic wakes its stories without a worktree: internal/runtime/coordinator/stories.go lines 26 to 35
     Given epic-7 with task-8 not done and task-9 that builds on task-8
     When the user clicks Start on task-9 while task-8 is not done
     Then task-9 is shown on the Tasks board and gets no worktree
@@ -159,7 +159,7 @@ Feature: Epics and stories
   @EPIC-14 @user @test
   Scenario: An epic with every story done asks once, and waits quietly if left open
     # internal/runtime/coordinator/epics_test.go TestAnEpicStaysOpenWithEveryStoryDone
-    # the question with the option "Close the epic": internal/runtime/coordinator/loop.go lines 375 to 378
+    # the question with the option "Close the epic": internal/runtime/coordinator/apply.go lines 57 to 60
     Given an epic whose 1 story is done
     When its coordinator finishes
     Then the epic asks the user exactly once whether to close it
@@ -201,7 +201,7 @@ Feature: Epics and stories
     Then no turn starts on the epic until a story's summary comes back to it
     And once every story is done, a done decision asks the user "Close it?" with the option "Close the epic", and the epic is not done until they do
     And if the user leaves it open, it stays open with no further question until they close it or add a story
-    # CloseEpic: internal/runtime/coordinator/epics.go; the question: internal/runtime/coordinator/loop.go apply, Finish
+    # CloseEpic: internal/runtime/coordinator/epics.go; the question: internal/runtime/coordinator/apply.go apply, Finish
 
   @EPIC-18 @user @test
   Scenario: Closing a done epic starts one Visionaries follow-up session about it

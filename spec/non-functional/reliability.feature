@@ -271,7 +271,7 @@ Feature: Reliability
     And an agent that may run only on that worker
     When the fleet is asked where the agent's turn runs and the worker connects 300 milliseconds later
     Then the fleet gives that worker: yes
-    # not under test, checked by hand: the wait ends after OfflineGrace, 30 seconds (internal/runtime/coordinator/loop.go line 204), and the agent is refused then
+    # not under test, checked by hand: the wait ends after OfflineGrace, 30 seconds (internal/runtime/coordinator/turns.go line 33), and the agent is refused then
     # README.md, Work across machines; internal/runtime/machines/fleet_test.go TestTheFleetWaitsForAWorkerComingBack
 
   @REL-48 @test
@@ -603,7 +603,7 @@ Feature: Reliability
 
   @REL-43 @test
   Scenario: The coordinator asks the user when the agent's only machines are offline
-    # internal/runtime/coordinator/loop.go startTurn: the fleet is waited for OfflineGrace, then the user is asked
+    # internal/runtime/coordinator/turns.go startTurn: the fleet is waited for OfflineGrace, then the user is asked
     Given a worker that joined and is offline, and an engineer who may run only on it
     When the coordinator assigns the task to the engineer
     Then the task asks the user a question, saying the engineer can't run anywhere now because the worker is offline: yes

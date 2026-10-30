@@ -45,7 +45,7 @@ Feature: Supervisor agents
 
   @PROP-56 @agent @test @to-coordinator-and-handoffs
   Scenario: A supervisor's brief names the agents it may hand the task to, and how
-    # the coordinator's brief lists the agents (internal/runtime/coordinator/brief.go coordinatorBrief); a worker's brief is handoffBrief or the worker brief (internal/runtime/coordinator/loop.go briefFor)
+    # the coordinator's brief lists the agents (internal/runtime/coordinator/brief.go coordinatorBrief); a worker's brief is handoffBrief or the worker brief (internal/runtime/coordinator/turns.go briefFor)
     # test: internal/runtime/coordinator/handoff_brief_test.go (to write)
     Given the reviewer of the Software team may assign
     When the coordinator hands it the task
@@ -56,7 +56,7 @@ Feature: Supervisor agents
 
   @PROP-57 @agent @test @to-coordinator-and-handoffs
   Scenario: A supervisor's report ending with an assign hands the task to that agent
-    # builds on @HANDOFF-01 and @HANDOFF-06 (internal/runtime/coordinator/loop.go, where the coordinator's decision becomes task.assigned)
+    # builds on @HANDOFF-01 and @HANDOFF-06 (internal/runtime/coordinator/apply.go, where the coordinator's decision becomes task.assigned)
     # test: internal/runtime/coordinator/loop_test.go (to write)
     Given the reviewer may assign, and its turn ends with the report "Two tests fail on Windows paths." and {"action": "assign", "agent": "engineer", "instructions": "Fix the path joins in internal/x."}
     When the loop reads the task
