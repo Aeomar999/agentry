@@ -230,7 +230,7 @@ Two rules hold for all four stories:
    `domains.go`, `workersapi`.
 5. **The workers' shared-file routes move to `sharedfilesapi`.**
    `blobFor` and `blobFrom`, with `Auth` `Worker`. `sharedfilesapi.API`
-   gains `WorkersConnect`, a bool `web` sets when `Config.Workers` is set;
+   gains `HasWorkers`, a bool `web` sets when `Config.Workers` is set;
    `Routes()` leaves the blob routes out when it is false. Touches
    `server.go`, `shared_api.go`, `sharedfilesapi`.
 6. **`extensions.Auth` gains `Open`, and joining moves to

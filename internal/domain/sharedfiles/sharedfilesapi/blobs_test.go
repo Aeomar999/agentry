@@ -23,8 +23,8 @@ import (
 )
 
 // The shared files a worker fetches and sends by their hash, with its
-// credential. A worker's whole turn with them is tested end to end in web
-// (workers_test.go).
+// credential, tested over HTTP through the server serve runs, as web mounts
+// them: that is where the credential check is.
 
 const missing = "0000000000000000000000000000000000000000000000000000000000000000"
 
