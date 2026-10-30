@@ -213,6 +213,9 @@ and the few routes that span every domain: `/api/events`, `/api/waiting`,
 in `mcp`: the protocol, the server instructions, notices and the waiting
 list it words.
 
+[web-and-mcp.md](web-and-mcp.md) lists every file left in `web` and `mcp`
+after step 12, where each goes, and the stories that take them there.
+
 ## 3. The dependency rules
 
 From the bottom up. A package may import its own layer's packages where the
