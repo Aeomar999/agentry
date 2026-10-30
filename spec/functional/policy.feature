@@ -3,7 +3,9 @@ Feature: Policy
   and the Policy page.
   # Sources: cmd/agentry/hook.go, cmd/agentry/policy.go, internal/policy,
   # internal/hooks, internal/agents/agent.go, internal/web/policy_api.go,
-  # ui/src/pages/PolicyPage.tsx and their tests.
+  # ui/src/pages/PolicyPage.tsx, ui/src/components/organisms/TryPolicyCall.tsx,
+  # ui/src/components/organisms/DefaultProfiles.tsx,
+  # ui/src/components/organisms/PolicyHistory.tsx and their tests.
 
   # ---- The Policy page -------------------------------------------------------
 

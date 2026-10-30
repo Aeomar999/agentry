@@ -3,8 +3,11 @@ Feature: Tasks and the board
   running limits, search, the keys and the archive.
   # Sources: internal/tasks, internal/archive, internal/settings,
   # internal/coordinator/slots.go, internal/web/api.go, internal/web/board_api.go,
-  # internal/web/erase_api.go, internal/web/archives.go, ui/src/pages/TasksPage.tsx,
-  # ui/src/pages/TaskPage.tsx, ui/src/components/organisms/TaskBoard.tsx and their
+  # internal/web/erase_api.go, internal/web/archives.go,
+  # internal/web/settings_api.go, ui/src/pages/TasksPage.tsx,
+  # ui/src/pages/TaskPage.tsx, ui/src/components/organisms/TaskBoard.tsx,
+  # ui/src/components/organisms/NewTaskForm.tsx,
+  # ui/src/components/organisms/LimitEditor.tsx, ui/src/lib/limits.ts and their
   # tests.
 
   # ---- Adding a task ---------------------------------------------------------

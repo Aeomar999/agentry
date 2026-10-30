@@ -79,7 +79,7 @@ func checkFeature(result *Result, seen map[string]string, cites *citer, folder, 
 	if !known {
 		result.Problems = append(result.Problems, Problem{path, 1, "unknown feature file name; the known names are " + knownNames()})
 	}
-	result.Problems = append(result.Problems, cites.sourcesProblems(path, text)...)
+	result.Problems = append(result.Problems, cites.sourcesProblems(path, text, filepath.Base(filepath.Dir(path)) == "functional")...)
 	for _, l := range outlines {
 		result.Problems = append(result.Problems, Problem{path, l.number, "Scenario Outline is not used in this spec: write one Scenario per case"})
 	}

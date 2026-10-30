@@ -2,7 +2,7 @@ Feature: The agents' turns
   The engineer, reviewer, tester, deployer and the other teams' agents, each in its own
   worktree and session: what each one's turn does.
   # Sources: internal/turns, internal/agents, internal/coordinator/brief.go,
-  # internal/hooks/handler.go and their tests.
+  # internal/coordinator/checks.go, internal/hooks/handler.go and their tests.
 
   # ---- Every agent's turn ----------------------------------------------------
 

@@ -1,7 +1,7 @@
 Feature: Ideas
   The Visionaries suggest features as ideas; the user accepts or dismisses each one.
-  # Sources: internal/ideas, internal/settings, ui/src/extensions/ideas and their
-  # tests.
+  # Sources: internal/ideas, internal/settings, internal/web/settings_api.go,
+  # ui/src/extensions/ideas and their tests.
 
   # ---- The Ideas page --------------------------------------------------------
 

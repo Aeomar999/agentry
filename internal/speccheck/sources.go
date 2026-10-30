@@ -7,12 +7,15 @@ import (
 	"strings"
 )
 
+// sourcesWords are the words a Sources sentence may hold besides its paths:
+// "Sources: internal/x, ui/src/y.tsx and their tests." Every other word is a
+// path.
+var sourcesWords = map[string]bool{"Sources": true, "and": true, "their": true, "its": true, "tests": true}
+
 // sourcesLines reads a feature file's "# Sources:" sentence: the comment
 // line that starts with it and each comment line after it, up to the line
 // that ends the sentence with a full stop, or up to a blank line or one that
-// isn't a comment. The words in it are read as citations are (commentTokens):
-// a token is a path only when it starts with a top folder and a slash, or is
-// a root file's bare name, so "and their tests" or "its tests" is never one.
+// isn't a comment.
 func sourcesLines(text string) []line {
 	var sources []line
 	in := false
@@ -33,23 +36,43 @@ func sourcesLines(text string) []line {
 
 // sourcesProblems checks that every path a feature file's Sources names is
 // in the repo, as a file or a folder, so a move that forgets the spec is
-// caught.
-func (c *citer) sourcesProblems(path, text string) []Problem {
+// caught. A functional file must have a Sources sentence; any other may.
+func (c *citer) sourcesProblems(path, text string, required bool) []Problem {
+	sources := sourcesLines(text)
+	if required && len(sources) == 0 {
+		return []Problem{{path, 1, "no # Sources: line under the description; name the code behind this file"}}
+	}
 	var problems []Problem
-	for _, l := range sourcesLines(text) {
+	for _, l := range sources {
 		for _, token := range commentTokens(l.text) {
-			message := ""
-			if isPath(token) {
-				if _, err := os.Stat(filepath.Join(c.root, filepath.FromSlash(token))); err != nil {
-					message = fmt.Sprintf("Sources names %s, which doesn't exist", token)
-				}
-			} else if folder, ok := unlistedFolder(token); ok {
-				message = c.check(citation{line: l.number, path: token, folder: folder})
-			}
-			if message != "" {
+			if message := c.sourceProblem(token); message != "" {
 				problems = append(problems, Problem{path, l.number, message})
 			}
 		}
 	}
 	return problems
+}
+
+// sourceProblem says what is wrong with one word of a Sources sentence, or
+// "". Every word but sourcesWords is a path from the repo root, with or
+// without a slash, so a typo such as intenal/x or a bare AgentPage.tsx fails
+// rather than passing as a word. A path that starts with ./ is refused, so
+// the spec names each path one way.
+func (c *citer) sourceProblem(token string) string {
+	if sourcesWords[token] {
+		return ""
+	}
+	if strings.HasPrefix(token, "./") {
+		return fmt.Sprintf("Sources names %s; name the path from the repo root, without ./", token)
+	}
+	if folder, ok := unlistedFolder(token); ok && !isPath(token) && c.isRepoFolder(folder) {
+		return c.check(citation{path: token, folder: folder})
+	}
+	if _, err := os.Stat(filepath.Join(c.root, filepath.FromSlash(token))); err != nil {
+		if !strings.Contains(token, "/") {
+			return fmt.Sprintf("Sources names %s, which isn't at the repo root; name the path from the repo root", token)
+		}
+		return fmt.Sprintf("Sources names %s, which doesn't exist", token)
+	}
+	return ""
 }

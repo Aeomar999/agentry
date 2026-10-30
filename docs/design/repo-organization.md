@@ -313,7 +313,8 @@ today's paths; the moves then rewrite them like any other path.
 
 | Spec file | Where its code is |
 |---|---|
-| `tasks-and-board`, `epics-and-stories` | `domain/tasks` |
+| `tasks-and-board` | `domain/tasks`, `domain/settings` |
+| `epics-and-stories` | `domain/tasks` |
 | `teams-and-templates` | `domain/agents` |
 | `agents` (the agents' turns) | `runtime/turns`, `domain/agents` |
 | `coordinator-and-handoffs` | `runtime/coordinator`, `runtime/watchdog` |
@@ -321,13 +322,16 @@ today's paths; the moves then rewrite them like any other path.
 | `policy` | `domain/policy`, `domain/policy/hooks` |
 | `workers` | `domain/workers`, `runtime/machines` |
 | `shared-files` | `domain/sharedfiles` |
-| `settings` | `domain/settings` |
+| `settings` | `extensions`, `web` (redact), `core/store` and `core/rules` (redact), `ui/src/pages/SettingsPage.tsx` |
 | `notifications` | `domain/notifications` |
 | `sessions` | `platform/sessions`, `platform/terminal`, `runtime/desk` |
 | `worktrees-and-branches` | `platform/worktrees`, `platform/workspace` |
 | `sign-in` | `web` |
 | `claude-code-tools` | `mcp`, `domain/connections` |
-| `ideas` | `extensions/ideas` |
+| `ideas` | `extensions/ideas`, `domain/settings` |
+
+Step 3 checked this table against the code; from then on the `# Sources:`
+lines are what is kept true, and this table is not.
 
 A spec area doesn't have to be a domain: sessions and worktrees know no
 domain, so their code is platform. The map goes from spec areas to code,

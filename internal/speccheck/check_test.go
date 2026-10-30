@@ -14,7 +14,7 @@ import (
 // A scenario that passes every rule, to break one rule at a time.
 const goodScenario = `Feature: Tasks
   What the person at the page does.
-
+  # Sources: internal/web and its tests.
   @TASK-01 @user @test
   Scenario: A new task goes to the coordinator
     Given a repo with a Software team
@@ -133,8 +133,18 @@ func TestANonFunctionalScenarioNeedsNoRoleTag(t *testing.T) {
 	expectProblems(t, problemsOf(t, map[string]string{"non-functional/limits.feature": text}))
 }
 
+func TestOnlyAFunctionalFileNeedsSources(t *testing.T) {
+	noSources := strings.Replace(goodScenario, "  # Sources: internal/web and its tests.\n", "\n", 1)
+	limits := strings.NewReplacer("@TASK-01 @user @test", "@LIM-01 @test", "Tasks", "Limits").Replace(noSources)
+	expectProblems(t, problemsOf(t, map[string]string{"non-functional/limits.feature": limits}))
+	proposal := strings.Replace(noSources, "@TASK-01 @user @test", "@PROP-01 @user @test @to-tasks-and-board", 1)
+	expectProblems(t, problemsOf(t, map[string]string{"proposals/board.feature": proposal}))
+	expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": noSources}),
+		"tasks-and-board.feature:1: no # Sources: line under the description")
+}
+
 func TestAnIDIsUsedOnceInTheFolder(t *testing.T) {
-	twice := goodScenario + "\n" + strings.Replace(goodScenario, "Feature: Tasks\n  What the person at the page does.\n\n", "", 1)
+	twice := goodScenario + "\n" + strings.Replace(goodScenario, "Feature: Tasks\n  What the person at the page does.\n  # Sources: internal/web and its tests.\n", "", 1)
 	expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": twice}),
 		"tasks-and-board.feature:12: ID @TASK-01 is already used at ")
 }
@@ -402,7 +412,7 @@ func TestAnUnknownFeatureFileNameFails(t *testing.T) {
 
 func TestAGoodSpecPassesAndIsCounted(t *testing.T) {
 	coordinator := `Feature: The coordinator
-
+  # Sources: internal/web and its tests.
   @HANDOFF-01 @coordinator @manual
   Scenario: A decision hands the task to one agent
     Given a task whose coordinator has decided
@@ -593,10 +603,10 @@ func TestEveryPathAFeaturesSourcesNamesExists(t *testing.T) {
 		"../scripts/build.sh":          "",
 	}
 	feature := func(sources string) string {
-		return strings.Replace(goodScenario, "  What the person at the page does.\n", "  What the person at the page does.\n"+sources, 1)
+		return strings.Replace(goodScenario, "  # Sources: internal/web and its tests.\n", sources+"\n", 1)
 	}
 	for name, c := range map[string]struct{ sources, want string }{
-		"no Sources": {"", ""},
+		"no Sources": {"", "tasks-and-board.feature:1: no # Sources: line under the description"},
 		"a good sentence over lines": {
 			"  # Sources: internal/tasks, internal/web/api_test.go,\n  # ui/src/pages/TaskPage.tsx, README.md and their\n  # tests.\n", ""},
 		"a missing path": {
@@ -615,6 +625,18 @@ func TestEveryPathAFeaturesSourcesNamesExists(t *testing.T) {
 		"an unlisted top folder": {
 			"  # Sources: internal/tasks, scripts/build.sh and their tests.\n",
 			"tasks-and-board.feature:3: cited path scripts/build.sh is under scripts/, a top folder rootFolders does not list"},
+		"a typo in the top folder": {
+			"  # Sources: intenal/tasks and their tests.\n",
+			"tasks-and-board.feature:3: Sources names intenal/tasks, which doesn't exist"},
+		"a top folder in the wrong case": {
+			"  # Sources: Internal/tasks and their tests.\n",
+			"tasks-and-board.feature:3: Sources names Internal/tasks, which doesn't exist"},
+		"a bare file name": {
+			"  # Sources: internal/tasks, TaskPage.tsx and their tests.\n",
+			"tasks-and-board.feature:3: Sources names TaskPage.tsx, which isn't at the repo root; name the path from the repo root"},
+		"a path from ./": {
+			"  # Sources: ./internal/tasks and their tests.\n",
+			"tasks-and-board.feature:3: Sources names ./internal/tasks; name the path from the repo root, without ./"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			files := maps.Clone(repo)

@@ -3,7 +3,8 @@ Feature: Teams and templates
   # Sources: internal/agents, internal/web/agents_api.go,
   # internal/web/templates_api.go, ui/src/pages/AgentsPage.tsx,
   # ui/src/pages/AgentPage.tsx, ui/src/pages/AgentEditPage.tsx,
-  # ui/src/components/organisms/TeamPanel.tsx, ui/src/lib/teams.ts,
+  # ui/src/components/organisms/TeamPanel.tsx,
+  # ui/src/components/organisms/AgentForm.tsx, ui/src/lib/teams.ts,
   # ui/src/lib/templates.ts and their tests.
 
   # ---- The Agents page and its teams -----------------------------------------
