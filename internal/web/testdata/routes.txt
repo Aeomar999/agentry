@@ -1,0 +1,107 @@
+# Every route `agentry serve` registers: pattern, owner, access kind. Written by
+# `go test ./internal/web -run TestTheRouteTableIsUpToDate -update`; reviewers read its diff.
+# The server has a task terminal, the Claude helper's terminal, the desk, workers
+# (their routes and the shared files' blobs) and the extensions serve installs: ideas, schedules.
+GET /                                                    web                          open
+GET /api/agents                                          the agents domain            UI
+POST /api/agents                                         the agents domain            UI
+POST /api/agents/redact                                  the settings domain          UI
+POST /api/agents/redact/preview                          the settings domain          UI
+DELETE /api/agents/{name}                                the agents domain            UI
+PUT /api/agents/{name}                                   the agents domain            UI
+GET /api/agents/{name}/knowledge                         the agents domain            UI
+PUT /api/agents/{name}/knowledge                         the agents domain            UI
+POST /api/agents/{name}/rename                           the agents domain            UI
+GET /api/changes                                         web                          UI
+GET /api/config                                          web                          UI
+GET /api/desk/terminal                                   web                          UI
+GET /api/features                                        web                          UI
+GET /api/ideas                                           the ideas extension          UI
+POST /api/ideas/{idea}/accept                            the ideas extension          UI
+POST /api/ideas/{idea}/dismiss                           the ideas extension          UI
+POST /api/integrations/claude-code                       the connections domain       UI
+POST /api/integrations/connect                           the connections domain       open
+GET /api/integrations/connections                        the connections domain       UI
+DELETE /api/integrations/connections/{id}                the connections domain       UI
+GET /api/policy                                          the policy domain            UI
+GET /api/policy/history                                  the policy domain            UI
+GET /api/policy/history/{position}                       the policy domain            UI
+POST /api/policy/profiles/{name}/add                     the policy domain            UI
+POST /api/policy/profiles/{name}/update                  the policy domain            UI
+POST /api/policy/profiles/{name}/use-default             the policy domain            UI
+POST /api/policy/revert                                  the policy domain            UI
+POST /api/policy/try                                     the policy domain            UI
+POST /api/policy/use-for-everyone/off                    the policy domain            UI
+GET /api/push                                            the notifications domain     UI
+DELETE /api/push/subscriptions                           the notifications domain     UI
+POST /api/push/subscriptions                             the notifications domain     UI
+GET /api/questions                                       the tasks domain             UI or desk
+POST /api/redact                                         the settings domain          UI
+POST /api/redact/preview                                 the settings domain          UI
+GET /api/settings                                        the settings domain          UI
+PUT /api/settings                                        the settings domain          UI
+POST /api/signin                                         web                          open
+POST /api/signin/codes                                   web                          UI token only
+POST /api/signout                                        web                          open
+GET /api/tasks                                           the tasks domain             UI or desk
+POST /api/tasks                                          the tasks domain             UI or desk
+GET /api/tasks/{task}                                    the tasks domain             UI or desk
+POST /api/tasks/{task}/actions/{action}/approve          the tasks domain             UI
+POST /api/tasks/{task}/actions/{action}/deny             the tasks domain             UI
+POST /api/tasks/{task}/answer                            the tasks domain             UI or desk
+PUT /api/tasks/{task}/budget                             the tasks domain             UI
+POST /api/tasks/{task}/claude/message                    web                          helper token
+GET /api/tasks/{task}/claude/terminal                    web                          UI
+GET /api/tasks/{task}/commits                            the tasks domain             UI
+POST /api/tasks/{task}/direct                            the tasks domain             UI
+PUT /api/tasks/{task}/epic                               the tasks domain             UI or desk
+POST /api/tasks/{task}/erase                             the tasks domain             UI
+GET /api/tasks/{task}/events                             the tasks domain             UI or desk
+GET /api/tasks/{task}/file                               the tasks domain             UI
+GET /api/tasks/{task}/files                              the tasks domain             UI
+PUT /api/tasks/{task}/labels                             the tasks domain             UI
+POST /api/tasks/{task}/message                           the tasks domain             UI
+PUT /api/tasks/{task}/rank                               the tasks domain             UI
+POST /api/tasks/{task}/redact                            the settings domain          UI
+POST /api/tasks/{task}/redact/preview                    the settings domain          UI
+PUT /api/tasks/{task}/repo                               the tasks domain             UI
+DELETE /api/tasks/{task}/shared                          the shared files domain      UI
+GET /api/tasks/{task}/shared                             the shared files domain      UI or desk
+POST /api/tasks/{task}/shared                            the shared files domain      UI or desk
+GET /api/tasks/{task}/shared/file                        the shared files domain      UI or desk
+GET /api/tasks/{task}/terminal                           web                          UI
+PUT /api/tasks/{task}/turns                              the tasks domain             UI
+POST /api/teams                                          the agents domain            UI
+GET /api/teams/templates                                 the agents domain            UI
+POST /api/teams/templates/import                         the agents domain            UI
+DELETE /api/teams/templates/{id}                         the agents domain            UI
+GET /api/teams/templates/{id}/export                     the agents domain            UI
+DELETE /api/teams/{team}                                 the agents domain            UI
+PUT /api/teams/{team}                                    the agents domain            UI
+POST /api/teams/{team}/link                              the agents domain            UI
+POST /api/teams/{team}/rename                            the agents domain            UI
+POST /api/teams/{team}/template                          the agents domain            UI
+POST /api/theme                                          web                          UI
+GET /api/waiting                                         web                          UI
+GET /api/worker/agentry                                  the workers domain           worker
+POST /api/worker/blobs                                   the shared files domain      worker
+GET /api/worker/blobs/{hash}                             the shared files domain      worker
+HEAD /api/worker/blobs/{hash}                            the shared files domain      worker
+GET /api/worker/connect                                  the workers domain           worker
+GET /api/worker/git/{task}/                              the workers domain           worker
+POST /api/worker/git/{task}/bundle                       the workers domain           worker
+POST /api/worker/git/{task}/git-upload-pack              the workers domain           worker
+POST /api/worker/join                                    the workers domain           open
+POST /api/worker/leave                                   the workers domain           worker
+GET /api/worker/streams/{id}                             the workers domain           worker
+GET /api/workers                                         the workers domain           UI
+POST /api/workers/invite                                 the workers domain           UI
+DELETE /api/workers/{name}                               the workers domain           UI
+GET /api/workers/{name}                                  the workers domain           UI
+POST /hooks                                              web                          hook token
+GET /integrations/agentry                                the connections domain       open
+GET /integrations/claude-code.ps1                        the connections domain       open
+GET /integrations/claude-code.sh                         the connections domain       open
+GET /worker/agentry                                      the workers domain           open
+GET /worker/install.ps1                                  the workers domain           open
+GET /worker/install.sh                                   the workers domain           open
