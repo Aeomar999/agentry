@@ -87,6 +87,9 @@ var edits = []edit{
 	{"6", "", "internal/events/fixtures_test.go", `const module = "../.."`, `const module = "../../.."`},
 	// web stays, so its path into policy gains domain/.
 	{"7", "policy", "internal/web/policy_api_test.go", `"../policy/shipped/`, `"../domain/policy/shipped/`},
+	// The rewrite fixes ui/public/sw.js but skips the built page; its copy
+	// must stay the same, or the next build changes dist.
+	{"7", "notifications", "internal/web/dist/sw.js", "(internal/webpush)", "(internal/domain/notifications/webpush)"},
 }
 
 // allowed are the files of a moved package whose `..` or Chdir is not a
