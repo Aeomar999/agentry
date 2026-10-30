@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -14,8 +15,8 @@ var sourcesWords = map[string]bool{"Sources": true, "and": true, "their": true, 
 
 // sourcesLines reads a feature file's "# Sources:" sentence: the comment
 // line that starts with it and each comment line after it, up to the line
-// that ends the sentence with a full stop, or up to a blank line or one that
-// isn't a comment.
+// that ends the sentence with a full stop, or up to a blank line, one that
+// isn't a comment or a "# ----" rule.
 func sourcesLines(text string) []line {
 	var sources []line
 	in := false
@@ -23,7 +24,7 @@ func sourcesLines(text string) []line {
 		l := line{number: i + 1, text: strings.TrimSpace(raw)}
 		if !in {
 			in = strings.HasPrefix(l.text, "# Sources:")
-		} else if !isComment(l.text) {
+		} else if !isComment(l.text) || strings.HasPrefix(l.text, "# ----") {
 			in = false
 		}
 		if in {
@@ -68,11 +69,32 @@ func (c *citer) sourceProblem(token string) string {
 	if folder, ok := unlistedFolder(token); ok && !isPath(token) && c.isRepoFolder(folder) {
 		return c.check(citation{path: token, folder: folder})
 	}
-	if _, err := os.Stat(filepath.Join(c.root, filepath.FromSlash(token))); err != nil {
-		if !strings.Contains(token, "/") {
-			return fmt.Sprintf("Sources names %s, which isn't at the repo root; name the path from the repo root", token)
-		}
+	switch {
+	case existsExactly(c.root, token):
+		return ""
+	case strings.Contains(token, "/"):
 		return fmt.Sprintf("Sources names %s, which doesn't exist", token)
+	case strings.Contains(token, "."):
+		return fmt.Sprintf("Sources names %s, which isn't at the repo root; name the path from the repo root", token)
+	default:
+		return fmt.Sprintf(`Sources names %s, which isn't a path; a Sources sentence holds only paths and "and their/its tests", ending with a full stop`, token)
 	}
-	return ""
+}
+
+// existsExactly is true when the path, with slashes, is under root with
+// each part's case as written. os.Stat alone would let Internal/x pass on a
+// case-insensitive filesystem, such as the Mac's.
+func existsExactly(root, path string) bool {
+	dir := root
+	for _, part := range strings.Split(path, "/") {
+		if part == "" {
+			continue
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil || !slices.ContainsFunc(entries, func(e os.DirEntry) bool { return e.Name() == part }) {
+			return false
+		}
+		dir = filepath.Join(dir, part)
+	}
+	return true
 }

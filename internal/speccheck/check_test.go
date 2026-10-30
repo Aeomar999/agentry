@@ -634,6 +634,11 @@ func TestEveryPathAFeaturesSourcesNamesExists(t *testing.T) {
 		"a bare file name": {
 			"  # Sources: internal/tasks, TaskPage.tsx and their tests.\n",
 			"tasks-and-board.feature:3: Sources names TaskPage.tsx, which isn't at the repo root; name the path from the repo root"},
+		"a plain word": {
+			"  # Sources: internal/tasks with ui/src/pages/TaskPage.tsx and their tests.\n",
+			`tasks-and-board.feature:3: Sources names with, which isn't a path; a Sources sentence holds only paths and "and their/its tests", ending with a full stop`},
+		"a rule ends a sentence with no full stop": {
+			"  # Sources: internal/tasks and their tests\n  # ---- The board ----\n", ""},
 		"a path from ./": {
 			"  # Sources: ./internal/tasks and their tests.\n",
 			"tasks-and-board.feature:3: Sources names ./internal/tasks; name the path from the repo root, without ./"},
