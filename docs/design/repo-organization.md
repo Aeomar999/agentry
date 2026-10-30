@@ -222,6 +222,14 @@ name stays: decision 5), `/api/config`, `/api/theme` and `/api/changes`
 list of every tool, which extensions are shown, the waiting list and news
 it words, and desktop notices. `web` and `mcp` stay one package each.
 
+Two checked tables hold every route and tool, so a change to them shows as a
+diff: `internal/web/testdata/routes.txt` (each route's pattern, owner and
+access kind) and `internal/mcp/testdata/tools.txt` (each tool and its
+owner). `TestTheRouteTableIsUpToDate` also fails when `web` registers a
+route of its own beyond the ones it labels by hand: a new route goes in a
+domain's api package or an extension. Rerun either test with `-update`
+after a change that is meant, and the reviewer reads the diff.
+
 [web-and-mcp.md](web-and-mcp.md) lists every file left in `web` and `mcp`
 after step 12, where each goes, and the stories that take them there.
 

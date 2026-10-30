@@ -106,7 +106,8 @@ Anyone who changes what Agentry does, an agent or a person, keeps this folder tr
 2. Every scenario added or changed follows the rules for every scenario above.
 3. The summary or report of the change names the scenario IDs it added, changed or removed, such as `added @HANDOFF-43, changed @TASK-12`, or says `no behaviour change`.
 4. A reviewer counts a behaviour change with no matching change in `spec/` as a finding.
-5. A tester runs `spec/check` (or `make spec`) and the tests that the touched `@test` scenarios name. The tester walks the touched `@manual` scenarios where it can, and reports each one it could not walk as `not walked`, with its ID.
+5. A reviewer reads the diff of `internal/web/testdata/routes.txt` and `internal/mcp/testdata/tools.txt`, the checked tables of every route and tool: a route or tool added or dropped, or one whose owner or access kind changed, is a change to check, such as a route that should need the UI token now open.
+6. A tester runs `spec/check` (or `make spec`) and the tests that the touched `@test` scenarios name. The tester walks the touched `@manual` scenarios where it can, and reports each one it could not walk as `not walked`, with its ID.
 
 ## Proposals
 
