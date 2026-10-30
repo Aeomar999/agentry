@@ -1,5 +1,44 @@
 # Schedules: tasks Agentry makes on a clock
 
+## Paths since epic-251
+
+This note keeps the paths it was written with
+([repo-organization.md](repo-organization.md), section 7). Since epic-251
+moved the code, the old paths it names are here on `dev`:
+
+| Old | Now |
+|---|---|
+| `internal/events`, `store`, `current`, `rules`, `httpapi` | `internal/core/events`, `store`, `current`, `rules`, `httpapi` |
+| `internal/rules/idea_rules.go` | `internal/extensions/ideas/rules.go`: an extension's rules come through it |
+| `internal/rules/schedule_rules.go`, not written yet | a `rules.go` in `internal/extensions/schedules`, as Ideas has |
+| `internal/agents`, `internal/tasks` | `internal/domain/agents`, `internal/domain/tasks` |
+| `internal/hooks` | `internal/domain/policy/hooks` |
+| `internal/webpush` | `internal/domain/notifications/webpush` |
+| `internal/engines` | `internal/platform/engines` |
+| `internal/coordinator` | `internal/runtime/coordinator` |
+| `internal/storetest` | `internal/testkit/storetest` |
+| `internal/features` (`features.go`) | `internal/extensions` (`extensions.go`) |
+| `internal/ideas` (`feature.go`) | `internal/extensions/ideas` (`extension.go`) |
+| `internal/schedules` | `internal/extensions/schedules`; `routes.go` is not written yet |
+| `internal/web/api.go` | split into `internal/web/config_api.go`, `internal/web/domains.go` and each domain's `internal/domain/<area>/<area>api` |
+| `internal/web/features_api.go` | `internal/web/extensions_api.go` |
+| `internal/web/push_api.go` | `internal/domain/notifications/notificationsapi/notificationsapi.go` |
+| `internal/web/dist`, committed | `internal/web/static/dist`, built, not committed |
+| `ui/src/features` (`index.ts`, `streams.ts`, `ideas/index.tsx`) | `ui/src/extensions` (`index.ts`, `streams.ts`, `ideas/index.tsx`) |
+| `ui/src/features/schedules`, not written yet | a folder `schedules` in `ui/src/extensions` |
+| `ui/src/pages/TaskPage.tsx` | `ui/src/domains/tasks/TaskPage.tsx` |
+
+Three steps are now mechanical for any new package or page:
+
+1. A new package under `internal/domain` or `internal/extensions` goes in a
+   feature file's `# Sources:` line in the same commit; `spec/check` fails
+   otherwise.
+2. `tools/importrules` reads a package's layer from its path, so a new
+   package must sit where repo-organization.md section 2 puts it. There is
+   no table to edit.
+3. The page is built by `make ui` into `internal/web/static/dist`, which git
+   ignores; never commit it. `make test` builds it when it is missing.
+
 Status: proposed, for task-123 (story 21 of `docs/design/extensions.md`
 section 11, phase 6). Design only: nothing in the server or the page
 changes with this document. It covers what a schedule is, its events, its

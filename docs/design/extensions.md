@@ -1,5 +1,42 @@
 # Extensions: how teams bring features and UI
 
+## Paths since epic-251
+
+This note keeps the paths it was written with
+([repo-organization.md](repo-organization.md), section 7). Since epic-251
+moved the code, the old paths it names are here on `dev`:
+
+| Old | Now |
+|---|---|
+| `internal/events`, `store`, `current`, `rules`, `httpapi` | `internal/core/events`, `store`, `current`, `rules`, `httpapi` |
+| `internal/rules/idea_rules.go` | `internal/extensions/ideas/rules.go` |
+| `internal/agents`, `internal/tasks`, `internal/policy` | `internal/domain/agents`, `internal/domain/tasks`, `internal/domain/policy` |
+| `internal/hooks` | `internal/domain/policy/hooks` |
+| `internal/schema` | `internal/platform/schema` |
+| `internal/coordinator` (`ideas.go`) | `internal/runtime/coordinator`; `ideas.go` is now `internal/extensions/ideas/coordinator.go` |
+| `internal/features` | `internal/extensions` |
+| `internal/ideas` | `internal/extensions/ideas` |
+| `internal/mcp/ideas.go` | `internal/extensions/ideas/tools.go` |
+| `internal/web/ideas_api.go` | `internal/extensions/ideas/routes.go` |
+| `internal/web/agents_api.go`, `views.go` | `internal/domain/agents/agentsapi/agents_api.go`, `internal/domain/tasks/tasksapi/views.go` |
+| `internal/web/api.go` (also written `web/api.go`) | split into `internal/web/config_api.go`, `internal/web/domains.go` and each domain's `internal/domain/<area>/<area>api` |
+| `ui/src/features` (`index.ts`, `ideas/`) | `ui/src/extensions` (`index.ts`, `ideas/index.tsx`) |
+| `ui/src/components/templates/AdminShell.tsx`, `organisms/Sidebar.tsx` | `ui/src/shell/AdminShell.tsx`, `ui/src/shell/Sidebar.tsx` |
+| `ui/src/components/organisms/IdeaCard.tsx`, `IdeaDialogs.tsx`, `ui/src/pages/IdeasPage.tsx`, `ui/src/lib/visionaries.ts` | the same names in `ui/src/extensions/ideas` |
+| `ui/src/components/organisms/NewTaskDialog.tsx`, `NewTaskForm.tsx`, `ui/src/pages/TasksPage.tsx` | the same names in `ui/src/domains/tasks` |
+| `ui/src/pages/AgentsPage.tsx`, `IntegrationsPage.tsx` | `ui/src/domains/agents/AgentsPage.tsx`, `ui/src/domains/connections/IntegrationsPage.tsx` |
+
+Three steps are now mechanical for any new package or page:
+
+1. A new package under `internal/domain` or `internal/extensions` goes in a
+   feature file's `# Sources:` line in the same commit; `spec/check` fails
+   otherwise.
+2. `tools/importrules` reads a package's layer from its path, so a new
+   package must sit where repo-organization.md section 2 puts it. There is
+   no table to edit.
+3. The page is built by `make ui` into `internal/web/static/dist`, which git
+   ignores; never commit it. `make test` builds it when it is missing.
+
 Status: proposed, for task-46 ("Research how teams contribute features and
 UI: the shape of Agentry's extensions").
 Research only: nothing in the server or the page changes with this document.

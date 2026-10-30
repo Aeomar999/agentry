@@ -1,5 +1,38 @@
 # T-019: shipping through GitHub and GitLab
 
+## Paths since epic-251
+
+This note keeps the paths it was written with
+([repo-organization.md](repo-organization.md), section 7). Since epic-251
+moved the code, the old paths it names are here on `dev`:
+
+| Old | Now |
+|---|---|
+| `internal/events`, `store`, `current`, `rules` | `internal/core/events`, `store`, `current`, `rules` |
+| `internal/agents`, `internal/tasks` | `internal/domain/agents`, `internal/domain/tasks` |
+| `internal/settingsfile` | `internal/domain/settings/settingsfile` |
+| `internal/coordinator`, `internal/watchdog` | `internal/runtime/coordinator`, `internal/runtime/watchdog` |
+| `internal/storetest` | `internal/testkit/storetest` |
+| `internal/features` (`features.go`) | `internal/extensions` (`extensions.go`) |
+| `internal/ideas` | `internal/extensions/ideas` |
+| `internal/githost`, not written yet | a folder `githost` in `internal/extensions` |
+| `internal/web/api.go` | split into `internal/web/config_api.go`, `internal/web/domains.go` and each domain's `internal/domain/<area>/<area>api` |
+| `internal/web/dist`, committed | `internal/web/static/dist`, built, not committed |
+| `ui/src/features` (`index.ts`, `FEATURES`) | `ui/src/extensions` (`index.ts`, `EXTENSIONS`) |
+| `ui/src/features/git`, not written yet | a folder `git` in `ui/src/extensions` |
+| `ui/src/pages/TaskPage.tsx` | `ui/src/domains/tasks/TaskPage.tsx` |
+
+Three steps are now mechanical for any new package or page:
+
+1. A new package under `internal/domain` or `internal/extensions` goes in a
+   feature file's `# Sources:` line in the same commit; `spec/check` fails
+   otherwise.
+2. `tools/importrules` reads a package's layer from its path, so a new
+   package must sit where repo-organization.md section 2 puts it. There is
+   no table to edit.
+3. The page is built by `make ui` into `internal/web/static/dist`, which git
+   ignores; never commit it. `make test` builds it when it is missing.
+
 Status: proposed, for task-121 (story 19 of the extensions epic,
 `docs/design/extensions.md` section 11, phase 4).
 Design only: nothing in the server or the page changes with this document.
