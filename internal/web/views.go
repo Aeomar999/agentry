@@ -8,8 +8,6 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
-	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
-	"gitlab.com/dev.chempa/agentry/internal/domain/policy/policyapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles/sharedfilesapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 )
@@ -243,33 +241,4 @@ func turnOf(t *tasks.Task, s tasks.Step) string {
 		}
 	}
 	return found
-}
-
-// agentView is an agent with the profile that judges its calls, when there
-// is a policy, and the built-in template its template comes from.
-type agentView struct {
-	agents.Agent
-	Base        string                   `json:"base,omitempty"` // the built-in template its Template resolves to, live or removed
-	Effective   *policyapi.EffectiveView `json:"effective,omitempty"`
-	TeamVersion string                   `json:"teamVersion"` // its team's, which PUT /api/teams/{team} checks
-}
-
-func agentsOf(roster agents.Roster, bases agents.Bases, p *policy.Policy) []agentView {
-	list := []agentView{}
-	versions := map[string]string{}
-	for _, team := range roster.Teams() {
-		versions[team] = roster.TeamVersion(team)
-	}
-	for _, a := range roster {
-		if a.Workers == nil {
-			a.Workers = []string{} // the page reads a list, never null
-		}
-		view := agentView{Agent: a, Base: bases.Of(a.Template), TeamVersion: versions[a.TeamName()]}
-		if p != nil {
-			effective := policyapi.EffectiveOf(p, a.Profile)
-			view.Effective = &effective
-		}
-		list = append(list, view)
-	}
-	return list
 }

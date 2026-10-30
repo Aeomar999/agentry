@@ -114,23 +114,6 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/tasks/{task}/actions/{action}/deny", s.deny)
 	api("GET /api/features", s.listFeatures)
 	api("GET /api/waiting", s.listWaiting)
-	api("GET /api/agents", s.listAgents)
-	api("GET /api/teams/templates", s.teamTemplates)
-	api("POST /api/teams", s.addTeam)
-	api("DELETE /api/teams/{team}", s.removeTeam)
-	api("POST /api/teams/{team}/rename", s.renameTeam)
-	api("PUT /api/teams/{team}", s.editTeam)
-	api("POST /api/teams/{team}/template", s.saveTemplate)
-	api("POST /api/teams/{team}/link", s.linkTeam)
-	api("DELETE /api/teams/templates/{id}", s.removeTemplate)
-	api("GET /api/teams/templates/{id}/export", s.exportTemplate)
-	api("POST /api/teams/templates/import", s.importTemplate)
-	api("POST /api/agents", s.createAgent)
-	api("PUT /api/agents/{name}", s.changeAgent)
-	api("DELETE /api/agents/{name}", s.removeAgent)
-	api("POST /api/agents/{name}/rename", s.renameAgent)
-	api("PUT /api/agents/{name}/knowledge", s.setKnowledge)
-	api("GET /api/agents/{name}/knowledge", s.knowledgeHistory)
 	api("GET /api/config", s.showConfig)
 	api("GET /api/changes", s.waitForChanges)
 	// A machine connecting its Claude Code, with its install command's code:
@@ -184,6 +167,7 @@ func (s *Server) Handler() http.Handler {
 	s.mount("the shared files domain", sharedfilesapi.API{Log: s.store, State: s.state, Blobs: s.config.Blobs}.Routes(), mux)
 	s.mount("the policy domain", s.policyAPI().Routes(), mux)
 	s.mount("the workers domain", s.workersAPI().Routes(), mux)
+	s.mount("the agents domain", s.agentsAPI().Routes(), mux)
 	// Last, so an extension's route that clashes with any core or domain
 	// route is the one that fails, naming its extension.
 	for _, f := range s.config.Extensions {

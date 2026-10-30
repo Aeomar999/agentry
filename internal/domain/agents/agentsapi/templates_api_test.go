@@ -1,4 +1,4 @@
-package web
+package agentsapi_test
 
 import (
 	"encoding/json"

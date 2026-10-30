@@ -1,22 +1,17 @@
-package web
+package agentsapi_test
 
 import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/core/current"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
-	"gitlab.com/dev.chempa/agentry/internal/core/rules"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
-	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
-	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
 
 // teamVersion is the team's version as GET /api/agents gives it with each
@@ -360,39 +355,6 @@ func TestAFollowUpRefusedPartwaySaysToSaveAgain(t *testing.T) {
 	if one, two := coordinatorOf(t, server, "task-1"), coordinatorOf(t, server, "task-2"); one != "analyst" || two != "analyst" {
 		t.Errorf("task-1 is %s's and task-2 %s's, want analyst's", one, two)
 	}
-}
-
-// newTestServerChecking is newTestServer whose log also runs check after
-// the rules, so a test can refuse one proposal.
-func newTestServerChecking(t *testing.T, check func(events.Proposal) *events.Rejection) (*httptest.Server, *store.Store) {
-	t.Helper()
-	server, s, _ := newTestStateChecking(t, check)
-	return server, s
-}
-
-// newTestStateChecking is newTestServerChecking and the state its log
-// keeps, for a test that archives a task in it.
-func newTestStateChecking(t *testing.T, check func(events.Proposal) *events.Rejection) (*httptest.Server, *store.Store, *current.State) {
-	t.Helper()
-	catalogue := events.Core()
-	state := storetest.NewState(catalogue)
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection {
-		if rejection := rules.Check(p, state, catalogue, storetest.Installed()...); rejection != nil {
-			return rejection
-		}
-		return check(p)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
-	for _, p := range agents.SeedProposals(nil) {
-		s.Propose(p)
-	}
-	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/src/app", Clones: filepath.Join(t.TempDir(), "repos"),
-		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}}, http.NotFoundHandler(), nil).Handler())
-	t.Cleanup(server.Close)
-	return server, s, state
 }
 
 func mustStream(t *testing.T, s *store.Store) []events.Event {

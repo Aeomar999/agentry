@@ -76,7 +76,9 @@ type verdictView struct {
 }
 
 // policyServer, servePolicy, withoutReadMostly, hash and policyEvents are
-// the same as their copies in internal/web/policy_test.go: change both together.
+// the same as their copies in internal/web/policy_test.go, and all but hash
+// as theirs in internal/domain/agents/agentsapi/agentsapi_test.go: change
+// them together.
 
 // policyServer serves the default team and a policy file holding text.
 type policyServer struct {

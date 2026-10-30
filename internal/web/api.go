@@ -17,6 +17,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/rules"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/agents/agentsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/policyapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/settings/settingsapi"
@@ -475,19 +476,6 @@ func (s *Server) decide(w http.ResponseWriter, r *http.Request, kind events.Type
 		Correlation: r.PathValue("action"), Data: map[string]any{"reason": request.Reason}})
 }
 
-func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
-	roster, err := s.roster()
-	if err != nil {
-		httpapi.Failed(w, err)
-		return
-	}
-	var inForce *policy.Policy
-	if s.config.Policy != nil {
-		inForce = s.config.Policy.Current()
-	}
-	httpapi.Reply(w, agentsOf(roster, agents.BasesIn(s.state), inForce))
-}
-
 // showConfig is what the page needs to know about the server. policyProblem
 // says policy.toml has a mistake, and missingProfiles names the profiles
 // agents have that it lacks, with those agents, so every page can point to
@@ -671,6 +659,18 @@ func (s *Server) policyAPI() policyapi.API {
 func (s *Server) settingsAPI() settingsapi.API {
 	return settingsapi.API{Log: s.store, State: s.state, Store: s.store, Blobs: s.config.Blobs, Redactions: s.config.Redactions,
 		Extensions: s.config.Extensions, Forget: s.archives.forget, WriteOverOldText: s.writeOverOldText}
+}
+
+// agentsAPI is the Agents page's routes as web mounts them.
+func (s *Server) agentsAPI() agentsapi.API {
+	return agentsapi.API{Log: s.store, Events: s.store, State: s.state, Roster: s.roster, Workers: s.workers,
+		Policy: s.config.Policy, ApplyPolicy: s.policyAPI().Apply, EffectiveOf: effectiveOf, Version: s.version()}
+}
+
+// effectiveOf is policyapi.EffectiveOf as an agent on the Agents page shows it.
+func effectiveOf(p *policy.Policy, profile string) any {
+	effective := policyapi.EffectiveOf(p, profile)
+	return &effective
 }
 
 // version is this Agentry's, as the comment above a profile it adds says.
