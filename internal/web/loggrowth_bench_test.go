@@ -19,10 +19,10 @@ import (
 	"time"
 	"unsafe"
 
-	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/connections"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"

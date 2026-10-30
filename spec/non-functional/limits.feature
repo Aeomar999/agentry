@@ -272,7 +272,7 @@ Feature: Limits
     When a Claude Code session connects with it 16 minutes later
     Then the connection is refused
     And the invite works for exactly 15 minutes from when it was made
-    # README.md, Use it from Claude Code; the lifetime is set in internal/connections/connections.go
+    # README.md, Use it from Claude Code; the lifetime is set in internal/domain/connections/connections.go
 
   @LIM-31 @manual
   Scenario: A worker is offline after 20 seconds of silence

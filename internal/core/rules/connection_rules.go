@@ -3,8 +3,8 @@ package rules
 import (
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
+	"gitlab.com/dev.chempa/agentry/internal/domain/connections"
 )
 
 // connectionRules check Claude Code's connections against those made so far.

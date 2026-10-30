@@ -1,7 +1,7 @@
 Feature: Agentry from Claude Code
   Plain claude in any repo hands work to Agentry through its MCP tools and hears back from it.
   # Sources: cmd/agentry/mcp.go, cmd/agentry/claudecode.go, internal/mcp,
-  # internal/ideas/tools.go, internal/connections, internal/web/integrations_api.go
+  # internal/ideas/tools.go, internal/domain/connections, internal/web/integrations_api.go
   # and their tests.
 
   # ---- Installing the integration --------------------------------------------
@@ -41,7 +41,7 @@ Feature: Agentry from Claude Code
     Given the user is signed in on the Integrations page
     When they ask for an install command
     Then the command carries a code, and each address the server has gets a command for a terminal (sh) and one for PowerShell (Windows)
-    # not under test, checked by hand: the code works for 15 minutes (internal/connections/connections.go line 21, InviteLifetime)
+    # not under test, checked by hand: the code works for 15 minutes (internal/domain/connections/connections.go line 21, InviteLifetime)
     And the install script fetched with the code carries that code and runs `agentry mcp connect`: yes
     And a script fetched with a wrong code is refused with status 401
     # internal/web/api_test.go TestClaudeCodeConnectsFromTheIntegrationsPage; every address: internal/web/addresses_test.go TestInstallCommands;
@@ -52,7 +52,7 @@ Feature: Agentry from Claude Code
     Given an install command whose code has not been used
     When the machine sends the code with its host name, user and system
     Then it gets a credential of its own: yes
-    # not under test, checked by hand: the log keeps only the credential's hash (internal/connections/connections.go line 7)
+    # not under test, checked by hand: the log keeps only the credential's hash (internal/domain/connections/connections.go line 7)
     And the same code sent a second time is refused with status 409
     And the script fetched with the used code is refused with status 401
     And a request to the API with the credential is answered with status 200

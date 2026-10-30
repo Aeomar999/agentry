@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/domain/connections"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 )
 

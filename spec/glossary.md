@@ -29,7 +29,7 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **close**: finishing an epic, which only the user does: with Close the epic on its page, `close_epic` in Claude Code, or by telling its coordinator, which asks the user to approve; a close starts one Visionaries follow-up session while that setting is on.
 - **code**: a one-time code: the sign-in code a signed-in device shows for another device, the join code in a worker's install command, or the install code in a Claude Code command; each works once and only its hash is kept.
 - **column**: one of the board's stages: Backlog, To do, In progress, Review, Shipping and Done; an agent's column says where its work shows, and dragging a card to a column is final at once.
-- **connection**: a machine whose Claude Code has Agentry's tools, connected from the Integrations page with its own credential; Revoke stops it at once (internal/connections).
+- **connection**: a machine whose Claude Code has Agentry's tools, connected from the Integrations page with its own credential; Revoke stops it at once (internal/domain/connections).
 - **constraint**: how Agentry is built and must stay built, with how it is checked; the constraints are in spec/constraints.md.
 - **coordinator**: an ordinary agent, one per team, that reads a task, names it, hands each step to one of its team's agents, reads every report and issue, and ends each turn with a decision; it never starts anyone itself.
 - **Coordinator tab**: the chat with a task's coordinator on its page; what the user sends stops the turn in progress so the coordinator reads it at once.
