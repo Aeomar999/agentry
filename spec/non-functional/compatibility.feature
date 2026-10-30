@@ -239,10 +239,10 @@ Feature: Compatibility
     Given a checkout of dev, where the built page is not committed
     When the user reads go.mod, the Makefile, .gitlab-ci.yml and the Dockerfile, and runs go build -o bin/agentry ./cmd/agentry
     Then go.mod says go 1.27.2 and the README says Go 1.27 and git; the build needs no Node, and the binary serves a page saying the UI isn't built until make ui has run: yes
-    And CI checks in golang:1.27-bookworm with go vet ./... and go test ./..., and is refused before the tests when internal/web/dist/index.html is missing, with "The UI is not built. Run make ui and commit internal/web/dist."
-    And the image is built in golang:1.27-bookworm with CGO_ENABLED=0 and runs on node:24-bookworm-slim only because Claude Code 2.1.301 is installed in it with npm, its auto-updater off
-    And Node is needed only for make ui, which runs npm ci and npm run build in ui
-    # README.md, From the source, Deploy it; go.mod line 3; Makefile lines 1-3, 10; .gitlab-ci.yml lines 21, 29-31; Dockerfile lines 5, 11, 13, 16-17; no test
+    And CI builds the page in node:24-bookworm-slim first, then checks in golang:1.27-bookworm with go vet ./... and go test ./... on a server with the page: yes
+    And the image builds the page in a node:24-bookworm-slim stage, builds the server in golang:1.27-bookworm with CGO_ENABLED=0, and runs on node:24-bookworm-slim because Claude Code 2.1.301 is installed in it with npm, its auto-updater off: yes
+    And Node is needed only for the page: make ui, CI's job ui and the image's ui stage, each running npm ci and npm run build in ui: yes
+    # README.md, From the source, Deploy it; go.mod line 3; Makefile lines 1-4, 11-13; .gitlab-ci.yml lines 21-27, 39-41, 50-51; Dockerfile lines 6-11, 13, 19-20, 22, 25-26; no test
 
   @COMPAT-24 @benchmark
   Scenario: The UI's toolchain is pinned to exact versions, with no Node version pinned

@@ -2,12 +2,21 @@
 # need to work: git and Claude Code. Everything worth keeping lives in
 # the agentry user's home, which the stack mounts as a volume (deploy/).
 
+# The page: Vite writes it to ../internal/web/static/dist, beside ui/.
+FROM node:24-bookworm-slim AS ui
+WORKDIR /src/ui
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci
+COPY ui ./
+RUN npm run build
+
 FROM golang:1.27-bookworm AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
+COPY --from=ui /src/internal/web/static/dist ./internal/web/static/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/agentry ./cmd/agentry
 
 FROM node:24-bookworm-slim

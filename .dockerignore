@@ -1,6 +1,8 @@
-# Only cmd/, internal/ (the built UI included) and deploy/ go into the image.
+# Only cmd/, internal/, ui/ and deploy/ go into the image. The image builds
+# its own page from ui/, so a local build and node_modules stay out.
 .git
 bin
-ui
+ui/node_modules
+internal/web/static/dist
 docs
 *.md

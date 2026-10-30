@@ -536,19 +536,17 @@ Feature: Operations
     # README.md, Work on it; Makefile
 
   @OPS-28 @manual
-  Scenario: The CI check fails when the UI is not built and committed, then vets and tests
-    # .gitlab-ci.yml stages: check, build, deploy; job check: image golang:1.27-bookworm, timeout 15 minutes, on merge requests and the dev branch
-    # .gitlab-ci.yml job check script: test -f internal/web/dist/index.html or fail saying to run make ui and commit internal/web/dist; go vet ./...; go test ./...
+  Scenario: CI checks and builds the UI, then vets and tests the server with it
+    # .gitlab-ci.yml stages: check, build, deploy; job ui: image node:24-bookworm-slim, timeout 10 minutes, on merge requests and the dev branch; job check: image golang:1.27-bookworm, needs ui, timeout 15 minutes, the same rules
+    # .gitlab-ci.yml job ui script: cd ui, npm ci, npm run lint, npm run build, then the commit's sha into internal/web/static/dist/built-from, kept as an artifact for 1 day; job check script: spec/check; go vet ./...; go test ./...
     # .gitlab-ci.yml job build_image: on dev only, needs check, timeout 20 minutes, builds and pushes the image; job deploy: on dev only, needs build_image, calls the deploy target's hook and fails unless it answers 200
     # Steps:
     # 1. Open a merge request against dev and watch the pipeline.
-    # 2. On a branch, delete internal/web/dist/index.html, push, and read the check job's output.
+    # 2. On a branch, break the UI's formatting, push, and read the ui job's output.
     Given a commit on a merge request or on dev
-    Then the pipeline runs the job check, and the jobs build_image and deploy only on dev: yes
-    And the UI's lint runs in the pipeline: no, it runs in make test
-    When internal/web/dist/index.html is missing from the commit
-    Then the job check fails within its first step, saying the UI is not built and to run make ui and commit internal/web/dist
-    When the UI is built and committed
+    Then the pipeline runs the jobs ui and check, and the jobs build_image and deploy only on dev: yes
+    And the job ui runs the UI's lint and build, and fails if either fails: yes
+    And the job check starts only after ui passes, with its built page: yes
     Then the job check runs go vet and go test, with a timeout of 15 minutes
     # README.md, Work on it; .gitlab-ci.yml
 

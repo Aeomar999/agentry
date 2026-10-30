@@ -1,6 +1,6 @@
 # One environment, so one branch: dev. Check, build the image, ask Berth to
-# deploy it to agentry.chempa.dev. The UI is built and committed in
-# internal/web/dist, so the pipeline needs no Node.
+# deploy it to agentry.chempa.dev. The built UI isn't committed, so the
+# job ui builds it first and check tests the server with it.
 
 stages:
   - check
@@ -14,11 +14,31 @@ default:
 variables:
   FF_NETWORK_PER_BUILD: "true"
 
+# The UI's type and format checks, then its build, which check embeds.
+# built-from names the commit, as make ui writes it.
+ui:
+  stage: check
+  interruptible: true
+  timeout: 10 minutes
+  image: node:24-bookworm-slim
+  script:
+    - cd ui && npm ci && npm run lint && npm run build && cd ..
+    - echo "$CI_COMMIT_SHA" > internal/web/static/dist/built-from
+  artifacts:
+    paths:
+      - internal/web/static/dist
+    expire_in: 1 day
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+
 check:
   stage: check
   interruptible: true
   timeout: 15 minutes
   image: golang:1.27-bookworm
+  needs:
+    - ui
   variables:
     GIT_AUTHOR_NAME: CI
     GIT_AUTHOR_EMAIL: ci@example.com
@@ -26,7 +46,6 @@ check:
     GIT_COMMITTER_EMAIL: ci@example.com
   # The tests run real sessions (each in a pty, kept by agentry itself) and git worktrees.
   script:
-    - 'test -f internal/web/dist/index.html || { echo "The UI is not built. Run make ui and commit internal/web/dist."; exit 1; }'
     - spec/check
     - go vet ./...
     - go test ./...
