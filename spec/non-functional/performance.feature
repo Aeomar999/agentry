@@ -102,7 +102,7 @@ Feature: Performance
     When the read-only profile judges each
     Then each verdict comes within 0.1 second, 3 seconds under the race detector
     And each call is asked
-    # README.md, The policy; internal/domain/policy/default_test.go TestAWordWithManyBracesIsJudgedQuickly; the cap of 256 brace groups is internal/domain/policy/shell.go maxBraces
+    # README.md, The policy; internal/domain/policy/default_test.go TestAWordWithManyBracesIsJudgedQuickly; the cap of 256 brace groups is internal/domain/policy/shell_braces.go maxBraces
 
   @PERF-13 @test
   Scenario: A wait for changes answers as soon as the log moves

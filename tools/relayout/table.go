@@ -94,7 +94,8 @@ var edits = []edit{
 var allowed = map[string]string{
 	"internal/policy/decide.go":                   "comments on how .. is cleaned",
 	"internal/policy/reach.go":                    "comments on how .. is cleaned",
-	"internal/policy/shell.go":                    "comments on .., and splitting a shell range on ..",
+	"internal/policy/shell_braces.go":             "splits a shell range on ..",
+	"internal/policy/shell_dirs.go":               "comments on how .. is cleaned",
 	"internal/policy/policyapi/policyapi_test.go": "reads a shipped policy from its sibling folder, which moves with it",
 	"internal/sharedfiles/folder.go":              "refuses names that escape the folder",
 	"internal/sharedfiles/blobs_test.go":          "tests that a name can't escape the folder",
