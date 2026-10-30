@@ -413,6 +413,7 @@ imports neither `domains/` nor `extensions/`.
 | `brag-output/` | the brag skill's videos, untracked, 15 MB | added to `.gitignore`, since the skill writes there by design (the user's decision) |
 | `packaging/` | a root folder | `tools/packaging` |
 | `docker-stack.dev.yml` | at the root | `deploy/`, beside `entrypoint.sh` (the `Dockerfile` stays at the root, where Docker looks) |
+| `ui/go.mod` | none, so `go ... ./...` reached the Go package that npm's `flatted` ships in `ui/node_modules` | an empty module that fences `ui/` off: Go doesn't descend into a nested module |
 
 ### The built page, no longer committed (step 10)
 
