@@ -66,7 +66,7 @@ var newPath = map[string]string{
 	"internal/domain/connections": "internal/domain/connections",
 	"internal/domain/policy":      "internal/domain/policy",
 	"internal/domain/settings":    "internal/domain/settings",
-	"internal/sharedfiles":        "internal/domain/sharedfiles",
+	"internal/domain/sharedfiles": "internal/domain/sharedfiles",
 
 	"internal/domain/tasks/taskstest":       "internal/domain/tasks/taskstest",
 	"internal/domain/tasks/waitlist":        "internal/domain/tasks/waitlist",

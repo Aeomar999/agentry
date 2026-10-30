@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
-	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 )
 
 // archivedFill is a store filled as fill fills it with task-1 archived,

@@ -4,9 +4,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/pinned"
-	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 )
 
 // Setup is what a worker that joined a server works with: `agentry worker

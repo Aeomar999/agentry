@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
-	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 )
 
 // The schema's tests write the erasure and run the deletes themselves, as

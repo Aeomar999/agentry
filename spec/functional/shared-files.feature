@@ -1,6 +1,6 @@
 Feature: Shared files
   Files that are not in git, shared with a task in .agentry/files, that follow it from machine to machine.
-  # Sources: internal/sharedfiles, internal/domain/tasks/files.go,
+  # Sources: internal/domain/sharedfiles, internal/domain/tasks/files.go,
   # internal/coordinator/files.go, internal/web/shared_api.go,
   # ui/src/components/organisms/SharedFiles.tsx and their tests.
 
@@ -24,8 +24,8 @@ Feature: Shared files
   @FILES-02 @user @manual
   Scenario: The Files tab drops files in, up to 2 GB each, and a story also has its epic's files
     # ui/src/components/organisms/SharedFiles.tsx lines 105 to 147
-    # 2 GB: internal/sharedfiles/blobs.go lines 22 and 25
-    # a story's epic's files, in epic/: internal/sharedfiles/folder.go line 28, internal/coordinator/files.go line 138
+    # 2 GB: internal/domain/sharedfiles/blobs.go lines 22 and 25
+    # a story's epic's files, in epic/: internal/domain/sharedfiles/folder.go line 28, internal/coordinator/files.go line 138
     Given task-5's Files tab is open with no files
     Then "No shared files" is shown with "Drop files here to share them with the task's agents. What they leave in .agentry/files shows here too."
     When the user drops 2 files on the tab
@@ -41,7 +41,7 @@ Feature: Shared files
     Given a task
     When a file is uploaded under a name that leaves the folder, such as one starting with ..
     Then it is refused with status 400
-    # internal/sharedfiles/blobs.go MaxSize: a shared file is at most 2 GB; no test sends one that big
+    # internal/domain/sharedfiles/blobs.go MaxSize: a shared file is at most 2 GB; no test sends one that big
     # internal/web/api_test.go TestYouShareFilesWithATask
 
   # ---- Following the task ----------------------------------------------------
@@ -63,8 +63,8 @@ Feature: Shared files
     When the story's turn starts
     Then the story's .agentry/files/epic holds exactly that file, and the brief says changes there aren't kept
     And a file written under .agentry/files/epic during the turn is not shared when the turn ends
-    # the delivery under epic/: internal/coordinator/files.go filesFor; the folder, left out of what a turn shares: internal/sharedfiles/folder.go EpicFolder, Manifest
-    # the folder left out of the manifest: internal/sharedfiles/sharedfiles_test.go TestFilesGoRoundBetweenWorktrees; the brief's words: internal/coordinator/brief.go sharedText
+    # the delivery under epic/: internal/coordinator/files.go filesFor; the folder, left out of what a turn shares: internal/domain/sharedfiles/folder.go EpicFolder, Manifest
+    # the folder left out of the manifest: internal/domain/sharedfiles/sharedfiles_test.go TestFilesGoRoundBetweenWorktrees; the brief's words: internal/coordinator/brief.go sharedText
     # Steps: drop a file on an epic's Files tab, start one of its stories, and in the story's worktree read
     # .agentry/files/epic/<the file>; write a new file beside it and end the turn; the story's Files tab shows no such
     # file (with no other shared file it says No shared files).
@@ -75,10 +75,10 @@ Feature: Shared files
     When the turn ends and the work moves
     Then the files are sent to the server as blobs by their hash, and the next worktree receives the same files: yes
     # internal/coordinator/loop.go startOn: the last turn's files are read back where it ran before the work moves
-    # internal/sharedfiles/blobs.go MaxSize: a shared file is at most 2 GB
-    # internal/sharedfiles/blobs_test.go: the same bytes make the same blob, so a file kept by 2 tasks is stored 1 time
+    # internal/domain/sharedfiles/blobs.go MaxSize: a shared file is at most 2 GB
+    # internal/domain/sharedfiles/blobs_test.go: the same bytes make the same blob, so a file kept by 2 tasks is stored 1 time
     And a shared file's name may leave .agentry/files: no
-    # internal/sharedfiles/sharedfiles_test.go TestFilesGoRoundBetweenWorktrees, TestNamesStayInsideTheFolder;
+    # internal/domain/sharedfiles/sharedfiles_test.go TestFilesGoRoundBetweenWorktrees, TestNamesStayInsideTheFolder;
     # the turn's files kept by their hash on the server: internal/coordinator/files_test.go TestSharedFilesFollowTheWork
 
   # ---- Fetching a file -------------------------------------------------------
@@ -104,5 +104,5 @@ Feature: Shared files
     When the user has allowed it
     Then the file outside is sent: yes
     # not under test, checked by hand: the user allows it by answering Copy it (internal/coordinator/files.go line 29); files_test checks the question offers it
-    # internal/sharedfiles/sharedfiles_test.go TestFetchAsksOutsideTheBoundary; 0 files before the user allows it:
+    # internal/domain/sharedfiles/sharedfiles_test.go TestFetchAsksOutsideTheBoundary; 0 files before the user allows it:
     # internal/coordinator/files_test.go TestSharedFilesFollowTheWork

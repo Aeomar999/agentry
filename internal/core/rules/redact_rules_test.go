@@ -5,7 +5,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
-	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 )
 
 var redactor = events.Actor{Kind: events.System, ID: "redactor"}

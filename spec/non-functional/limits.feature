@@ -178,7 +178,7 @@ Feature: Limits
     Then the first upload is refused with "a shared file is at most 2 GB"
     And the second file is kept
     And no cap holds on the number of files or their total size
-    # README.md, Use it; the cap is set in internal/sharedfiles/blobs.go
+    # README.md, Use it; the cap is set in internal/domain/sharedfiles/blobs.go
 
   @LIM-21 @test
   Scenario: A task's events page takes a limit of at most 2,000

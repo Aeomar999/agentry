@@ -18,10 +18,10 @@ import (
 
 	"github.com/coder/websocket"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/platform/terminal"
 	"gitlab.com/dev.chempa/agentry/internal/platform/workspace"
 	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
-	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 )
 
 // message is one websocket text message. With an ID and a method it is a

@@ -11,11 +11,11 @@ import (
 
 	"github.com/coder/websocket"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/terminal"
 	"gitlab.com/dev.chempa/agentry/internal/platform/workspace"
 	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
-	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 )
 
 // remote is a connected worker, as the server uses it: a machines.Machine

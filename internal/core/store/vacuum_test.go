@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
-	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 )
 
 // pragma reads one number from the log's file, such as its page_count.

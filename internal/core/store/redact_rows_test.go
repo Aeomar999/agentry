@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
-	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 )
 
 // RedactRows and RedactArchivedRows: Redact and RedactArchived of only the

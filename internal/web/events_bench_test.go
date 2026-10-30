@@ -13,7 +13,7 @@ import (
 	"slices"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
 

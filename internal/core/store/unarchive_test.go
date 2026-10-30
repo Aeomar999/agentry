@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
-	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 )
 
 // The state's side of unarchiving, that the task comes back as a log never
