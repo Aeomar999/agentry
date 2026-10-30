@@ -3,7 +3,7 @@ Feature: Agentry from Claude Code
   # Sources: cmd/agentry/mcp.go, cmd/agentry/claudecode.go, internal/mcp,
   # internal/extensions/ideas/tools.go, internal/domain/tasks/tasksapi/tools.go,
   # internal/domain/tasks/tasksapi/tools_approvals.go, internal/domain/connections,
-  # internal/domain/connections/connectionsapi, internal/web/integrations_api.go,
+  # internal/domain/connections/connectionsapi, internal/web/server.go,
   # internal/domain/sharedfiles/sharedfilesapi/tools.go, internal/platform/client/client.go and their tests.
 
   # ---- Installing the integration --------------------------------------------
@@ -59,7 +59,8 @@ Feature: Agentry from Claude Code
     And the script fetched with the used code is refused with status 401
     And a request to the API with the credential is answered with status 200
     And the Integrations page lists 1 connection, naming the machine, without the credential itself
-    # internal/domain/connections/connectionsapi/connectionsapi_test.go TestClaudeCodeConnectsFromTheIntegrationsPage
+    # internal/domain/connections/connectionsapi/connectionsapi_test.go TestClaudeCodeConnectsFromTheIntegrationsPage;
+    # a used, wrong or expired code at every route: internal/domain/connections/connectionsapi/connectionsapi_test.go TestTheConnectRoutesRefuseACodeThatDoesNotWork
 
   @TOOLS-05 @claude-code @test
   Scenario: Revoke stops a connected machine at once
