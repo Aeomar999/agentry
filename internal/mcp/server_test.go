@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -220,38 +219,6 @@ func TestTheBoardAndHandingOverWork(t *testing.T) {
 	}
 }
 
-// A held action was refused long ago: the user hears that, when it was held
-// (with the zone), and what approving it does now.
-func TestAHeldApprovalSaysWhenItWasHeld(t *testing.T) {
-	heldAt := time.Date(2026, 10, 19, 2, 30, 0, 0, time.UTC)
-	agentry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method + " " + r.URL.Path {
-		case "GET /api/questions":
-			fmt.Fprintf(w, `[{"kind":"approval","task":"task-1","taskTitle":"Fix the login","agent":"deployer","text":"git push origin dev",
-				"action":"push-1","tool":"Bash","reason":"pushing asks you","held":true,"heldAt":%q}]`, heldAt.Format(time.RFC3339))
-		case "GET /api/tasks":
-			io.WriteString(w, `[]`)
-		default:
-			io.WriteString(w, `{}`)
-		}
-	}))
-	t.Cleanup(agentry.Close)
-	var asked string
-	c := startOn(t, client.Client{Where: client.Where{URL: agentry.URL}}, true, func(method string, params json.RawMessage) any {
-		var p struct{ Message string }
-		json.Unmarshal(params, &p)
-		asked = p.Message
-		return map[string]any{"action": "decline"}
-	})
-	c.tool("review_approvals", map[string]any{})
-	for _, want := range []string{"Bash: git push origin dev", "it was held at " + heldAt.Local().Format("Mon 2 Jan 15:04 MST") + ",", "deployer was told no",
-		"deployer may run this exact command once, in its next turn"} {
-		if !strings.Contains(asked, want) {
-			t.Errorf("the question should say %q:\n%s", want, asked)
-		}
-	}
-}
-
 func TestApprovalsAreAskedOfTheUser(t *testing.T) {
 	var asked []string
 	c, calls := start(t, true, func(method string, params json.RawMessage) any {
@@ -326,61 +293,12 @@ func TestYouCloseAnEpicYouLeftOpen(t *testing.T) {
 	}
 }
 
-// show_task, list_tasks and status say what a task has used of its budget
-// and its turns, with no limit too, and none used yet.
-func TestTheTaskSaysItsLimits(t *testing.T) {
-	for _, c := range []struct {
-		task task
-		want string
-	}{
-		{task{Budget: 5_000_000, TokensUsed: 1_200_000, MaxTurns: 24, Turns: 30, TurnsSinceAnswer: 18}, "1.2M of 5M tokens · 18 of 24 turns"},
-		{task{TokensUsed: 950, Turns: 14, TurnsSinceAnswer: 3}, "950 tokens (no limit) · 14 turns (no limit)"},
-		{task{}, "0 tokens (no limit) · 0 turns (no limit)"},
-	} {
-		if got := usageOf(c.task); got != c.want {
-			t.Errorf("%+v: %q, want %q", c.task, got, c.want)
-		}
-	}
-}
-
 // show_task says on how many turns the tokens couldn't be counted, and why,
 // as the server words it.
 func TestTheTaskSaysWhereItsTokensAreUnknown(t *testing.T) {
 	c, _ := start(t, false, nil)
 	if text := c.tool("show_task", map[string]any{"task": "task-3"}); !strings.Contains(text, "\nTokens unknown on 2 turns: transcript not saved\n") {
 		t.Errorf("show_task should say where the tokens are unknown:\n%s", text)
-	}
-}
-
-// show_task says a done task whose work an agent pushed is shipped, and
-// that the user moved it to Done when they did.
-func TestTheTaskSaysItShipped(t *testing.T) {
-	c, _ := start(t, false, nil)
-	text := c.tool("show_task", map[string]any{"task": "task-5"})
-	if !strings.Contains(text, "\nStatus: shipped · on the board: Done ·") || !strings.Contains(text, "\nMoved to Done by you.\n") {
-		t.Errorf("show_task should say it shipped and who moved it:\n%s", text)
-	}
-	for _, c := range []struct {
-		task task
-		want string
-	}{
-		{task{Status: "done", Pushed: true}, "shipped"},
-		{task{Status: "done"}, "done"},
-		{task{Status: "working", Pushed: true}, "working"},
-	} {
-		if got := statusOf(c.task); got != c.want {
-			t.Errorf("%+v: %q, want %q", c.task, got, c.want)
-		}
-	}
-}
-
-// show_task says where the task is on the board, as the board names it.
-func TestTheTaskSaysItsColumn(t *testing.T) {
-	if got := columnOf(task{Column: "shipping"}); got != "on the board: Shipping" {
-		t.Errorf("shipping: %q", got)
-	}
-	if got := columnOf(task{Column: "in-progress"}); got != "on the board: In progress" {
-		t.Errorf("in progress: %q", got)
 	}
 }
 

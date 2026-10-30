@@ -24,6 +24,13 @@ import (
 // "offline" (a machine), or an extension's own.
 type Waiting = extensions.Waiting
 
+// task is the part of a task on the board the news reads; it mirrors
+// internal/domain/tasks/tasksapi/tools.go's task.
+type task struct {
+	ID, Title, Status, Kind string
+	Told                    *struct{ At, From, Text string }
+}
+
 // WaitingFor is what GET /api/waiting lists for a session in repo ("" when
 // not known): the core's entries oldest first, then each extension's.
 func WaitingFor(agentry client.Client, repo string) ([]Waiting, error) {
@@ -106,7 +113,7 @@ func WaitForNew(ctx context.Context, agentry client.Client, seen map[string]bool
 
 // withSummary adds a finished task's summary to its line.
 func withSummary(agentry client.Client, w Waiting) Waiting {
-	var t detail
+	var t struct{ Summary string }
 	if w.Kind == "done" && agentry.Call("GET", "/api/tasks/"+w.Task, nil, &t) == nil && t.Summary != "" {
 		w.Line += ". " + tasks.OneLine(t.Summary, 300)
 	}
@@ -120,4 +127,50 @@ func Seen(waiting []Waiting) map[string]bool {
 		seen[w.Key] = true
 	}
 	return seen
+}
+
+// waitingNote is what waits for you anywhere, for the end of every reply.
+func (s *Server) waitingNote() string {
+	waiting, err := WaitingFor(s.agentry, s.repo)
+	if err != nil {
+		return ""
+	}
+	var notes []string
+	for _, w := range waiting {
+		notes = append(notes, w.Line)
+	}
+	if len(notes) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\n\nWaiting for the user (%d):", len(notes))
+	for _, note := range notes[:min(5, len(notes))] {
+		b.WriteString("\n- " + note)
+	}
+	return b.String()
+}
+
+// shown is the task's id as you read it: epic-N for an epic. It mirrors
+// internal/domain/tasks/tasksapi/tools.go's.
+func (t task) shown() string { return tasks.ShownID(t.ID, tasks.Kind(t.Kind)) }
+
+// shownIDs gives each task's id as you read it, by its kind on the board
+// all; an id not on it stays as it is. It mirrors
+// internal/domain/tasks/tasksapi/tools.go's.
+func shownIDs(all []task) func(id string) string {
+	kinds := map[string]tasks.Kind{}
+	for _, t := range all {
+		kinds[t.ID] = tasks.Kind(t.Kind)
+	}
+	return func(id string) string { return tasks.ShownID(id, kinds[id]) }
+}
+
+// idsAs are the ids, each as id gives it. It mirrors
+// internal/domain/tasks/tasksapi/tools.go's.
+func idsAs(ids []string, id func(string) string) []string {
+	var out []string
+	for _, each := range ids {
+		out = append(out, id(each))
+	}
+	return out
 }

@@ -1,10 +1,13 @@
-// Package tasksapi is the tasks' HTTP API: the tasks and each one's
-// detail and events, an archived task's read back from its blob, your
-// answers and approvals, your moves on the board, erasing a task for
-// good, what waits for you in Questions, your chat with a
-// task's coordinator, a task's Workspace, and the task's settings you
+// Package tasksapi is the tasks' API over HTTP and MCP: the tasks and each
+// one's detail and events, an archived task's read back from its blob,
+// your answers and approvals, your moves on the board, erasing a task for
+// good, what waits for you in Questions, your chat with a task's
+// coordinator, a task's Workspace, and the task's settings you
 // change on its page: its epic, labels, rank, budget, limit of turns and
-// repo. Web mounts its Routes as it mounts an extension's.
+// repo. Its Client's Tools do the same from Claude Code: the board, a
+// task, handing over work, answers, approvals and closing an epic. Web
+// mounts its Routes and agentry mcp lists its Client's Tools as they do an
+// extension's.
 package tasksapi
 
 import (
