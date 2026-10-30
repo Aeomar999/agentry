@@ -1,6 +1,6 @@
 Feature: Ideas
   The Visionaries suggest features as ideas; the user accepts or dismisses each one.
-  # Sources: internal/extensions/ideas, internal/domain/settings, internal/web/settings_api.go,
+  # Sources: internal/extensions/ideas, internal/domain/settings, internal/domain/settings/settingsapi/settingsapi.go,
   # ui/src/extensions/ideas and their tests.
 
   # ---- The Ideas page --------------------------------------------------------
@@ -187,7 +187,7 @@ Feature: Ideas
 
   @IDEA-13 @user @test
   Scenario: Auto-accept is off until you turn it on, and starting them counts only with it
-    # internal/web/settings_api_test.go TestYouTurnAutoAcceptingIdeasOnAndOff and TestYouChooseTheAutoAcceptRule
+    # internal/domain/settings/settingsapi/settingsapi_test.go TestYouTurnAutoAcceptingIdeasOnAndOff and TestYouChooseTheAutoAcceptRule
     # internal/extensions/ideas/agreed_test.go TestAgentryAcceptsOnlyWhatTheSettingAndTheVisionariesAllow and TestAgentryStartsOnlyWhileTheSettingsSay
     # the defaults: internal/domain/settings/settings.go line 46
     Given settings never changed

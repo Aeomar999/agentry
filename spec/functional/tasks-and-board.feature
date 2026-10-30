@@ -4,7 +4,7 @@ Feature: Tasks and the board
   # Sources: internal/domain/tasks, internal/runtime/archive, internal/domain/settings,
   # internal/runtime/coordinator/slots.go, internal/web/api.go, internal/web/board_api.go,
   # internal/web/erase_api.go, internal/web/archives.go,
-  # internal/web/settings_api.go, ui/src/pages/TasksPage.tsx,
+  # internal/domain/settings/settingsapi/settingsapi.go, ui/src/pages/TasksPage.tsx,
   # ui/src/pages/TaskPage.tsx, ui/src/components/organisms/TaskBoard.tsx,
   # ui/src/components/organisms/NewTaskForm.tsx,
   # ui/src/components/organisms/LimitEditor.tsx, ui/src/lib/limits.ts and their
@@ -319,7 +319,7 @@ Feature: Tasks and the board
 
   @TASK-28 @user @test
   Scenario: Most running at once is set on the Tasks page
-    # internal/web/settings_api_test.go TestYouSetTheMostTasksRunningAtOnce
+    # internal/domain/settings/settingsapi/settingsapi_test.go TestYouSetTheMostTasksRunningAtOnce
     # from 1 to 100, 0 for no limit: internal/domain/settings/settings.go line 33, MostRunningTasks
     # presets 1, 2, 3, 4, 5, 8, 10: ui/src/lib/limits.ts line 87
     Given the Tasks page with no limit set

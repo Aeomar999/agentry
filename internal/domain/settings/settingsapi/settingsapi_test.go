@@ -1,13 +1,49 @@
-package web
+package settingsapi_test
 
 import (
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
+	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
+	"gitlab.com/dev.chempa/agentry/internal/web"
 )
 
+// The settings' routes, tested over HTTP through the server serve runs, as
+// web mounts them: that is where their token check is.
+
+const token = "ui-secret"
+
+func newTestServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	server := httptest.NewServer(web.NewServer(s, state, web.Config{UIToken: token}, http.NotFoundHandler(), nil).Handler())
+	t.Cleanup(server.Close)
+	return server
+}
+
+func call(t *testing.T, server *httptest.Server, method, path, body string) (int, string) {
+	t.Helper()
+	request, _ := http.NewRequest(method, server.URL+path, strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	content, _ := io.ReadAll(response.Body)
+	return response.StatusCode, string(content)
+}
+
 func TestYouTurnTheVisionariesAfterAnEpicOffAndOn(t *testing.T) {
-	server, _ := newTestServer(t)
+	server := newTestServer(t)
 	if code, body := call(t, server, "GET", "/api/settings", ""); code != 200 || body != `{"visionariesOnEpicClose":true,"autoAcceptIdeas":false,"autoStartIdeas":false,"autoAcceptRule":"everyoneBacked","maxRunningTasks":0,"runningTasks":0}`+"\n" {
 		t.Errorf("never changed, it is on: %d %s", code, body)
 	}
@@ -28,7 +64,7 @@ func TestYouTurnTheVisionariesAfterAnEpicOffAndOn(t *testing.T) {
 // A request that changes nothing it can read is refused, and the setting
 // stays as it was; without the UI token nothing changes either.
 func TestABadSettingsChangeLeavesTheSettingAlone(t *testing.T) {
-	server, _ := newTestServer(t)
+	server := newTestServer(t)
 	call(t, server, "PUT", "/api/settings", `{"visionariesOnEpicClose":false}`)
 	for _, body := range []string{`{"visionariesOnEpicClose":null}`, `{"visionariesOnEpicClose":"yes"}`, `{"another":true}`, `{bad`, ``} {
 		if code, answer := call(t, server, "PUT", "/api/settings", body); code != 400 {
@@ -50,7 +86,7 @@ func TestABadSettingsChangeLeavesTheSettingAlone(t *testing.T) {
 }
 
 func TestYouTurnAutoAcceptingIdeasOnAndOff(t *testing.T) {
-	server, _ := newTestServer(t)
+	server := newTestServer(t)
 	off := `{"visionariesOnEpicClose":true,"autoAcceptIdeas":false,"autoStartIdeas":false,"autoAcceptRule":"everyoneBacked","maxRunningTasks":0,"runningTasks":0}` + "\n"
 	if _, body := call(t, server, "GET", "/api/settings", ""); body != off {
 		t.Errorf("never changed, both are off: %s", body)
@@ -71,7 +107,7 @@ func TestYouTurnAutoAcceptingIdeasOnAndOff(t *testing.T) {
 // You choose which ideas Agentry may accept for you; a rule it doesn't
 // know is refused, naming the ones it does, and the rule stays.
 func TestYouChooseTheAutoAcceptRule(t *testing.T) {
-	server, _ := newTestServer(t)
+	server := newTestServer(t)
 	loose := `{"visionariesOnEpicClose":true,"autoAcceptIdeas":false,"autoStartIdeas":false,"autoAcceptRule":"nobodyDoubted","maxRunningTasks":0,"runningTasks":0}` + "\n"
 	if code, body := call(t, server, "PUT", "/api/settings", `{"autoAcceptRule":"nobodyDoubted"}`); code != 200 || body != loose {
 		t.Errorf("loosened: %d %s", code, body)
@@ -90,7 +126,7 @@ func TestYouChooseTheAutoAcceptRule(t *testing.T) {
 // You set the most tasks running at once, or 0 for no limit; a limit out of
 // range, or not a whole number, is refused and the one before stays.
 func TestYouSetTheMostTasksRunningAtOnce(t *testing.T) {
-	server, _ := newTestServer(t)
+	server := newTestServer(t)
 	two := `{"visionariesOnEpicClose":true,"autoAcceptIdeas":false,"autoStartIdeas":false,"autoAcceptRule":"everyoneBacked","maxRunningTasks":2,"runningTasks":0}` + "\n"
 	if code, body := call(t, server, "PUT", "/api/settings", `{"maxRunningTasks":2}`); code != 200 || body != two {
 		t.Errorf("set to 2: %d %s", code, body)

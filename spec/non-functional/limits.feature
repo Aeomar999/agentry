@@ -81,7 +81,7 @@ Feature: Limits
     Given the setting maxRunningTasks, 0 by default, which is no limit
     When the user sets it to 2 and then to 100
     Then the settings answer with maxRunningTasks 2, then 100, the highest allowed
-    # README.md, Use it; internal/web/settings_api_test.go TestYouSetTheMostTasksRunningAtOnce; the default: TestYouTurnTheVisionariesAfterAnEpicOffAndOn
+    # README.md, Use it; internal/domain/settings/settingsapi/settingsapi_test.go TestYouSetTheMostTasksRunningAtOnce; the default: TestYouTurnTheVisionariesAfterAnEpicOffAndOn
 
   @LIM-10 @test
   Scenario: A most-tasks setting out of range is refused
@@ -89,7 +89,7 @@ Feature: Limits
     When the user sets it to -1, 101, 1.5, "3", true or null
     Then each is refused with HTTP 400
     And the setting stays 2
-    # README.md, Use it; internal/web/settings_api_test.go TestYouSetTheMostTasksRunningAtOnce
+    # README.md, Use it; internal/domain/settings/settingsapi/settingsapi_test.go TestYouSetTheMostTasksRunningAtOnce
 
   @LIM-11 @test
   Scenario: Tasks over the limit wait in the user's priority order

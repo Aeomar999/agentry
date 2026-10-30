@@ -533,7 +533,7 @@ Feature: Security
     Then the job gets the secret's value exactly as written
     And the secret is not in the server's output
     And the secret is not in agentry.db, its WAL or the snapshot
-    # not under test, checked by hand: the page and the API never show it; no route serves features.toml, GET /api/settings shows Agentry's own settings (internal/web/settings_api.go line 27)
+    # not under test, checked by hand: the page and the API never show it; no route serves features.toml, GET /api/settings shows Agentry's own settings (internal/domain/settings/settingsapi/settingsapi.go line 56)
     And no agent may read features.toml, whatever the policy says
     # README.md, Features' settings and secrets; cmd/agentry/jobs_test.go TestASecretReachesTheJobAndNeitherLog, TestTheSettingsFileIsProtected (under the shipped policy, whose use_for_everyone is allow-everything)
 

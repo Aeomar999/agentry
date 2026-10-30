@@ -21,14 +21,22 @@ func (s *Server) listFeatures(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// mount puts f's routes on mux, each behind the wrapper its Auth names.
-func (s *Server) mount(f extensions.Extension, mux *http.ServeMux) {
+// routesOf are f's routes, made with the Core it may use; none when it has none.
+func (s *Server) routesOf(f extensions.Extension) []extensions.Route {
 	if f.Routes == nil {
-		return
+		return nil
 	}
-	for _, route := range f.Routes(s.coreOf(f)) {
+	return f.Routes(s.coreOf(f))
+}
+
+// mount puts routes on mux, each behind the wrapper its Auth names. owner
+// says whose they are, "the ideas extension" or "the settings domain", for
+// the panic when one clashes. Every extension's and domain's routes are
+// mounted here, so they all sit behind a wrapper the same way.
+func (s *Server) mount(owner string, routes []extensions.Route, mux *http.ServeMux) {
+	for _, route := range routes {
 		wrap := s.wrapperOf(route.Auth)
-		mountRoute(f.Name, route, func(pattern string, handler http.HandlerFunc) { mux.Handle(pattern, wrap(handler)) })
+		mountRoute(owner, route, func(pattern string, handler http.HandlerFunc) { mux.Handle(pattern, wrap(handler)) })
 	}
 }
 
@@ -45,13 +53,13 @@ func (s *Server) wrapperOf(auth extensions.Auth) func(http.HandlerFunc) http.Han
 	return s.requireUI
 }
 
-// mountRoute registers one of extension's routes. A pattern that clashes with
-// a route there already panics, as ServeMux does, but naming the extension
+// mountRoute registers one of owner's routes. A pattern that clashes with
+// a route there already panics, as ServeMux does, but naming the owner
 // and its pattern, which ServeMux's message doesn't.
-func mountRoute(extension string, route extensions.Route, register func(pattern string, handler http.HandlerFunc)) {
+func mountRoute(owner string, route extensions.Route, register func(pattern string, handler http.HandlerFunc)) {
 	defer func() {
 		if clash := recover(); clash != nil {
-			panic(fmt.Sprintf("the %s extension's route %q can't be mounted: %v", extension, route.Pattern, clash))
+			panic(fmt.Sprintf("%s's route %q can't be mounted: %v", owner, route.Pattern, clash))
 		}
 	}()
 	register(route.Pattern, route.Handler)

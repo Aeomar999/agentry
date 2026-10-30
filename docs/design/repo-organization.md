@@ -179,6 +179,30 @@ two. A domain's api package takes the dependencies it needs (the store, the
 fleet, the loop) in its own struct; an extension gets only `extensions.Core`,
 because an extension never holds the store.
 
+`domain/settings/settingsapi` was the first to move (step 12), and the others
+copy it:
+
+- **The struct** holds only what its handlers use, as the narrowest types
+  that work: `settingsapi.API{Log, State}`, an `extensions.Proposer` (what
+  `httpapi.ProposeOrRefuse` takes; web passes the store) and a small `State`
+  interface of the reads it makes (web passes the read model). It has
+  `Routes() []extensions.Route`, each route with its `Auth`, as an
+  extension's has. It has `Tools() []extensions.Tool` only when the domain
+  has tools; `mcp` appends those as it appends an extension's.
+- **Web mounts it** in `Handler`, through the one `mount(owner, routes, mux)`
+  that mounts every extension's routes too, so each sits behind the wrapper
+  its `Auth` names. Domains are mounted before the extensions, so an
+  extension's route that clashes with one is still the one that fails, by
+  name. The `api(...)` lines and the handler file leave `web`; a helper
+  `web` uses elsewhere stays there.
+- **Tests move with their handlers**, names unchanged, into the api
+  package's own `_test` package. They call the routes through
+  `web.NewServer`, as the extensions' route tests do, so the token check
+  is tested with them.
+- **The spec follows**: `@test` citations' paths and any line numbers in
+  them, the `# Sources:` lines that named the old file, and the api package
+  in one feature file's Sources.
+
 What stays in `web` after that: sign-in and tokens (`signin.go`), the
 embedded page and install scripts (`page.go`, `scripts.go`), addresses,
 and the few routes that span every domain: `/api/events`, `/api/waiting`,

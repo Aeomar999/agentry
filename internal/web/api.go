@@ -55,6 +55,12 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 	httpapi.Reply(w, summaries)
 }
 
+// slots are how many tasks run now and which wait for a slot, as the loop
+// holds them back.
+func (s *Server) slots() coordinator.Slots {
+	return coordinator.SlotsOf(s.state.Tasks(), s.state.Roster(), s.state.Settings().MaxRunningTasks)
+}
+
 // changeRepo moves a task's work to another repo: when the turn in progress
 // ends, or at once between turns. A finished task gets its worktree of the
 // new repo here and now, its whole history counted as the task's work, so

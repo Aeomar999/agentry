@@ -1,4 +1,7 @@
-package web
+// Package settingsapi is the settings' HTTP API: GET and PUT /api/settings,
+// as the Settings page reads and changes them. Web mounts its Routes as it
+// mounts an extension's.
+package settingsapi
 
 import (
 	"net/http"
@@ -8,9 +11,35 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/settings"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/runtime/coordinator"
 )
+
+// State is what the routes read: the settings, and the tasks and roster
+// that say how many tasks are running.
+type State interface {
+	Settings() settings.Settings
+	Tasks() []*tasks.Task
+	Roster() agents.Roster
+}
+
+// API holds what the settings' routes need: the log to write their changes
+// to, and the state to read them back from.
+type API struct {
+	Log   extensions.Proposer
+	State State
+}
+
+// Routes are the settings' endpoints, for the page and Claude Code.
+func (a API) Routes() []extensions.Route {
+	return []extensions.Route{
+		{Pattern: "GET /api/settings", Auth: extensions.UI, Handler: a.showSettings},
+		{Pattern: "PUT /api/settings", Auth: extensions.UI, Handler: a.changeSettings},
+	}
+}
 
 // settingsView is your settings as the page shows and changes them.
 type settingsView struct {
@@ -22,17 +51,17 @@ type settingsView struct {
 	RunningTasks           int    `json:"runningTasks"`           // how many have one now: read only, for "Queued: 3 of 3 running"
 }
 
-func (s *Server) showSettings(w http.ResponseWriter, r *http.Request) {
-	now := s.state.Settings()
+func (a API) showSettings(w http.ResponseWriter, r *http.Request) {
+	now := a.State.Settings()
 	httpapi.Reply(w, settingsView{VisionariesOnEpicClose: now.VisionariesOnEpicClose, AutoAcceptIdeas: now.AutoAcceptIdeas,
 		AutoStartIdeas: now.AutoStartIdeas, AutoAcceptRule: now.AutoAcceptRule, MaxRunningTasks: now.MaxRunningTasks,
-		RunningTasks: s.slots().Running})
+		RunningTasks: coordinator.SlotsOf(a.State.Tasks(), a.State.Roster(), now.MaxRunningTasks).Running})
 }
 
 // changeSettings changes the settings the request names, 400 when it names
 // none, a rule Agentry doesn't know or a limit of tasks out of range, and
 // answers with all of them as they are now.
-func (s *Server) changeSettings(w http.ResponseWriter, r *http.Request) {
+func (a API) changeSettings(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		VisionariesOnEpicClose, AutoAcceptIdeas, AutoStartIdeas *bool
 		AutoAcceptRule                                          *string
@@ -66,14 +95,8 @@ func (s *Server) changeSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "say which setting to change: visionariesOnEpicClose, autoAcceptIdeas, autoStartIdeas, autoAcceptRule or maxRunningTasks", http.StatusBadRequest)
 		return
 	}
-	if !httpapi.ProposeOrRefuse(w, s.store, events.Proposal{Stream: events.SettingsStream, Actor: httpapi.You, Type: events.SettingsChanged, Data: changes}) {
+	if !httpapi.ProposeOrRefuse(w, a.Log, events.Proposal{Stream: events.SettingsStream, Actor: httpapi.You, Type: events.SettingsChanged, Data: changes}) {
 		return
 	}
-	s.showSettings(w, r)
-}
-
-// slots are how many tasks run now and which wait for a slot, as the loop
-// holds them back.
-func (s *Server) slots() coordinator.Slots {
-	return coordinator.SlotsOf(s.state.Tasks(), s.state.Roster(), s.state.Settings().MaxRunningTasks)
+	a.showSettings(w, r)
 }

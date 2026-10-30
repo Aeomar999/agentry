@@ -432,7 +432,7 @@ export interface PushStatus {
   subscribed: number; // how many browsers are subscribed
 }
 
-// Your settings for how Agentry works (internal/web/settings_api.go).
+// Your settings for how Agentry works (internal/domain/settings/settingsapi/settingsapi.go).
 export interface Settings {
   visionariesOnEpicClose: boolean; // a Visionaries session starts after you close an epic
   autoAcceptIdeas: boolean; // Agentry accepts an idea the Visionaries agreed on, by autoAcceptRule, as you would

@@ -18,6 +18,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/notifications/webpush"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/hooks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/settings/settingsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
@@ -144,8 +145,6 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/redact/preview", s.previewLogRedaction)
 	api("POST /api/redact", s.redactLog) // never the desk's: nothing undoes it
 	api("GET /api/config", s.showConfig)
-	api("GET /api/settings", s.showSettings)
-	api("PUT /api/settings", s.changeSettings)
 	api("GET /api/policy", s.showPolicy)
 	api("GET /api/policy/history", s.policyHistory)
 	api("GET /api/policy/history/{position}", s.policyVersion)
@@ -206,10 +205,11 @@ func (s *Server) Handler() http.Handler {
 	if s.config.Desk != nil {
 		mux.Handle("GET /api/desk/terminal", s.requireUI(s.config.Desk.ServeHTTP))
 	}
-	// Last, so an extension's route that clashes with any core route is
-	// the one that fails, naming its extension.
+	s.mount("the settings domain", settingsapi.API{Log: s.store, State: s.state}.Routes(), mux)
+	// Last, so an extension's route that clashes with any core or domain
+	// route is the one that fails, naming its extension.
 	for _, f := range s.config.Extensions {
-		s.mount(f, mux)
+		s.mount("the "+f.Name+" extension", s.routesOf(f), mux)
 	}
 	return s.atPosition(mux)
 }
