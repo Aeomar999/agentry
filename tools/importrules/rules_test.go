@@ -96,6 +96,7 @@ var newPath = map[string]string{
 	"internal/speccheck": "tools/speccheck",
 	"packaging":          "tools/packaging",
 	"tools/importrules":  "tools/importrules",
+	"tools/relayout":     "tools/relayout",
 	"cmd/agentry":        "cmd/agentry",
 }
 
