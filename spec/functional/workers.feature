@@ -2,7 +2,7 @@ Feature: Workers
   A machine joined to Agentry so that agents can run on it.
   # Sources: cmd/agentry/worker.go, cmd/agentry/worker_manage.go,
   # internal/domain/workers, internal/domain/workers/workerlink, internal/domain/workers/workerservice,
-  # internal/runtime/machines, internal/runtime/turns, internal/platform/pinned, internal/web/workers_api.go, internal/web/binary.go, internal/domain/workers/workersapi
+  # internal/runtime/machines, internal/runtime/turns, internal/platform/pinned, internal/web/binary.go, internal/domain/workers/workersapi
   # and their tests.
 
   # ---- Joining ---------------------------------------------------------------
@@ -33,10 +33,9 @@ Feature: Workers
     Given an install command whose code has not been used
     When the machine sends the code with what it knows about itself
     Then it gets a credential, and its name is its host's name before the first dot, in lowercase: yes
-    # not under test, checked by hand: other characters become dashes (internal/web/workers_api.go line 52 workerName)
-    # internal/web/workers_api.go workerName: at most 28 characters, starting with a letter; freeName adds -2, -3 and so on to a name taken
+    # internal/domain/workers/workersapi/join.go workerName: other characters become dashes, at most 28 characters, starting with a letter; freeName adds -2, -3 and so on to a name taken: internal/domain/workers/workersapi/join_test.go TestAJoiningMachineIsNamedAfterWhatItAskedFor
     And the same code sent again is refused, saying the code is unknown, used or expired: yes
-    # not under test, checked by hand: the refusal's status is 401 (internal/web/workers_api.go line 36)
+    # the refusal's status is 401: internal/domain/workers/workersapi/join_test.go TestTheJoinRoutesRefuseACodeThatDoesNotWork
     And the Workers page lists the worker, online once it connects: yes
     # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
@@ -112,7 +111,7 @@ Feature: Workers
     Given a machine that reaches the server
     When the user runs the install command there
     Then agentry is downloaded with the code for the machine's system, 1 program, and made executable
-    # internal/web/install.sh: AGENTRY_BIN or ~/.local/bin; internal/web/install.ps1: AGENTRY_BIN or %LOCALAPPDATA%\Agentry\bin
+    # internal/domain/workers/workersapi/install.sh: AGENTRY_BIN or ~/.local/bin; internal/domain/workers/workersapi/install.ps1: AGENTRY_BIN or %LOCALAPPDATA%\Agentry\bin
     And it is put in the user's bin folder and added to the PATH of new shells: yes
     And a note names each of git and claude that is missing, up to 2 notes
     And the machine joins with the code, 1 join, then the worker is started in the background

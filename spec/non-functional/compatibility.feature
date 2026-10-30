@@ -77,7 +77,7 @@ Feature: Compatibility
     Then the last 2 requests the sh command sends carrying the code are the script at /worker/install.sh, then the agentry download
     And the 2 requests the PowerShell command sends carrying the code are the script at /worker/install.ps1, then the build for windows
     And with another CA's fingerprint in the command, 0 requests carrying the code are sent by either
-    # not under test, checked by hand: the scripts ask for the machine's own os and arch (internal/web/install.sh line 35, internal/web/install.ps1 line 42); the PowerShell test skips where pwsh or curl.exe is missing; so CI, in the golang image, never runs it
+    # not under test, checked by hand: the scripts ask for the machine's own os and arch (internal/domain/workers/workersapi/install.sh line 35, internal/domain/workers/workersapi/install.ps1 line 42); the PowerShell test skips where pwsh or curl.exe is missing; so CI, in the golang image, never runs it
     # README.md, Add machines; internal/web/install_https_test.go TestThePinnedInstallCommandsRunInSh and TestThePinnedInstallCommandRunsInPowerShell
 
   @COMPAT-07 @manual
@@ -88,7 +88,7 @@ Feature: Compatibility
     And on macOS and Linux agentry is installed in ~/.local/bin, or AGENTRY_BIN, and that folder is added to the PATH in .zshrc, .bash_profile on a Mac, .bashrc or .profile, once
     And on Windows agentry.exe is installed in %LOCALAPPDATA%\Agentry\bin, or AGENTRY_BIN, and that folder is added to the user's Path once; an agentry.exe already there is moved to agentry.exe.old first, since Windows does not replace a program that runs
     And on every system the script notes git and claude when they are not found, joins with the code, and starts the worker
-    # README.md, Add machines; internal/web/install.sh lines 16, 43-68; internal/web/install.ps1 lines 17, 50-74; ui/src/components/molecules/InstallCommand.tsx lines 16, 26-29, 48-49; no test
+    # README.md, Add machines; internal/domain/workers/workersapi/install.sh lines 16, 43-68; internal/domain/workers/workersapi/install.ps1 lines 17, 50-74; ui/src/components/molecules/InstallCommand.tsx lines 16, 26-29, 48-49; no test
 
   @COMPAT-08 @test
   Scenario: A machine of the server's own kind gets the server's own binary
@@ -96,7 +96,7 @@ Feature: Compatibility
     When the install script asks for /worker/agentry with a working code and the server's own os and arch
     Then the answer is 200 with the server's own binary
     And with an unknown code the install script itself is refused with 401
-    # not under test, checked by hand: a used or expired code is refused alike, and the build too needs a code that works (internal/web/workers_api.go lines 84 and 94)
+    # a used or expired code is refused alike, and the build too needs a code that works: internal/domain/workers/workersapi/join_test.go TestTheJoinRoutesRefuseACodeThatDoesNotWork
     # README.md, Add machines; internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @COMPAT-09 @manual
@@ -106,7 +106,7 @@ Feature: Compatibility
     Then the first gets agentry-<os>-<arch> from beside the server's binary, 200
     And the second gets 404, "this server has no agentry for <os>/<arch>", and the script stops with exit 1 saying so, with nothing installed
     And os and arch are taken only as lower-case letters and digits; anything else gets the same 404
-    # README.md, What Start Agentry does (The other programs in the folder); internal/web/binary.go lines 17-58; internal/web/install.sh lines 35-39; internal/web/install.ps1 lines 42-47; no test
+    # README.md, What Start Agentry does (The other programs in the folder); internal/web/binary.go lines 17-58; internal/domain/workers/workersapi/install.sh lines 35-39; internal/domain/workers/workersapi/install.ps1 lines 42-47; no test
 
   @COMPAT-10 @manual
   Scenario: The worker is kept running the way its system does
@@ -281,4 +281,4 @@ Feature: Compatibility
     When agentry worker update runs, or the install command is run again
     Then the server's build for windows and the machine's arch is downloaded whole, checked against its SHA-256 ETag, and refused with "the new agentry didn't arrive whole" when the bytes do not match
     And since Windows does not replace a program that runs, the old agentry.exe is renamed agentry.exe.old first and removed at the next update; on macOS and Linux the new file is renamed over the old one in 1 step
-    # README.md, Add machines (run again, it updates it); internal/domain/workers/workerlink/update.go lines 57, 85-93, 104-120; internal/web/install.ps1 lines 48-55; no test of the Windows branch
+    # README.md, Add machines (run again, it updates it); internal/domain/workers/workerlink/update.go lines 57, 85-93, 104-120; internal/domain/workers/workersapi/install.ps1 lines 48-55; no test of the Windows branch

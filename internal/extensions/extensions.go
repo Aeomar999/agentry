@@ -180,12 +180,13 @@ type Route struct {
 	Handler http.HandlerFunc
 }
 
-// Auth says who may call a Route: UI, Desk, Worker or Signed(verify). The
-// zero Auth is UI. It holds a func, so it can't be compared: ask DeskToo,
-// ForWorkers and Verify.
+// Auth says who may call a Route: UI, Desk, Worker, Open or Signed(verify).
+// The zero Auth is UI. It holds a func, so it can't be compared: ask
+// DeskToo, ForWorkers, IsOpen and Verify.
 type Auth struct {
 	deskToo bool
 	worker  bool
+	open    bool
 	verify  func(r *http.Request, body []byte) error
 }
 
@@ -196,6 +197,10 @@ var (
 	// handler reads which worker with WorkerOf. Only a domain's route may
 	// take it; web refuses it from an extension.
 	Worker = Auth{worker: true}
+	// Open is anyone, with no token: the handler checks the one-time code
+	// the request carries itself. Only a domain's route may take it; web
+	// refuses it from an extension.
+	Open = Auth{open: true}
 )
 
 // Signed is for a webhook: a request whose body verify accepts, checked
@@ -215,7 +220,10 @@ func (a Auth) DeskToo() bool { return a.deskToo }
 // ForWorkers is whether the route takes a worker's credential, and nothing else: Worker.
 func (a Auth) ForWorkers() bool { return a.worker }
 
-// Verify is a Signed route's check of a request and its body, nil for UI, Desk and Worker.
+// IsOpen is whether the route takes no token, its handler checking its own code: Open.
+func (a Auth) IsOpen() bool { return a.open }
+
+// Verify is a Signed route's check of a request and its body, nil for UI, Desk, Worker and Open.
 func (a Auth) Verify() func(r *http.Request, body []byte) error { return a.verify }
 
 type workerKey struct{}

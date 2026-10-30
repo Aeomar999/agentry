@@ -48,6 +48,17 @@ func (s *Server) serveScript(w http.ResponseWriter, r *http.Request, sc script, 
 		"{{CA}}", sc.quote(ca), "{{CA_FINGERPRINT}}", sc.quote(fingerprint)).Replace(sc.template)))
 }
 
+// serveScriptNamed is serveScript for template, the script called name:
+// for PowerShell if name ends in .ps1, else for sh. A domain's API takes
+// it as its ServeScript.
+func (s *Server) serveScriptNamed(w http.ResponseWriter, r *http.Request, name, template string, works func(code string) bool, refusal string) {
+	sc := shScript(template)
+	if strings.HasSuffix(name, ".ps1") {
+		sc = powerShellScript(template)
+	}
+	s.serveScript(w, r, sc, works, refusal)
+}
+
 // commands are the two ways to run the script at path?code=code: curl
 // piped to sh, and in PowerShell, irm piped to iex (which runs it as text,
 // so no execution policy stops it). The page shows the one for your system.

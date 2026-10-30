@@ -252,6 +252,22 @@ func TestAnExtensionRouteForWorkersIsRefused(t *testing.T) {
 	}
 }
 
+func TestAnExtensionRouteOpenWithNoTokenIsRefused(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	votes := extensions.Extension{Name: "votes", Routes: func(extensions.Core) []extensions.Route {
+		return []extensions.Route{{Pattern: "GET /votes.sh", Auth: extensions.Open, Handler: func(http.ResponseWriter, *http.Request) {}}}
+	}}
+	got := func() (refusal any) {
+		defer func() { refusal = recover() }()
+		NewServer(s, state, Config{UIToken: token, Extensions: []extensions.Extension{votes}}, http.NotFoundHandler(), nil).Handler()
+		return nil
+	}()
+	want := `the votes extension's route "GET /votes.sh" can't be mounted: only a domain's route may be open with no token`
+	if message, _ := got.(string); message != want {
+		t.Errorf("mounting votes: panicked with %v, want %q", got, want)
+	}
+}
+
 const hookSecret = "hook-secret"
 
 // signedWith checks a body as a git host does: X-Signature is the hex

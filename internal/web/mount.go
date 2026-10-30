@@ -22,10 +22,13 @@ func (s *Server) mount(owner string, routes []extensions.Route, mux *http.ServeM
 
 // wrapperOf is the wrapper auth names: signed for extensions.Signed,
 // requireUIOrDesk for extensions.Desk, requireWorker for extensions.Worker,
-// and requireUI for extensions.UI. None is requireRealUIToken, which hands
-// out the token.
+// none for extensions.Open, whose handler checks its own code, and
+// requireUI for extensions.UI. None is requireRealUIToken, which hands out
+// the token.
 func (s *Server) wrapperOf(auth extensions.Auth) func(http.HandlerFunc) http.Handler {
 	switch {
+	case auth.IsOpen():
+		return func(next http.HandlerFunc) http.Handler { return next }
 	case auth.Verify() != nil:
 		return func(next http.HandlerFunc) http.Handler { return signed(auth.Verify(), next) }
 	case auth.DeskToo():

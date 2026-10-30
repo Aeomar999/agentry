@@ -68,7 +68,7 @@ func (s *Server) version() string {
 }
 
 // workersAPI is the Workers page's routes as web mounts them, and those a
-// joined worker calls when the server has a hub for workers.
+// joining or joined worker calls when the server has a hub for workers.
 func (s *Server) workersAPI() workersapi.API {
 	api := workersapi.API{Log: s.store, Events: s.store, State: s.state, Workers: s.workers, Roster: s.roster,
 		Local: s.config.Local, InstallCommands: s.installCommands}
@@ -80,6 +80,7 @@ func (s *Server) workersAPI() workersapi.API {
 	if s.config.Workers != nil {
 		api.Disconnect = s.config.Workers.Disconnect
 		api.Connect, api.Stream, api.ServeBinary = s.config.Workers.Connect, s.config.Workers.Stream, s.serveBinary
+		api.ServeScript = s.serveScriptNamed
 	}
 	return api
 }

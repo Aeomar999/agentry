@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/platform/pinned"
@@ -356,18 +357,25 @@ func TestTheScriptsCarryTheCA(t *testing.T) {
 	for _, c := range []struct {
 		name   string
 		config Config
-		tls    bool
+		server string // the address the script names; "" for the one it was fetched from
 	}{
-		{"a public URL", Config{CA: string(ca.PEM()), PublicURL: "https://agentry.example.com"}, true},
-		{"no CA", Config{}, false},
+		{"no CA", Config{}, ""},
+		{"a public URL", Config{PublicURL: "https://agentry.example.com"}, "https://agentry.example.com"},
 	} {
-		request := httptest.NewRequest("GET", "/worker/install.sh?code=c0de", nil)
-		if c.tls {
-			request.TLS = &tls.ConnectionState{}
+		s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+		fleet := machines.NewFleet(&machines.Local{Label: workers.Local})
+		c.config.UIToken, c.config.Fleet, c.config.Workers = token, fleet, workerlink.NewServer(s, fleet)
+		server := httptest.NewServer(NewServer(s, state, c.config, http.NotFoundHandler(), nil).Handler())
+		t.Cleanup(server.Close)
+		code, invite := workers.Invite(httpapi.You, time.Now())
+		if _, rejection, err := s.Propose(invite); err != nil || rejection != nil {
+			t.Fatal(rejection, err)
 		}
-		response := httptest.NewRecorder()
-		(&Server{config: c.config}).serveScript(response, request, shScript(installTemplate), func(string) bool { return true }, "")
-		if got := response.Body.String(); !strings.Contains(got, "\nca=''\nca_fingerprint=''\n") {
+		status, got := get(t, server.URL+"/worker/install.sh?code="+code)
+		if status != 200 || !strings.Contains(got, "\nserver='"+cmp.Or(c.server, server.URL)+"'\ncode='"+code+"'\n") {
+			t.Errorf("%s: %d, not the script for its address and code:\n%s", c.name, status, got)
+		}
+		if !strings.Contains(got, "\nca=''\nca_fingerprint=''\n") {
 			t.Errorf("%s: the script carries a CA:\n%s", c.name, got)
 		}
 	}

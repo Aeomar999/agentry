@@ -1,6 +1,7 @@
 // Package workersapi is the Workers page's HTTP API: the machines, besides
 // this one, that agents run on, one of them in detail, a join code and the
-// command that uses it, and taking a worker off. It is also what a joined
+// command that uses it, and taking a worker off. It is also what a machine
+// calls with its join code to install agentry and join, and what a joined
 // worker calls with its credential: its link, a task's repo, updating
 // itself and leaving. Web mounts its Routes as it mounts an extension's.
 package workersapi
@@ -33,8 +34,8 @@ type State interface {
 // on each machine, the workers and the agents as web reads them, this
 // machine, a machine's details read from it, the way to cut a removed
 // worker's link, web's install commands for the address the request came
-// in on, and for a joined worker the hub's link and streams and web's
-// agentry download.
+// in on, and for a joining or joined worker the hub's link and streams and
+// web's install scripts and agentry download.
 type API struct {
 	Log             extensions.Proposer
 	Events          extensions.EventLog
@@ -47,14 +48,18 @@ type API struct {
 	InstallCommands func(r *http.Request, path, code string) map[string]any
 
 	// The hub's ends of a worker's link: all nil when no worker can connect,
-	// and then no route a worker calls is mounted.
+	// and then no route a joining or joined worker calls is mounted.
 	Connect     func(w http.ResponseWriter, r *http.Request, worker workers.Worker)
 	Stream      func(w http.ResponseWriter, r *http.Request, worker workers.Worker, id string)
 	ServeBinary http.HandlerFunc // agentry for ?os= and ?arch=, with its hash as its ETag
+	// ServeScript sends template, the script called name (sh, or PowerShell
+	// for a .ps1), filled for the request's code if works says it is one
+	// that works, or else refusal, as the shell shows it.
+	ServeScript func(w http.ResponseWriter, r *http.Request, name, template string, works func(code string) bool, refusal string)
 }
 
 // Routes are the workers' endpoints, for the Workers page, and the ones a
-// joined worker calls when it can connect.
+// joining or joined worker calls when it can connect.
 func (a API) Routes() []extensions.Route {
 	routes := []extensions.Route{
 		{Pattern: "GET /api/workers", Auth: extensions.UI, Handler: a.listWorkers},
@@ -66,6 +71,10 @@ func (a API) Routes() []extensions.Route {
 		return routes
 	}
 	return append(routes,
+		extensions.Route{Pattern: "GET /worker/install.sh", Auth: extensions.Open, Handler: a.installScript},
+		extensions.Route{Pattern: "GET /worker/install.ps1", Auth: extensions.Open, Handler: a.installWindowsScript},
+		extensions.Route{Pattern: "GET /worker/agentry", Auth: extensions.Open, Handler: a.downloadBinary},
+		extensions.Route{Pattern: "POST /api/worker/join", Auth: extensions.Open, Handler: a.join},
 		extensions.Route{Pattern: "GET " + workerlink.ConnectPath, Auth: extensions.Worker, Handler: a.connect},
 		extensions.Route{Pattern: "GET " + workerlink.StreamPath + "{id}", Auth: extensions.Worker, Handler: a.stream},
 		extensions.Route{Pattern: "GET " + workerlink.GitPath + "{task}/", Auth: extensions.Worker, Handler: a.gitFetch},
@@ -204,7 +213,7 @@ func (a API) removeWorker(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// firstError is why a proposal failed; it mirrors internal/web/workers_api.go.
+// firstError is why a proposal failed.
 func firstError(err error, rejection *events.Rejection) error {
 	if err != nil {
 		return err

@@ -100,7 +100,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /api/config", s.showConfig)
 	api("GET /api/changes", s.waitForChanges)
 	// A machine connecting its Claude Code, with its install command's code:
-	// these stay here, not in connectionsapi, as no extensions.Auth is open.
+	// still here, until connectionsapi takes them as extensions.Open routes.
 	mux.HandleFunc("GET /integrations/claude-code.sh", s.claudeCodeScript)
 	mux.HandleFunc("GET /integrations/claude-code.ps1", s.claudeCodeWindowsScript)
 	mux.HandleFunc("GET /integrations/agentry", s.integrationBinary)
@@ -113,14 +113,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/signout", s.signOut)
 	if s.terminal != nil {
 		mux.Handle("GET /api/tasks/{task}/terminal", s.requireUI(s.terminal.ServeHTTP))
-	}
-	if s.config.Workers != nil {
-		// A machine joining with its code: these stay here, not in
-		// workersapi, as no extensions.Auth is open.
-		mux.HandleFunc("GET /worker/install.sh", s.installScript)
-		mux.HandleFunc("GET /worker/install.ps1", s.installWindowsScript)
-		mux.HandleFunc("GET /worker/agentry", s.downloadBinary)
-		mux.HandleFunc("POST /api/worker/join", s.join)
 	}
 	if s.config.Helper != nil {
 		mux.Handle("GET /api/tasks/{task}/claude/terminal", s.requireUI(s.config.Helper.ServeHTTP))

@@ -1,4 +1,4 @@
-package web
+package workersapi
 
 import (
 	_ "embed"
@@ -8,10 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 )
+
+// A machine joining with its code, which it shows instead of a token: the
+// install scripts, agentry for its system, and joining. Each route checks
+// the code itself.
 
 // joinRequest is what `agentry worker join` sends with its code.
 type joinRequest struct {
@@ -22,12 +25,12 @@ type joinRequest struct {
 
 // join lets a machine in with a join code, under the name it asked for or,
 // if that is taken, the first free one after it (laptop-2, laptop-3).
-func (s *Server) join(w http.ResponseWriter, r *http.Request) {
+func (a API) join(w http.ResponseWriter, r *http.Request) {
 	var request joinRequest
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	roster, err := s.workers()
+	roster, err := a.Workers()
 	if err != nil {
 		httpapi.Failed(w, err)
 		return
@@ -38,7 +41,7 @@ func (s *Server) join(w http.ResponseWriter, r *http.Request) {
 	}
 	name := freeName(roster, workerName(request.Name, request.Machine.Host))
 	credential, p := workers.Join(name, request.Code, request.Machine)
-	if _, rejection, err := s.store.Propose(p); err != nil || rejection != nil {
+	if _, rejection, err := a.Log.Propose(p); err != nil || rejection != nil {
 		http.Error(w, firstError(err, rejection).Error(), http.StatusConflict)
 		return
 	}
@@ -80,32 +83,25 @@ const unknownJoinCode = "That join code is unknown, used or expired. Make a new 
 
 // installScript is the script the join command runs: for sh, or for
 // PowerShell on Windows.
-func (s *Server) installScript(w http.ResponseWriter, r *http.Request) {
-	s.serveScript(w, r, shScript(installTemplate), s.codeWorks, unknownJoinCode)
+func (a API) installScript(w http.ResponseWriter, r *http.Request) {
+	a.ServeScript(w, r, "install.sh", installTemplate, a.codeWorks, unknownJoinCode)
 }
 
-func (s *Server) installWindowsScript(w http.ResponseWriter, r *http.Request) {
-	s.serveScript(w, r, powerShellScript(installWindowsTemplate), s.codeWorks, unknownJoinCode)
+func (a API) installWindowsScript(w http.ResponseWriter, r *http.Request) {
+	a.ServeScript(w, r, "install.ps1", installWindowsTemplate, a.codeWorks, unknownJoinCode)
 }
 
 // downloadBinary sends agentry for the joining machine's kind, for a code
 // that works.
-func (s *Server) downloadBinary(w http.ResponseWriter, r *http.Request) {
-	if !s.codeWorks(r.URL.Query().Get("code")) {
+func (a API) downloadBinary(w http.ResponseWriter, r *http.Request) {
+	if !a.codeWorks(r.URL.Query().Get("code")) {
 		http.Error(w, "that join code is unknown, used or expired", http.StatusUnauthorized)
 		return
 	}
-	s.serveBinary(w, r)
+	a.ServeBinary(w, r)
 }
 
-func (s *Server) codeWorks(code string) bool {
-	roster, err := s.workers()
+func (a API) codeWorks(code string) bool {
+	roster, err := a.Workers()
 	return err == nil && code != "" && roster.CanJoin(workers.Hash(code), time.Now())
-}
-
-func firstError(err error, rejection *events.Rejection) error {
-	if err != nil {
-		return err
-	}
-	return rejection
 }

@@ -17,7 +17,7 @@ import (
 
 // The Workers page's routes, tested over HTTP through the server serve
 // runs, as web mounts them: that is where their token check is. A worker
-// joining and taking work is tested end to end in web, where join is.
+// joining and taking work is tested end to end in web (workers_test.go).
 
 const token = "ui-secret"
 

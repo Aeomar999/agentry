@@ -384,7 +384,7 @@ Feature: Operations
 
   @OPS-21 @manual
   Scenario: The install command from the Workers page joins the machine and starts the worker in the background
-    # internal/web/workers_api.go: the page gives one command per system; internal/web/install.sh runs agentry worker join [-ca-fingerprint F] [-name N] <server> <code>, then agentry worker start
+    # internal/web/scripts.go commands: the page gives one command per system; internal/domain/workers/workersapi/install.sh runs agentry worker join [-ca-fingerprint F] [-name N] <server> <code>, then agentry worker start
     # cmd/agentry/worker.go workerCommands: join, start, stop, restart, status, logs [-f], update, leave [-purge], run
     # internal/domain/workers/workerservice/service.go ForThisMachine: systemd user service agentry-worker.service on Linux; launchd agent dev.agentry.worker on macOS, or a background process when started over SSH; on Windows a background process started at login by the Task Scheduler task "Agentry worker"
     # cmd/agentry/worker_manage.go runStart waits 15 seconds for the link; worker.log in the worker's folder

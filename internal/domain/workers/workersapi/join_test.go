@@ -26,9 +26,6 @@ import (
 // scripts, agentry for its system, and joining. Each checks the code
 // itself, so each must refuse a bad one.
 
-// scripts is the folder install.sh and install.ps1 are in.
-const scripts = "../../../web/"
-
 // joinServer is web's server with a hub for workers and config on top, and
 // its log, to make join codes in.
 func joinServer(t *testing.T, config web.Config) (*httptest.Server, *store.Store) {
@@ -161,7 +158,7 @@ func TestTheInstallScriptsAreFilledIn(t *testing.T) {
 			{"install.sh", "text/x-shellscript", `'\''`},
 			{"install.ps1", "text/plain; charset=utf-8", "''"},
 		} {
-			template, err := os.ReadFile(scripts + script.file)
+			template, err := os.ReadFile(script.file)
 			if err != nil {
 				t.Fatal(err)
 			}

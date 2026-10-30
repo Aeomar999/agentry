@@ -33,6 +33,9 @@ func (s *Server) routesOf(f extensions.Extension) []extensions.Route {
 		if route.Auth.ForWorkers() {
 			panic(fmt.Sprintf("the %s extension's route %q can't be mounted: only a domain's route may take a worker's credential", f.Name, route.Pattern))
 		}
+		if route.Auth.IsOpen() {
+			panic(fmt.Sprintf("the %s extension's route %q can't be mounted: only a domain's route may be open with no token", f.Name, route.Pattern))
+		}
 	}
 	return routes
 }
