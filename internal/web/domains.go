@@ -6,6 +6,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents/agentsapi"
+	"gitlab.com/dev.chempa/agentry/internal/domain/connections/connectionsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/policyapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/settings/settingsapi"
@@ -65,6 +66,13 @@ func (s *Server) version() string {
 		return "(unknown version)"
 	}
 	return s.config.Local.Version
+}
+
+// connectionsAPI is the Integrations page's routes as web mounts them, and
+// those a machine connecting its Claude Code calls, with or without a hub.
+func (s *Server) connectionsAPI() connectionsapi.API {
+	return connectionsapi.API{Log: s.store, State: s.state, InstallCommands: s.installCommands,
+		PublicURL: s.publicURL, ServeBinary: s.serveBinary, ServeScript: s.serveScriptNamed}
 }
 
 // workersAPI is the Workers page's routes as web mounts them, and those a

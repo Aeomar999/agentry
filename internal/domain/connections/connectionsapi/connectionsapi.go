@@ -1,7 +1,8 @@
 // Package connectionsapi is the connections' HTTP API, as the Integrations
 // page uses it: make an install command for Claude Code on another machine,
-// list the machines connected, and revoke one. Web mounts its Routes as it
-// mounts an extension's.
+// list the machines connected, and revoke one. It also serves what that
+// machine calls with its install command's code: the install scripts,
+// agentry, and connect. Web mounts its Routes as it mounts an extension's.
 package connectionsapi
 
 import (
@@ -21,21 +22,33 @@ type State interface {
 	Broken(stream string) error
 }
 
-// API holds what the connections' routes need: the log to write invites
-// and revocations to, the state to list connections from, and web's install
-// commands for the address the request came in on.
+// API holds what the connections' routes need: the log to write invites,
+// connections and revocations to, the state to list connections from, and
+// from web, the install commands and the server's address for the address
+// the request came in on, and what a connecting machine downloads.
 type API struct {
 	Log             extensions.Proposer
 	State           State
 	InstallCommands func(r *http.Request, path, code string) map[string]any
+	PublicURL       func(r *http.Request) string // the address connect replies with as the page's
+	ServeBinary     http.HandlerFunc             // agentry for ?os= and ?arch=, with its hash as its ETag
+	// ServeScript sends template, the script called name (sh, or PowerShell
+	// for a .ps1), filled for the request's code if works says it is one
+	// that works, or else refusal, as the shell shows it.
+	ServeScript func(w http.ResponseWriter, r *http.Request, name, template string, works func(code string) bool, refusal string)
 }
 
-// Routes are the connections' endpoints, for the Integrations page.
+// Routes are the connections' endpoints, for the Integrations page, and
+// the ones a connecting machine calls with its code.
 func (a API) Routes() []extensions.Route {
 	return []extensions.Route{
 		{Pattern: "POST /api/integrations/claude-code", Auth: extensions.UI, Handler: a.inviteClaudeCode},
 		{Pattern: "GET /api/integrations/connections", Auth: extensions.UI, Handler: a.listConnections},
 		{Pattern: "DELETE /api/integrations/connections/{id}", Auth: extensions.UI, Handler: a.revokeConnection},
+		{Pattern: "GET /integrations/claude-code.sh", Auth: extensions.Open, Handler: a.claudeCodeScript},
+		{Pattern: "GET /integrations/claude-code.ps1", Auth: extensions.Open, Handler: a.claudeCodeWindowsScript},
+		{Pattern: "GET /integrations/agentry", Auth: extensions.Open, Handler: a.downloadBinary},
+		{Pattern: "POST /api/integrations/connect", Auth: extensions.Open, Handler: a.connect},
 	}
 }
 

@@ -13,9 +13,10 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/current"
+	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
-	"gitlab.com/dev.chempa/agentry/internal/domain/connections/connectionsapi"
+	"gitlab.com/dev.chempa/agentry/internal/domain/connections"
 	"gitlab.com/dev.chempa/agentry/internal/domain/notifications/notificationsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/notifications/webpush"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/hooks"
@@ -99,12 +100,6 @@ func (s *Server) Handler() http.Handler {
 	api("GET /api/waiting", s.listWaiting)
 	api("GET /api/config", s.showConfig)
 	api("GET /api/changes", s.waitForChanges)
-	// A machine connecting its Claude Code, with its install command's code:
-	// still here, until connectionsapi takes them as extensions.Open routes.
-	mux.HandleFunc("GET /integrations/claude-code.sh", s.claudeCodeScript)
-	mux.HandleFunc("GET /integrations/claude-code.ps1", s.claudeCodeWindowsScript)
-	mux.HandleFunc("GET /integrations/agentry", s.integrationBinary)
-	mux.HandleFunc("POST /api/integrations/connect", s.connect)
 	api("POST /api/theme", s.setTheme)
 	// Signing in: a device without the token swaps a one-time code, or the
 	// token pasted in, for the cookie and the token.
@@ -122,7 +117,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	s.mount("the tasks domain", s.tasksAPI().Routes(), mux)
 	s.mount("the settings domain", s.settingsAPI().Routes(), mux)
-	s.mount("the connections domain", connectionsapi.API{Log: s.store, State: s.state, InstallCommands: s.installCommands}.Routes(), mux)
+	s.mount("the connections domain", s.connectionsAPI().Routes(), mux)
 	s.mount("the notifications domain", notificationsapi.API{Push: s.config.Push, PublicURL: s.config.PublicURL}.Routes(), mux)
 	s.mount("the shared files domain", sharedfilesapi.API{Log: s.store, State: s.state, Blobs: s.config.Blobs, HasWorkers: s.config.Workers != nil}.Routes(), mux)
 	s.mount("the policy domain", s.policyAPI().Routes(), mux)
@@ -171,6 +166,25 @@ func (s *Server) requireUI(next http.HandlerFunc) http.Handler {
 		}
 		next(w, r)
 	})
+}
+
+// carriesConnection is a request from a connected Claude Code: its
+// credential opens what the page's token does, until it is revoked.
+func (s *Server) carriesConnection(r *http.Request) bool {
+	credential := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if credential == "" {
+		return false
+	}
+	roster, err := s.connections()
+	if err != nil {
+		return false
+	}
+	_, ok := roster.WithCredential(credential)
+	return ok
+}
+
+func (s *Server) connections() (connections.Roster, error) {
+	return s.state.Connections(), s.state.Broken(events.ConnectionsStream)
 }
 
 // requireUIOrDesk also lets in the desk's token. Approving an action never
