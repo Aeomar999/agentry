@@ -295,7 +295,11 @@ network gate, is part of policy: `internal/domain/policy/egress`.
 **Names users see stay.** The framework's rename is inside the code only.
 The settings file `features.toml`, the `GET /api/features` endpoint and its
 JSON keep their names on purpose: users and existing installs see them, and
-renaming them would be a behaviour change (decision 5).
+renaming them would be a behaviour change (decision 5). So do the words users
+read: the Settings page's "Features that are off", "Every feature is on." and
+"Couldn't read the features" (`ui/src/pages/SettingsPage.tsx` lines 33-38),
+and the scenarios that say the same (`spec/functional/settings.feature` lines
+7 and 13, `ideas.feature` line 66). Only names in the code change.
 
 `cmd/agentry` stays one package. Its 21 files are subcommands, and each
 holds steps its tests call directly, so it is not just wiring. The rule for
@@ -521,7 +525,7 @@ Every step but step 10 changes no behaviour, builds, passes `make test` and
 | Step | What | Kind |
 |---|---|---|
 | 1 | This document | doc |
-| 1a | Rename the framework in place: `internal/features` → `internal/extensions`, `ui/src/features` → `ui/src/extensions`, the Go and UI names, and `@/features` imports; the package name in `spec/constraints.md` section 1 and `spec/glossary.md`, and `internal/features` paths in `spec/`; `features.toml`, `/api/features` and its JSON keep their names | rename, no behaviour change |
+| 1a | Rename the framework in place: `internal/features` → `internal/extensions`, `ui/src/features` → `ui/src/extensions`, the Go and UI names, and `@/features` imports; the package name in `spec/constraints.md` section 1, an **extension** entry in `spec/glossary.md`, and `internal/features` and `ui/src/features` paths in `spec/`; `features.toml`, `/api/features`, its JSON and the words users read keep their names | rename, no behaviour change |
 | 2 | The import test, with the flat names after step 1a in its table; drop the two old `imports_test.go`; rewrite `spec/constraints.md` line 77 | test only |
 | 3 | `# Sources:` lines in the 12 feature files without one; `spec/check` fails on a Sources path that doesn't exist | spec and check |
 | 4 | `testkit` and `tools`: `storetest`, `deeptest`, `speccheck`, `packaging` | move |
@@ -602,12 +606,17 @@ else it rewrites:
   `spec/constraints.md` section 1 (line 7, "the leaves, `events`, `features`
   and `httpapi`"; line 31, the package's own entry; line 64, `httpapi`
   "imports only events and features"; and `go test ./internal/features` on
-  line 77), and the framework's entry in `spec/glossary.md` (line 56). Line
-  77 has the reviewer compare section 1 with the packages, so a miss there
-  is caught by no test. Every `internal/features` path in `spec/` (such as
-  `spec/constraints.md` line 97 and
+  line 77). Line 77 has the reviewer compare section 1 with the packages,
+  so a miss there is caught by no test. In `spec/glossary.md`, **feature**
+  (line 56) stays, as the user's word; the step adds an **extension** entry,
+  or a line in the feature entry, naming extension as the code's name for
+  it, `internal/extensions` and `ui/src/extensions`. Every `internal/features`
+  and `ui/src/features` path in `spec/` (such as `spec/constraints.md` line
+  97, the 15 `ui/src/features` paths in `spec/functional/ideas.feature`, and
   `spec/proposals/extensions-github-and-email.feature`) is rewritten by
-  whole path segments, as item 3 of the script above says.
+  whole path segments, as item 3 of the script above says. `spec/check`
+  doesn't look up proposals' citations, so grep `spec/proposals/` for both
+  paths rather than rely on it.
 - The UI: `@/features` imports become `@/extensions` (in `App.tsx`,
   `Sidebar.tsx`, `AdminShell.tsx`, `SettingsPage.tsx` and its test,
   `TaskPage.tsx` and `TasksPage.tsx` today). A rewrite of `ui/src/features`
@@ -619,11 +628,15 @@ else it rewrites:
   `internal/web/features_api_test.go`, and the UI's `FEATURES`,
   `useFeatures`, `visibleFeatures`, `hiddenFeatures` and `FeatureUI`. Names
   that mirror the JSON of `GET /api/features` or `features.toml`, such as
-  `FeatureLine` and `FeaturesReply` in `ui/src/api/types.ts` and a
-  template's `features` field, keep theirs.
+  `FeatureLine` and `FeaturesReply` in `ui/src/api/types.ts`, keep theirs.
+  A template's `features` is the JSON of the templates API and of saved
+  templates (`internal/agents/teams.go` line 21,
+  `internal/web/agents_api.go` line 458, `ui/src/api/types.ts` line 375):
+  the Go field `Template.Features` may be renamed, but its JSON tag
+  `features` stays.
 
-It leaves `features.toml`, `/api/features` and its JSON as they are
-(section 4), so the step changes no behaviour, and section 6's "Package
+It leaves `features.toml`, `/api/features`, its JSON and the words users
+read in the UI as they are (section 4), so the step changes no behaviour, and section 6's "Package
 names don't change in a move" stays true for every move after it.
 
 Old design docs under `docs/design/` keep the paths they were written with;
@@ -733,4 +746,6 @@ The reviewer's challenges:
    matches `docs/design/extensions.md`. The settings file `features.toml`,
    the `GET /api/features` endpoint and its JSON are deliberately not
    renamed: users and existing installs see them, and renaming them would be
-   a behaviour change.
+   a behaviour change. The words users read in the UI, such as "Features
+   that are off" on the Settings page, stay "feature" too, and so does the
+   glossary's **feature**: only names in the code change.
