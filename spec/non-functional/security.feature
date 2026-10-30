@@ -467,7 +467,7 @@ Feature: Security
     Given a device opens the printed link or signs in with a code
     When the server sets the cookie
     Then its name is agentry_ui, its path is /, and it lasts at least 300 days
-    # not under test, checked by hand: it lasts 365 days (internal/web/server.go line 263); the tests use the uiCookie constant, agentry_ui (internal/web/server.go line 175)
+    # not under test, checked by hand: it lasts 365 days (internal/web/server.go line 255); the tests use the uiCookie constant, agentry_ui (internal/web/server.go line 167)
     And it is HttpOnly with SameSite Lax, so no script on the page reads it
     And it is Secure only when the request came over https
     And the app's manifest, service worker and icons are served with no token

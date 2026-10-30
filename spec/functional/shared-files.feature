@@ -2,7 +2,7 @@ Feature: Shared files
   Files that are not in git, shared with a task in .agentry/files, that follow it from machine to machine.
   # Sources: internal/domain/sharedfiles, internal/domain/sharedfiles/sharedfilesapi,
   # internal/domain/tasks/files.go, internal/runtime/coordinator/files.go,
-  # internal/web/shared_api.go, ui/src/components/organisms/SharedFiles.tsx
+  # ui/src/components/organisms/SharedFiles.tsx
   # and their tests.
 
   # ---- Adding and downloading ------------------------------------------------
@@ -10,7 +10,7 @@ Feature: Shared files
   @FILES-01 @user @test
   Scenario: Shared files: add one, download it, take it away
     # internal/domain/sharedfiles/sharedfilesapi/sharedfilesapi_test.go TestYouShareFilesWithATask
-    # internal/domain/sharedfiles/sharedfilesapi/sharedfilesapi.go lines 75 to 126
+    # internal/domain/sharedfiles/sharedfilesapi/sharedfilesapi.go lines 85 to 136
     Given task-1 with no shared files
     When the user shares "data/sales.csv" holding 8 bytes
     Then the list shows the file "data/sales.csv", size 8, by "you"
@@ -78,6 +78,7 @@ Feature: Shared files
     # internal/runtime/coordinator/turns.go startOn: the last turn's files are read back where it ran before the work moves
     # internal/domain/sharedfiles/blobs.go MaxSize: a shared file is at most 2 GB
     # internal/domain/sharedfiles/blobs_test.go: the same bytes make the same blob, so a file kept by 2 tasks is stored 1 time
+    # the worker's end, by hash: internal/domain/sharedfiles/sharedfilesapi/blobs_test.go TestAWorkerSendsAndFetchesAFileByItsHash
     And a shared file's name may leave .agentry/files: no
     # internal/domain/sharedfiles/sharedfiles_test.go TestFilesGoRoundBetweenWorktrees, TestNamesStayInsideTheFolder;
     # the turn's files kept by their hash on the server: internal/runtime/coordinator/files_test.go TestSharedFilesFollowTheWork

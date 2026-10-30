@@ -13,8 +13,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles/sharedfilesapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/web"
@@ -132,5 +134,31 @@ func TestWithNoHubTheBlobRoutesAreNotThere(t *testing.T) {
 		if response, body := asWorker(t, server, route, credential, "x"); response.StatusCode != want {
 			t.Errorf("%s with no hub: %d %s, want %d", route, response.StatusCode, body, want)
 		}
+	}
+}
+
+// Routes has the blob routes only when web has workers, each behind a
+// worker's credential.
+func TestRoutesHasTheBlobRoutesOnlyWithWorkers(t *testing.T) {
+	blobs := func(api sharedfilesapi.API) map[string]extensions.Auth {
+		found := map[string]extensions.Auth{}
+		for _, route := range api.Routes() {
+			if strings.Contains(route.Pattern, sharedfiles.BlobsPath) {
+				found[route.Pattern] = route.Auth
+			}
+		}
+		return found
+	}
+	if found := blobs(sharedfilesapi.API{}); len(found) != 0 {
+		t.Errorf("with no workers: %v", found)
+	}
+	found := blobs(sharedfilesapi.API{HasWorkers: true})
+	for _, pattern := range []string{"HEAD " + sharedfiles.BlobsPath + "/{hash}", "GET " + sharedfiles.BlobsPath + "/{hash}", "POST " + sharedfiles.BlobsPath} {
+		if auth, ok := found[pattern]; !ok || !auth.ForWorkers() {
+			t.Errorf("%s with workers: there %v, for workers %v", pattern, ok, auth.ForWorkers())
+		}
+	}
+	if len(found) != 3 {
+		t.Errorf("with workers: %v", found)
 	}
 }

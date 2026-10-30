@@ -1,8 +1,8 @@
 // Package sharedfilesapi is a task's shared files over HTTP and MCP: on the
 // page, from the desk and from Claude Code you can add one, download any,
-// and take one away. Web mounts its Routes and agentry mcp lists its Tools
-// as they do an extension's. The workers' blob routes stay in web, as no
-// extensions.Auth takes a worker's credential.
+// and take one away; a worker fetches and sends them by their hash. Web
+// mounts its Routes and agentry mcp lists its Tools as they do an
+// extension's.
 package sharedfilesapi
 
 import (
@@ -28,20 +28,30 @@ type State interface {
 // API holds what the shared files' routes need: the log to write their
 // changes to, the state to read the task from, and where the files are kept.
 type API struct {
-	Log   extensions.Proposer
-	State State
-	Blobs sharedfiles.Disk
+	Log        extensions.Proposer
+	State      State
+	Blobs      sharedfiles.Disk
+	HasWorkers bool // web sets it when it has a hub for workers (Config.Workers)
 }
 
 // Routes are the shared files' endpoints, for the page, and for the desk
-// too except taking one away.
+// too except taking one away; and, when there are workers, the blobs a
+// worker fetches and sends.
 func (a API) Routes() []extensions.Route {
-	return []extensions.Route{
+	routes := []extensions.Route{
 		{Pattern: "GET /api/tasks/{task}/shared", Auth: extensions.Desk, Handler: a.listShared},
 		{Pattern: "GET /api/tasks/{task}/shared/file", Auth: extensions.Desk, Handler: a.downloadShared},
 		{Pattern: "POST /api/tasks/{task}/shared", Auth: extensions.Desk, Handler: a.uploadShared},
 		{Pattern: "DELETE /api/tasks/{task}/shared", Auth: extensions.UI, Handler: a.removeShared},
 	}
+	if !a.HasWorkers {
+		return routes
+	}
+	return append(routes,
+		extensions.Route{Pattern: "HEAD " + sharedfiles.BlobsPath + "/{hash}", Auth: extensions.Worker, Handler: a.blobFor},
+		extensions.Route{Pattern: "GET " + sharedfiles.BlobsPath + "/{hash}", Auth: extensions.Worker, Handler: a.blobFor},
+		extensions.Route{Pattern: "POST " + sharedfiles.BlobsPath, Auth: extensions.Worker, Handler: a.blobFrom},
+	)
 }
 
 // File is one of a task's shared files, as the page shows it in the list

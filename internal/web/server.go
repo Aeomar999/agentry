@@ -121,14 +121,6 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET /worker/install.ps1", s.installWindowsScript)
 		mux.HandleFunc("GET /worker/agentry", s.downloadBinary)
 		mux.HandleFunc("POST /api/worker/join", s.join)
-		worker := func(pattern string, handler func(http.ResponseWriter, *http.Request, workers.Worker)) {
-			mux.Handle(pattern, s.requireWorker(func(w http.ResponseWriter, r *http.Request) { handler(w, r, extensions.WorkerOf(r)) }))
-		}
-		// The shared files a worker fetches and sends, with its credential:
-		// these stay here until they move to sharedfilesapi.
-		worker("HEAD "+sharedfiles.BlobsPath+"/{hash}", s.blobFor)
-		worker("GET "+sharedfiles.BlobsPath+"/{hash}", s.blobFor)
-		worker("POST "+sharedfiles.BlobsPath, s.blobFrom)
 	}
 	if s.config.Helper != nil {
 		mux.Handle("GET /api/tasks/{task}/claude/terminal", s.requireUI(s.config.Helper.ServeHTTP))
@@ -140,7 +132,7 @@ func (s *Server) Handler() http.Handler {
 	s.mount("the settings domain", s.settingsAPI().Routes(), mux)
 	s.mount("the connections domain", connectionsapi.API{Log: s.store, State: s.state, InstallCommands: s.installCommands}.Routes(), mux)
 	s.mount("the notifications domain", notificationsapi.API{Push: s.config.Push, PublicURL: s.config.PublicURL}.Routes(), mux)
-	s.mount("the shared files domain", sharedfilesapi.API{Log: s.store, State: s.state, Blobs: s.config.Blobs}.Routes(), mux)
+	s.mount("the shared files domain", sharedfilesapi.API{Log: s.store, State: s.state, Blobs: s.config.Blobs, HasWorkers: s.config.Workers != nil}.Routes(), mux)
 	s.mount("the policy domain", s.policyAPI().Routes(), mux)
 	s.mount("the workers domain", s.workersAPI().Routes(), mux)
 	s.mount("the agents domain", s.agentsAPI().Routes(), mux)
