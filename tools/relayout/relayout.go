@@ -306,12 +306,7 @@ func namesPaths(file string) bool {
 // format runs gofmt -w on the Go files among files, so the import blocks
 // are sorted again.
 func (r run) format(files []string) error {
-	var goFiles []string
-	for _, f := range files {
-		if strings.HasSuffix(f, ".go") {
-			goFiles = append(goFiles, f)
-		}
-	}
+	goFiles := goFilesOf(files)
 	if r.dry || len(goFiles) == 0 {
 		return nil
 	}
@@ -321,4 +316,18 @@ func (r run) format(files []string) error {
 		return fmt.Errorf("gofmt: %v: %s", err, out)
 	}
 	return nil
+}
+
+// goFilesOf gives the Go files among files, each once: a file both edited
+// and rewritten is listed twice, and gofmt formats its files in parallel,
+// so two writes of one file would race.
+func goFilesOf(files []string) []string {
+	var goFiles []string
+	for _, f := range files {
+		if strings.HasSuffix(f, ".go") {
+			goFiles = append(goFiles, f)
+		}
+	}
+	slices.Sort(goFiles)
+	return slices.Compact(goFiles)
 }

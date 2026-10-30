@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -240,4 +241,13 @@ func read(t *testing.T, root, name string) string {
 		t.Fatal(err)
 	}
 	return string(data)
+}
+
+// gofmt gets each changed Go file once, though an edited file can also be
+// rewritten.
+func TestEachGoFileIsFormattedOnce(t *testing.T) {
+	got := goFilesOf([]string{"b.go", "a.go", "spec/check", "b.go"})
+	if want := []string{"a.go", "b.go"}; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }
