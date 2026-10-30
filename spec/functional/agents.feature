@@ -51,7 +51,7 @@ Feature: The agents' turns
     Then the brief's "Where the work is" names that worktree and branch, and says never to create or change repos or folders outside it
     And the worktree's port is in the PORT environment variable of the turn: yes
     # not under test, checked by hand: the port is task-3's own 7903; the turns test checks PORT=7901 for its own worktree
-    # whereText: internal/coordinator/brief.go; PORT: internal/turns/turns.go environment; the branch: internal/worktrees/worktree_test.go TestCreateSetsTheWorktreeUp
+    # whereText: internal/coordinator/brief.go; PORT: internal/turns/turns.go environment; the branch: internal/platform/worktrees/worktree_test.go TestCreateSetsTheWorktreeUp
 
   @TURN-06 @agent @test
   Scenario: An agent writes the plan file its brief asks for, and the plan follows the file

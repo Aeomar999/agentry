@@ -209,7 +209,7 @@ Feature: Agentry from Claude Code
     Given a repo at a git address the server can reach
     When Claude calls create_task with that address as repo
     Then the server clones the repo, and the task works in the clone: yes
-    # not under test, checked by hand: the clone may take 10 minutes (internal/worktrees/repo.go line 66, CloneTimeout), and create_task allows 1 minute more (internal/mcp/tools.go line 305)
+    # not under test, checked by hand: the clone may take 10 minutes (internal/platform/worktrees/repo.go line 66, CloneTimeout), and create_task allows 1 minute more (internal/mcp/tools.go line 305)
     # internal/web/api_test.go TestATaskInARepoNamedByItsAddressWorksInAClone: the task is made through the API, not create_task
 
   @TOOLS-20 @claude-code @test
@@ -280,7 +280,7 @@ Feature: Agentry from Claude Code
     Then the question says the command, that it was held, the time it was held in the user's zone, and that the agent was told no
     And it says the agent may run this exact command 1 time in its next turn if the user approves
     # internal/hooks/handler.go replyMargin: the server stops waiting 5 seconds before the hook's deadline
-    # internal/turns/turns.go environment: the deadline is GateTimeoutSeconds - 10 = 1790 seconds (internal/engines/engine.go GateTimeoutSeconds = 1800)
+    # internal/turns/turns.go environment: the deadline is GateTimeoutSeconds - 10 = 1790 seconds (internal/platform/engines/engine.go GateTimeoutSeconds = 1800)
     # internal/mcp/server_test.go TestAHeldApprovalSaysWhenItWasHeld: the question says once, which is 1 time
 
   @TOOLS-27 @claude-code @test

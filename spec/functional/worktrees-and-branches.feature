@@ -1,13 +1,13 @@
 Feature: Worktrees and branches
   Each task works in its own worktree on its own branch, shown on the Workspace page.
-  # Sources: internal/worktrees, internal/workspace, internal/web/workspace_api.go,
+  # Sources: internal/platform/worktrees, internal/platform/workspace, internal/web/workspace_api.go,
   # ui/src/pages/WorkspacePage.tsx and their tests.
 
   # ---- Worktrees and branches ------------------------------------------------
 
   @TREE-01 @coordinator @test
   Scenario: Each task works in its own worktree on branch agentry/<task>
-    # internal/worktrees/worktree_test.go TestCreateSetsTheWorktreeUp
+    # internal/platform/worktrees/worktree_test.go TestCreateSetsTheWorktreeUp
     Given a repo and a task task-1
     When Agentry prepares the task's worktree
     Then the worktree is on branch agentry/task-1, with its base commit kept and the port it was given, 7901
@@ -17,25 +17,25 @@ Feature: Worktrees and branches
 
   @TREE-02 @coordinator @test
   Scenario: Each worktree leases a port between 7900 and 7999
-    # internal/worktrees/worktree_test.go TestLeasePortSkipsTakenAndBusyPorts; PORT: internal/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt
+    # internal/platform/worktrees/worktree_test.go TestLeasePortSkipsTakenAndBusyPorts; PORT: internal/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt
     Given port 7900 is held by another unfinished task and 7901 has something listening on it
     When a new task's worktree is prepared
     Then its port is exactly 7902
     And a turn starts with the worktree's port in its PORT environment variable: yes
-    # FirstPort = 7900, LastPort = 7999: internal/worktrees/ports.go; PORT: internal/turns/turns.go environment
+    # FirstPort = 7900, LastPort = 7999: internal/platform/worktrees/ports.go; PORT: internal/turns/turns.go environment
 
   @TREE-03 @coordinator @test
   Scenario: A finished task's worktree is removed only once its branch is merged into dev
-    # internal/worktrees/worktree_test.go TestRemoveOnlyOnceMerged
+    # internal/platform/worktrees/worktree_test.go TestRemoveOnlyOnceMerged
     Given a done task whose branch has commits not yet in dev
     When Agentry removes its worktree
     Then the worktree and the branch are kept, so no work is lost
     And once the branch is in a local dev with no remote, the worktree and the branch are no longer there
-    # not under test, checked by hand: the branch in origin/dev counts as merged too: internal/worktrees/worktree.go lines 209 to 212
+    # not under test, checked by hand: the branch in origin/dev counts as merged too: internal/platform/worktrees/worktree.go lines 209 to 212
 
   @TREE-04 @coordinator @test
   Scenario: The task's work follows its branch to the next machine
-    # internal/worktrees/handoff_test.go TestWorkMovesThroughTheHubAndBack
+    # internal/platform/worktrees/handoff_test.go TestWorkMovesThroughTheHubAndBack
     Given a task's worktree on one machine with 1 commit and 1 file left uncommitted
     When the next turn's agent runs on another machine
     Then what was left uncommitted is committed first, the branch goes to the repo Agentry runs from, and the other machine's worktree made from that branch is clean, with 0 changes showing
@@ -48,14 +48,14 @@ Feature: Worktrees and branches
     Given a task's worktree on one machine, with 1 commit and 1 file left uncommitted
     When the work leaves that machine
     Then what was uncommitted is committed, the hub gets the branch, and the worktree there is gone: yes
-    # not under test, checked by hand: as 1 commit (internal/worktrees/handoff.go line 19). In internal/worktrees/handoff_test.go TestWorkMovesThroughTheHubAndBack the hub is the worktree's own repo;
+    # not under test, checked by hand: as 1 commit (internal/platform/worktrees/handoff.go line 19). In internal/platform/worktrees/handoff_test.go TestWorkMovesThroughTheHubAndBack the hub is the worktree's own repo;
     # a worker's hand-off to the hub is asserted in internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
     When the next machine makes its worktree from the hub's branch
     Then the uncommitted file is there, the worktree is clean, and its origin is the repo's own remote: yes
     When that machine's agent changes the file and the work goes back
     Then the hub's branch has the change, the history has the first commit, and the base moved: no
     And a branch with 0 new commits sends 0 bundles
-    # internal/worktrees/handoff_test.go TestWorkMovesThroughTheHubAndBack, TestABranchWithNothingNewBundlesNothing
+    # internal/platform/worktrees/handoff_test.go TestWorkMovesThroughTheHubAndBack, TestABranchWithNothingNewBundlesNothing
 
   @TREE-06 @worker @test
   Scenario: Work moves only to another machine, between turns
@@ -76,7 +76,7 @@ Feature: Worktrees and branches
   @TREE-07 @user @manual
   Scenario: The Workspace page: the git view of the task's worktree
     # ui/src/pages/WorkspacePage.tsx lines 23 to 29 and 130 to 196; ui/src/components/organisms/SourceControl.tsx lines 8 to 13
-    # files over 2 MB: internal/workspace/workspace.go lines 163 and 185
+    # files over 2 MB: internal/platform/workspace/workspace.go lines 163 and 185
     Given task-5 has a worktree with 2 changed files, 1 added file and 3 commits on its branch
     When the user clicks Workspace on the task's page
     Then a new tab opens with the id, title, status badge and branch, and the header counts read "M 2" and "A 1"

@@ -20,9 +20,9 @@ import (
 
 	"github.com/pkg/browser"
 
-	"gitlab.com/dev.chempa/agentry/internal/client"
-	"gitlab.com/dev.chempa/agentry/internal/launch"
-	"gitlab.com/dev.chempa/agentry/internal/procs"
+	"gitlab.com/dev.chempa/agentry/internal/platform/client"
+	"gitlab.com/dev.chempa/agentry/internal/platform/launch"
+	"gitlab.com/dev.chempa/agentry/internal/platform/procs"
 )
 
 const origin = "http://localhost:7800"

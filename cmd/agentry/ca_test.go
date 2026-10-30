@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/client"
-	"gitlab.com/dev.chempa/agentry/internal/tlsca"
+	"gitlab.com/dev.chempa/agentry/internal/platform/client"
+	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 )
 
 // agentry ca shows the CA's fingerprint; -regenerate makes a new CA and

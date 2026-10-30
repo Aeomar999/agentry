@@ -157,7 +157,7 @@ Feature: Tasks and the board
 
   @TASK-13 @user @test
   Scenario: A repo named by a link to a .tar.gz is downloaded and made a repo
-    # internal/worktrees/repo_test.go TestARepoNamedByALinkToAnArchiveIsDownloaded
+    # internal/platform/worktrees/repo_test.go TestARepoNamedByALinkToAnArchiveIsDownloaded
     Given a link to a .tar.gz, with a query after its name, whose files sit in one top folder app-1.2
     When Agentry fetches the repo the link names
     Then the link counts as an address, and the archive is downloaded into a folder whose name starts with app-1.2-, which is a git repo: yes

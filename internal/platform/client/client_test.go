@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/tlsca"
+	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 )
 
 // overHTTPS is a server with a leaf its own CA issued, as `agentry serve

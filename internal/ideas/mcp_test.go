@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/mcp"
+	"gitlab.com/dev.chempa/agentry/internal/platform/client"
 )
 
 // In agentry mcp, Ideas brings its three tools and its instructions only

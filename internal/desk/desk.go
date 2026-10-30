@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions"
 )
 
 // Name is the desk's session name; its session is agentry-desk. Tasks

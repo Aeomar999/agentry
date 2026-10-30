@@ -7,7 +7,7 @@ package terminal
 import (
 	"errors"
 
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions"
 )
 
 // Pane is a session being watched: what the hub needs from it. On this

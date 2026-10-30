@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/engines"
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions"
 )
 
 // About is everything the page shows about a machine, read when asked: the

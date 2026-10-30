@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
+	"gitlab.com/dev.chempa/agentry/internal/platform/client"
 )
 
 // Server is one Claude Code session's Agentry: its tools, for the repo the

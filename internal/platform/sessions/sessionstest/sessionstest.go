@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions"
 )
 
 // base is the run's own sessions folder, set by package sessions.

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
-	"gitlab.com/dev.chempa/agentry/internal/sessions/sessionstest"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions/sessionstest"
 )
 
 // The desk is Claude started with its prompt, allowed to run `agentry task`

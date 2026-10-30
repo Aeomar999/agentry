@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/pinned"
-	"gitlab.com/dev.chempa/agentry/internal/tlsca"
+	"gitlab.com/dev.chempa/agentry/internal/platform/pinned"
+	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 )
 
 // A worker pinned to a CA the server no longer has keeps dialling, and

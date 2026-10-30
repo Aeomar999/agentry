@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/sessions/sessionstest"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions/sessionstest"
 )
 
 // Tests here can start sessions: one left running fails the run.

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/platform/terminal"
+	"gitlab.com/dev.chempa/agentry/internal/platform/workspace"
+	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
-	"gitlab.com/dev.chempa/agentry/internal/terminal"
-	"gitlab.com/dev.chempa/agentry/internal/workspace"
-	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
 
 // Offline is a worker that isn't connected. Everything fails with why,

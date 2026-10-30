@@ -4,8 +4,8 @@ import (
 	"cmp"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/engines"
-	"gitlab.com/dev.chempa/agentry/internal/hookcall"
+	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
+	"gitlab.com/dev.chempa/agentry/internal/platform/hookcall"
 )
 
 // A split whose total is 0 is no count: the turn says why, as before, and

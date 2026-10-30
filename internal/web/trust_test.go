@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
-	"gitlab.com/dev.chempa/agentry/internal/tlsca"
 )
 
 // trustSeen is what the page is told about trusting the server's own CA:

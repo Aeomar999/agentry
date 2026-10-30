@@ -7,9 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"gitlab.com/dev.chempa/agentry/internal/engines"
-	"gitlab.com/dev.chempa/agentry/internal/hookcall"
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
+	"gitlab.com/dev.chempa/agentry/internal/platform/hookcall"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions"
 )
 
 // Helper is a plain Claude session you open beside a task, in its worktree

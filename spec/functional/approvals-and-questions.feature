@@ -39,7 +39,7 @@ Feature: Approvals and questions
     Then the agent is told no, with "the command is held for the user's approval. Don't retry it now"
     And the action is held and undecided, the task is in Needs you, and 0 hook calls still wait on it
     And the task's waiting line reads exactly "Waiting for you to approve the push to dev"
-    # the hook's deadline is 1790 seconds, GateTimeoutSeconds 1800 less 10: internal/turns/turns.go environment, internal/engines/engine.go;
+    # the hook's deadline is 1790 seconds, GateTimeoutSeconds 1800 less 10: internal/turns/turns.go environment, internal/platform/engines/engine.go;
     # the server answers 5 seconds before it: internal/hooks/handler.go replyMargin; the line: internal/tasks/waiting_test.go TestAHeldPushNamesItsBranch
     # the test holds a curl command, which goes through the same hold as any ask
 

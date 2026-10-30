@@ -265,7 +265,7 @@ Feature: Usability
 
   @USE-29 @manual
   Scenario: An agent's session starts in the page's theme, and a terminal on the page follows a theme change
-    # the session starts in the page's theme: internal/engines/claude.go lines 45-46 write the theme into the session's settings
+    # the session starts in the page's theme: internal/platform/engines/claude.go lines 45-46 write the theme into the session's settings
     # the terminal follows a theme change: ui/src/components/organisms/TerminalView.tsx lines 46-49 watch the html element's class
     Given the page in the light theme and an agent that runs on Claude Code
     When the user starts a task, switches the page to the dark theme, and starts another task

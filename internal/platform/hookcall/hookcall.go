@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/engines"
+	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
 )
 
 // The environment every agent session has, read by `agentry hook`.

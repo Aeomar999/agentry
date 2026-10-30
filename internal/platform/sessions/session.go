@@ -17,11 +17,11 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/procs"
+	"gitlab.com/dev.chempa/agentry/internal/platform/procs"
 )
 
 // The size a session starts at. A viewer can resize it to fit their screen
-// (internal/terminal), and the program in it sees the change as in any terminal.
+// (internal/platform/terminal), and the program in it sees the change as in any terminal.
 const (
 	Columns = 120
 	Rows    = 36

@@ -4,14 +4,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/engines"
-	"gitlab.com/dev.chempa/agentry/internal/hookcall"
+	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
+	"gitlab.com/dev.chempa/agentry/internal/platform/hookcall"
 )
 
 func stopEnding(t *testing.T) *hookcall.Ending {
 	t.Helper()
 	t.Setenv(hookcall.EnvWorktree, t.TempDir())
-	transcript, _ := filepath.Abs("../../internal/engines/testdata/resumed.transcript")
+	transcript, _ := filepath.Abs("../../internal/platform/engines/testdata/resumed.transcript")
 	end := ending(hookcall.Call{Engine: "claude", Event: "Stop",
 		Payload: []byte(`{"hook_event_name":"Stop","last_assistant_message":"Done.","transcript_path":"` + transcript + `"}`)})
 	if end == nil || end.Split == nil {

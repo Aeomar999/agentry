@@ -195,8 +195,8 @@ Feature: Limits
     Given a task's session with a viewer in control
     When the viewer in control asks for 9999 columns by 1 row
     Then the other viewer sees the session sized at 500 columns by 5 rows: yes
-    # not under test, checked by hand: the bounds are 20 to 500 columns and 5 to 200 rows (internal/terminal/viewers.go lines 117 and 118)
-    # README.md, Use it; internal/terminal/terminal_test.go TestAViewerResizesTheSession
+    # not under test, checked by hand: the bounds are 20 to 500 columns and 5 to 200 rows (internal/platform/terminal/viewers.go lines 117 and 118)
+    # README.md, Use it; internal/platform/terminal/terminal_test.go TestAViewerResizesTheSession
 
   @LIM-23 @manual
   Scenario: A viewer too slow for the live terminal is disconnected
@@ -204,7 +204,7 @@ Feature: Limits
     When 4,096 output chunks queue for it unread, or 16 state messages
     Then that viewer is disconnected, exactly once
     And the session and the other viewers are not affected, so the page's terminal keeps streaming
-    # README.md, Use it; the backlog sizes are set in internal/terminal/viewers.go
+    # README.md, Use it; the backlog sizes are set in internal/platform/terminal/viewers.go
 
   @LIM-24 @test
   Scenario: A push notification fits one 4,096-byte record
@@ -291,8 +291,8 @@ Feature: Limits
     Given tasks that hold dev ports
     When a port is leased for a new worktree
     Then its PORT is the lowest from 7900 that no task holds and nothing listens on: yes
-    # not under test, checked by hand: the range ends at 7999, so 100 ports are the most worktrees that can hold one at once (internal/worktrees/ports.go lines 12 and 13)
-    # README.md, Use it; internal/worktrees/worktree_test.go TestLeasePortSkipsTakenAndBusyPorts
+    # not under test, checked by hand: the range ends at 7999, so 100 ports are the most worktrees that can hold one at once (internal/platform/worktrees/ports.go lines 12 and 13)
+    # README.md, Use it; internal/platform/worktrees/worktree_test.go TestLeasePortSkipsTakenAndBusyPorts
 
   @LIM-33 @manual
   Scenario: A turn's start and a clone time out
@@ -300,7 +300,7 @@ Feature: Limits
     When the task starts and the clone runs
     Then the clone is stopped after exactly 10 minutes and the turn is an issue
     And a session that has not started 2 minutes after its turn began is an issue
-    # README.md, Use it; the timeouts are set in internal/worktrees/repo.go and internal/turns/turns.go
+    # README.md, Use it; the timeouts are set in internal/platform/worktrees/repo.go and internal/turns/turns.go
 
   @LIM-34 @manual
   Scenario: The server waits at most 10 seconds for a request's headers

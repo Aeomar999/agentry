@@ -1,9 +1,9 @@
 package workerlink
 
 import (
+	"gitlab.com/dev.chempa/agentry/internal/platform/workspace"
+	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
-	"gitlab.com/dev.chempa/agentry/internal/workspace"
-	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
 
 // The server's requests, each a machines.Machine method of the same name.

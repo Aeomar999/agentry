@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/pinned"
-	"gitlab.com/dev.chempa/agentry/internal/tlsca"
+	"gitlab.com/dev.chempa/agentry/internal/platform/pinned"
+	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 )
 
 // A machine joining a server served over https with Agentry's own CA, as a

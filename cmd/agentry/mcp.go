@@ -16,9 +16,9 @@ import (
 	"syscall"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/mcp"
+	"gitlab.com/dev.chempa/agentry/internal/platform/client"
 )
 
 // `agentry mcp` is Agentry for Claude Code: an MCP server on stdio with

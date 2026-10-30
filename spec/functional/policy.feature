@@ -213,7 +213,7 @@ Feature: Policy
     Given an agent session on a worker whose server is unreachable, slow or broken
     When the engine's gate hook calls `agentry hook`
     Then the hook exits 2 within its own deadline, so the action is blocked: yes
-    # internal/turns/turns.go environment: the deadline is 1790 seconds, 10 under the engine's gate timeout of 1800 (internal/engines/engine.go GateTimeoutSeconds)
+    # internal/turns/turns.go environment: the deadline is 1790 seconds, 10 under the engine's gate timeout of 1800 (internal/platform/engines/engine.go GateTimeoutSeconds)
     And the server's reply, when it comes, is printed as it is: yes
     # not under test, checked by hand: its exit code is kept (cmd/agentry/hook.go line 50); the test's reply has exit code 0, the default
     # cmd/agentry/hook_test.go TestTheHookFailsClosed, TestTheHookPassesTheServersReplyThrough

@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/client"
-	"gitlab.com/dev.chempa/agentry/internal/procs"
+	"gitlab.com/dev.chempa/agentry/internal/platform/client"
+	"gitlab.com/dev.chempa/agentry/internal/platform/procs"
 )
 
 // Running is the server running from this data folder, if it answers.

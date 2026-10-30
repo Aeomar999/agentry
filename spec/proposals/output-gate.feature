@@ -13,7 +13,7 @@ Feature: Output gate
 
   @PROP-65 @agent @test @to-policy
   Scenario: A result no rule for results matches reaches the agent unchanged
-    # the gate today: @POLICY-07 and the reporting hooks, which end || true (internal/engines/hook_config.go)
+    # the gate today: @POLICY-07 and the reporting hooks, which end || true (internal/platform/engines/hook_config.go)
     # test: internal/hooks/output_test.go (to write)
     Given the developer profile with 1 rule for results, which holds a result from WebFetch that has "ignore previous instructions"
     When the engineer runs go test, reads a file and fetches a page without those words
@@ -33,7 +33,7 @@ Feature: Output gate
 
   @PROP-67 @agent @test @to-policy
   Scenario: A held result waits for the user, as an ask does
-    # @APPROVE-01: Needs you, approve or deny; the gate's wait, GateTimeoutSeconds, 30 minutes (internal/engines)
+    # @APPROVE-01: Needs you, approve or deny; the gate's wait, GateTimeoutSeconds, 30 minutes (internal/platform/engines)
     # test: internal/hooks/output_test.go and internal/web/api_test.go (to write)
     Given a rule "pages that talk to the agent" that holds results from WebFetch that have "ignore previous instructions"
     When the engineer fetches a page that holds those words
@@ -96,8 +96,8 @@ Feature: Output gate
 
   @PROP-73 @test @to-reliability
   Scenario: A result the gate has not judged by the hook's deadline does not reach the agent
-    # the gate fails closed: a gate's hook ends || exit 2, which blocks a call at PreToolUse (docs/design/proofs.md, proof 01; internal/engines/hook_config.go); nothing yet shows exit 2 at PostToolUse withholds a result, so Agentry ends the session instead, as in @PROP-75; a hook that crashes or cannot reach the server is an open question below
-    # test: internal/hooks/output_test.go and internal/engines/engines_test.go (to write)
+    # the gate fails closed: a gate's hook ends || exit 2, which blocks a call at PreToolUse (docs/design/proofs.md, proof 01; internal/platform/engines/hook_config.go); nothing yet shows exit 2 at PostToolUse withholds a result, so Agentry ends the session instead, as in @PROP-75; a hook that crashes or cannot reach the server is an open question below
+    # test: internal/hooks/output_test.go and internal/platform/engines/engines_test.go (to write)
     Given an agent whose profile has 1 rule for results
     When the hook's deadline passes before a decision
     Then the result reaches 0 model calls: Agentry ends the agent's session before the hook returns, as in @PROP-75, and exactly 1 issue goes back to the coordinator
@@ -107,8 +107,8 @@ Feature: Output gate
 
   @PROP-74 @test @to-compatibility
   Scenario: On Claude Code, PostToolUse is where a result is judged
-    # PostToolUse fires once a tool call succeeded, with its result (internal/engines/claude.go claudeReports, internal/tasks/task.go Pushed)
-    # test: internal/engines/engines_test.go (to write), with recorded payloads
+    # PostToolUse fires once a tool call succeeded, with its result (internal/platform/engines/claude.go claudeReports, internal/tasks/task.go Pushed)
+    # test: internal/platform/engines/engines_test.go (to write), with recorded payloads
     Given an agent on Claude Code whose profile has rules for results
     When its session is prepared
     Then PostToolUse is written to wait for the gate's decision on the result, and every other reporting hook ends || true as today: yes
@@ -119,7 +119,7 @@ Feature: Output gate
   @PROP-75 @test @to-compatibility
   Scenario: Where an engine cannot replace or withhold a result, a hold, a redaction or a block ends the session first
     # docs/design/proofs.md, proof 07: Codex has the same hook events and fields; its PreToolUse can only deny and needs a reason; its PostToolUse fires for a command that failed too, with no exit code (internal/tasks/task.go Pushed)
-    # test: internal/engines/engines_test.go and internal/hooks/output_test.go (to write)
+    # test: internal/platform/engines/engines_test.go and internal/hooks/output_test.go (to write)
     Given an agent on an engine whose PostToolUse cannot replace or withhold what the agent sees
     When a rule holds, redacts or blocks a result
     Then Agentry ends the agent's session before the hook returns, so the result reaches 0 model calls: yes

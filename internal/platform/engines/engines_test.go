@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/engines"
+	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 )
 

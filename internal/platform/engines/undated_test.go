@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/engines"
+	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
 )
 
 // Usage whose time Agentry can't read may be an earlier turn's, so with a

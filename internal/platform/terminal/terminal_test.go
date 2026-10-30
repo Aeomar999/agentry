@@ -12,8 +12,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
-	"gitlab.com/dev.chempa/agentry/internal/sessions/sessionstest"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions/sessionstest"
 )
 
 // watcher is one browser tab: it collects what the server sends.

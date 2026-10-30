@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/client"
-	"gitlab.com/dev.chempa/agentry/internal/tlsca"
+	"gitlab.com/dev.chempa/agentry/internal/platform/client"
+	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 )
 
 // connectable is a server with -https's front door whose Integrations page

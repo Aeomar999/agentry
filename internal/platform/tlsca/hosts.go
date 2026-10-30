@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/hostaddrs"
+	"gitlab.com/dev.chempa/agentry/internal/platform/hostaddrs"
 )
 
 // Hosts are the names and addresses this machine is reached on: its

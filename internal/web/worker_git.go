@@ -10,10 +10,10 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
-	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
 
 // A task's repo, the hub its work moves through (package worktrees), as

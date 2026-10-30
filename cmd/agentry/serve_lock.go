@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/launch"
+	"gitlab.com/dev.chempa/agentry/internal/platform/launch"
 )
 
 // lockFile is the file in the data folder that one serve at a time holds

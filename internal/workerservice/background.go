@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/procs"
+	"gitlab.com/dev.chempa/agentry/internal/platform/procs"
 )
 
 // background is a plain background process, for machines with neither

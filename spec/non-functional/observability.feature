@@ -133,8 +133,8 @@ Feature: Observability
     And both get the session's state saying 2 viewers: yes
     And what the session prints after that reaches both: yes
     But a task with no running session answers HTTP 404, with no terminal to watch
-    # not under test, checked by hand: the state, with who is in control and which viewer each is, comes first, then the screen, then the live output (internal/terminal/hub.go lines 129 and 130); the page's route is GET /api/tasks/{task}/terminal (internal/web/server.go line 181)
-    # README.md, Use it, A task; internal/terminal/terminal_test.go TestOnlyTheViewerInControlCanType and TestNoSessionNoWatch
+    # not under test, checked by hand: the state, with who is in control and which viewer each is, comes first, then the screen, then the live output (internal/platform/terminal/hub.go lines 129 and 130); the page's route is GET /api/tasks/{task}/terminal (internal/web/server.go line 181)
+    # README.md, Use it, A task; internal/platform/terminal/terminal_test.go TestOnlyTheViewerInControlCanType and TestNoSessionNoWatch
 
   @OBS-14 @test
   Scenario: Only the viewer in control types, and a viewer is let go when the session ends
@@ -144,7 +144,7 @@ Feature: Observability
     And the second's take is refused while the first holds control
     And the keys typed in control reach the session and show on every viewer's screen, both of them
     And when the session ends, the viewer waited on is disconnected within 5 seconds, to reconnect to the next turn's
-    # README.md, Use it, A task; internal/terminal/terminal_test.go TestOnlyTheViewerInControlCanType
+    # README.md, Use it, A task; internal/platform/terminal/terminal_test.go TestOnlyTheViewerInControlCanType
 
   @OBS-15 @test
   Scenario: A turn running on a worker streams its terminal to the server
@@ -171,7 +171,7 @@ Feature: Observability
     Then the call reaches the server at the url kept there, with the page token, answered with ok true: yes
     And without the CA from that file the same server is not trusted
     # not under test, checked by hand: agentry serve writes server.json at start, with the listen address too (cmd/agentry/serve.go line 334), and agentry statusline and agentry mcp, with no address or connection set, fall back to client.Local (cmd/agentry/mcp.go line 106)
-    # README.md, Use it from Claude Code; internal/client/client_test.go TestLocalReachesAnHTTPSServerWithTheCAItSaved
+    # README.md, Use it from Claude Code; internal/platform/client/client_test.go TestLocalReachesAnHTTPSServerWithTheCAItSaved
 
   @OBS-18 @test
   Scenario: Agentry's news for Claude Code is only what is new since it started
@@ -248,8 +248,8 @@ Feature: Observability
     And a turn's total is the 4 summed: 4 + 12,800 + 40,000 + 370 = 53,174
     And with no start stamp, as from an older worker, the whole transcript is counted
     And when every entry is older than the start, the tokens are 0 with the reason NoUsageThisTurn; a missing transcript gives TranscriptNotSaved; a Codex turn gives CodexTokensNotRead
-    # not under test, checked by hand: the reasons read "no usage in this turn's part of the transcript", "transcript not saved" (internal/engines/claude.go lines 28 and 26) and "Codex's token use isn't read" (internal/engines/codex.go line 69)
-    # README.md, Use it, Budgets and turn limits; internal/engines/tokens_test.go TestClaudeCountsOnlyThisTurnsTokens, TestClaudeCountsTheWholeTranscriptWithNoStart, TestClaudeSaysWhenNoneOfTheUsageIsThisTurns and TestCodexTokensStayUnread; internal/engines/engines_test.go for TranscriptNotSaved
+    # not under test, checked by hand: the reasons read "no usage in this turn's part of the transcript", "transcript not saved" (internal/platform/engines/claude.go lines 28 and 26) and "Codex's token use isn't read" (internal/platform/engines/codex.go line 69)
+    # README.md, Use it, Budgets and turn limits; internal/platform/engines/tokens_test.go TestClaudeCountsOnlyThisTurnsTokens, TestClaudeCountsTheWholeTranscriptWithNoStart, TestClaudeSaysWhenNoneOfTheUsageIsThisTurns and TestCodexTokensStayUnread; internal/platform/engines/engines_test.go for TranscriptNotSaved
 
   @OBS-26 @test
   Scenario: Each turn keeps its token split and its engine session from turn.ended

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/engines"
+	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
 )
 
 func TestOnlyParentSessionMarkersAreDropped(t *testing.T) {

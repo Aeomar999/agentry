@@ -17,8 +17,8 @@ import (
 	"github.com/aymanbagabas/go-pty"
 	"github.com/charmbracelet/x/vt"
 
-	"gitlab.com/dev.chempa/agentry/internal/engines"
-	"gitlab.com/dev.chempa/agentry/internal/procs"
+	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
+	"gitlab.com/dev.chempa/agentry/internal/platform/procs"
 )
 
 // The host is the process that keeps one session: Start runs this same

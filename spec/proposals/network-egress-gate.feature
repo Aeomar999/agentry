@@ -15,7 +15,7 @@ Feature: Network egress gate
 
   @PROP-78 @agent @test @to-policy
   Scenario: An agent's session is started with Agentry's proxy as its way out
-    # the old build plan, "agent traffic through an Agentry proxy"; a turn's environment is set by Agentry (internal/turns/turns.go environment, internal/sessions/session.go Env)
+    # the old build plan, "agent traffic through an Agentry proxy"; a turn's environment is set by Agentry (internal/turns/turns.go environment, internal/platform/sessions/session.go Env)
     # test: internal/turns/turns_test.go (to write)
     Given an agent whose profile has a network allowlist
     When its turn starts
@@ -67,7 +67,7 @@ Feature: Network egress gate
 
   @PROP-83 @agent @test @to-policy
   Scenario: Agentry's own server and the engine's service are always reachable
-    # the hook posts every call to the server (internal/hookcall); the engine reaches its own service to run at all (internal/engines)
+    # the hook posts every call to the server (internal/platform/hookcall); the engine reaches its own service to run at all (internal/platform/engines)
     # test: internal/egress/proxy_test.go (to write)
     Given an agent on Claude Code, and a profile whose allowlist is empty
     When its session starts and its hooks post to Agentry

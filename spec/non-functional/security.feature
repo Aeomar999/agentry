@@ -34,14 +34,14 @@ Feature: Security
     When the settings are written
     Then the PreToolUse gate's command, for Claude Code and for Codex, has "PreToolUse || exit 2", so the hook blocks the call on every failure
     And the Stop report's command has "Stop || true", so a report never blocks
-    # internal/engines/engines_test.go TestPrepareWritesHooksThatFailClosed
+    # internal/platform/engines/engines_test.go TestPrepareWritesHooksThatFailClosed
 
   @SEC-05 @test
   Scenario: The hook gives up before the engine would kill it
     Given the engine lets a gate hook run for 1800 seconds
     When a turn's environment is prepared
     Then the hook's own deadline is more than 0 and less than 1800 seconds, so the hook fails closed and never open
-    # internal/engines/engine.go line 62 GateTimeoutSeconds = 1800; the test uses the constant
+    # internal/platform/engines/engine.go line 62 GateTimeoutSeconds = 1800; the test uses the constant
     # internal/turns/turns_test.go TestTheHookGivesUpBeforeTheEngineKillsIt
 
   @SEC-06 @test
@@ -110,7 +110,7 @@ Feature: Security
 
   @SEC-68 @test
   Scenario: A downloaded repo archive stays in its folder and under its size limit
-    # internal/worktrees/repo_test.go TestADownloadedArchiveStaysInItsFolder and TestOnlyWebLinksAreArchives
+    # internal/platform/worktrees/repo_test.go TestADownloadedArchiveStaysInItsFolder and TestOnlyWebLinksAreArchives
     Given a repo named by a link to a .zip or a .tar
     When the archive holds an entry that climbs out of its folder with ../, git's own files or a link, or is bigger than the limit, or unpacks to more than it
     Then the entry out of its folder is refused, saying "outside its folder", nothing is written outside, and the failed download leaves nothing behind
@@ -564,9 +564,9 @@ Feature: Security
     When the CA and the server certificate are made
     Then the CA lasts 10 years and is name-constrained to this machine's names, loopback and the private ranges
     And the server certificate lasts 397 days and never past the CA's end
-    # not under test, checked by hand: the server certificate is kept only in memory (internal/tlsca/issuer.go line 24)
+    # not under test, checked by hand: the server certificate is kept only in memory (internal/platform/tlsca/issuer.go line 24)
     And it is renewed 30 days before its end, or when the machine's addresses change
-    # README.md, What the CA can sign; internal/tlsca/ca_test.go TestTheCAIsMadeOnceAndReused, TestTheCAIsNameConstrained; internal/tlsca/issue_test.go TestTheCertificateNamesEveryHostAndVerifies, TestALeafNeverOutlivesTheCA; internal/tlsca/issuer_test.go TestANewCertificateNearItsEnd, TestANewCertificateWhenTheAddressesChange
+    # README.md, What the CA can sign; internal/platform/tlsca/ca_test.go TestTheCAIsMadeOnceAndReused, TestTheCAIsNameConstrained; internal/platform/tlsca/issue_test.go TestTheCertificateNamesEveryHostAndVerifies, TestALeafNeverOutlivesTheCA; internal/platform/tlsca/issuer_test.go TestANewCertificateNearItsEnd, TestANewCertificateWhenTheAddressesChange
 
   @SEC-63 @test
   Scenario: The CA's key never leaves the server
@@ -575,7 +575,7 @@ Feature: Security
     Then the trust page and the certificate are shown
     And the key is never served
     And the key's file mode is 0600 in a 0700 folder
-    # README.md, Trust a device once; cmd/agentry/trust_test.go TestTheTrustPageIsServedToAnyone; cmd/agentry/https_test.go TestTheCACertificateIsServedToAnyone, TestTheCAKeyIsNeverServed; internal/tlsca/ca_test.go TestTheCAIsMadeOnceAndReused
+    # README.md, Trust a device once; cmd/agentry/trust_test.go TestTheTrustPageIsServedToAnyone; cmd/agentry/https_test.go TestTheCACertificateIsServedToAnyone, TestTheCAKeyIsNeverServed; internal/platform/tlsca/ca_test.go TestTheCAIsMadeOnceAndReused
 
   @SEC-64 @test
   Scenario: Plain HTTP from another device is sent to https
@@ -590,7 +590,7 @@ Feature: Security
     Given Agentry prepares an engine's hook settings for a task
     When the user opens the written settings file and finds the PreToolUse hook
     Then its timeout is exactly 1800 seconds
-    # internal/engines/engine.go GateTimeoutSeconds, written by internal/engines/hook_config.go gateHook; no test asserts the number
+    # internal/platform/engines/engine.go GateTimeoutSeconds, written by internal/platform/engines/hook_config.go gateHook; no test asserts the number
 
   @SEC-66 @manual
   Scenario: The hook's deadline is 10 seconds shorter than the engine's timeout
@@ -606,7 +606,7 @@ Feature: Security
     Then the token is hidden in the lines the app writes to serve.log, in the app's log and the browser command's output on stderr, and on the start page, plain or URL-encoded: yes
     And a token written across two writes is hidden too: yes
     And the scripts the app runs in the page hold no token
-    # internal/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne, TestRedactHidesTheToken and TestRedactorHidesATokenSplitAcrossWrites; cmd/agentry-desktop/desktop_test.go TestLogHidesTheToken, TestBrowserOutputHidesTheToken, TestStartReplyHidesTheTokenInAnError, TestStartPageAsksTheAppToStartAgentry and TestScriptsHoldNoToken; docs/decisions.md, 2026-10-26
+    # internal/platform/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne, TestRedactHidesTheToken and TestRedactorHidesATokenSplitAcrossWrites; cmd/agentry-desktop/desktop_test.go TestLogHidesTheToken, TestBrowserOutputHidesTheToken, TestStartReplyHidesTheTokenInAnError, TestStartPageAsksTheAppToStartAgentry and TestScriptsHoldNoToken; docs/decisions.md, 2026-10-26
 
   @SEC-70 @manual
   Scenario: The desktop app's window title never holds the token
@@ -620,7 +620,7 @@ Feature: Security
     Given no Agentry running, and the desktop app opened
     When it starts agentry serve
     Then the server listens on 127.0.0.1 only, over plain http, never on every interface
-    # internal/launch/launch_test.go TestEnsureListensOnThisComputerByDefault; cmd/agentry-desktop/desktop_test.go TestLaunchOptions; docs/decisions.md, 2026-10-26
+    # internal/platform/launch/launch_test.go TestEnsureListensOnThisComputerByDefault; cmd/agentry-desktop/desktop_test.go TestLaunchOptions; docs/decisions.md, 2026-10-26
 
   @SEC-72 @test
   Scenario: A page from another site that gets into the desktop window is sent back to Agentry

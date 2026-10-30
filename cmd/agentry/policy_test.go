@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
-	"gitlab.com/dev.chempa/agentry/internal/tlsca"
 )
 
 func TestEachPolicyVersionIsRecordedWithItsText(t *testing.T) {

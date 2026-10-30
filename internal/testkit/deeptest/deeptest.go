@@ -11,7 +11,7 @@ import (
 	"time"
 	"unsafe"
 
-	"gitlab.com/dev.chempa/agentry/internal/exactgob"
+	"gitlab.com/dev.chempa/agentry/internal/platform/exactgob"
 )
 
 // Fill gives every field, exported or not, a value: every pointer, map and

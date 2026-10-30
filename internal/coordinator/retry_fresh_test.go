@@ -9,8 +9,8 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/hookcall"
-	"gitlab.com/dev.chempa/agentry/internal/sessions/sessionstest"
+	"gitlab.com/dev.chempa/agentry/internal/platform/hookcall"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions/sessionstest"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/turns"
 	watchdogs "gitlab.com/dev.chempa/agentry/internal/watchdog"

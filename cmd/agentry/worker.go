@@ -19,8 +19,8 @@ import (
 	"syscall"
 
 	"gitlab.com/dev.chempa/agentry/internal/machines"
-	"gitlab.com/dev.chempa/agentry/internal/pinned"
-	"gitlab.com/dev.chempa/agentry/internal/procs"
+	"gitlab.com/dev.chempa/agentry/internal/platform/pinned"
+	"gitlab.com/dev.chempa/agentry/internal/platform/procs"
 	"gitlab.com/dev.chempa/agentry/internal/workerlink"
 )
 

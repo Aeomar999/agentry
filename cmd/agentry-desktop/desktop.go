@@ -30,8 +30,8 @@ import (
 
 	"github.com/pkg/browser"
 
-	"gitlab.com/dev.chempa/agentry/internal/launch"
-	"gitlab.com/dev.chempa/agentry/internal/procs"
+	"gitlab.com/dev.chempa/agentry/internal/platform/launch"
+	"gitlab.com/dev.chempa/agentry/internal/platform/procs"
 )
 
 // binaryNextTo is the agentry binary in the folder of exe, the app's own

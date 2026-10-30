@@ -118,7 +118,7 @@ Feature: Review from the command line
 
   @PROP-21 @test @to-limits
   Scenario: A file over 2 MB is named in the diff, not printed
-    # the Workspace shows "Too big to show" for a file over 2 MB (@TREE-07, internal/workspace/workspace.go)
+    # the Workspace shows "Too big to show" for a file over 2 MB (@TREE-07, internal/platform/workspace/workspace.go)
     # test: cmd/agentry/review_test.go (to write)
     Given a worktree with a changed text file of 3 MB and a changed image
     When the user runs agentry review on the task

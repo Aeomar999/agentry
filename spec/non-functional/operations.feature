@@ -101,7 +101,7 @@ Feature: Operations
   Scenario: Stop Agentry stops the server that Start Agentry started
     # tools/packaging/files/stop-unix.sh and stop-windows.cmd run agentry stop; cmd/agentry/open.go runStopServer
     # cmd/agentry/open.go pidFile = serve.pid; the wait is 50 checks of 100 ms = 5 seconds
-    # internal/procs/procs_unix.go Terminate sends SIGTERM; procs_windows.go Terminate kills the process
+    # internal/platform/procs/procs_unix.go Terminate sends SIGTERM; procs_windows.go Terminate kills the process
     # Steps:
     # 1. Start Agentry.
     # 2. Run Stop Agentry (Stop Agentry.command, Stop Agentry.cmd or ./stop-agentry.sh).
@@ -135,9 +135,9 @@ Feature: Operations
     # cmd/agentry/open.go -repo default: filepath.Join(home, "Agentry"), made at the first start
     # cmd/agentry/serve.go: agentry.db, state.snapshot, files, repos, worktrees, ui-token, hook-token, desk-token, helper-token
     # cmd/agentry/policy.go policyFile = policy.toml, settingsFile = features.toml, which is read and not written (internal/settingsfile/settingsfile.go Open, gone); internal/webpush/webpush.go File = push.json
-    # internal/tlsca/ca.go Folder = tls; internal/client/client.go ServerFile = server.json
+    # internal/platform/tlsca/ca.go Folder = tls; internal/platform/client/client.go ServerFile = server.json
     # cmd/agentry/serve_lock.go serve.lock; cmd/agentry/open.go serve.log and serve.pid
-    # internal/sessions/proc_unix.go sessionsDir: the temporary folder, agentry-<uid>; proc_windows.go: the user cache folder, agentry\sessions
+    # internal/platform/sessions/proc_unix.go sessionsDir: the temporary folder, agentry-<uid>; proc_windows.go: the user cache folder, agentry\sessions
     # cmd/agentry/worker.go -dir default: filepath.Join(home, ".agentry-worker")
     # Steps:
     # 1. Start Agentry and make one task.
@@ -224,30 +224,30 @@ Feature: Operations
 
   @OPS-13 @test
   Scenario: The CA, made on first use, signs only for this machine and private addresses
-    # internal/tlsca/ca.go Folder = tls, caLifetime = 10 years, the key is 0600 on Mac and Linux, privateRanges
+    # internal/platform/tlsca/ca.go Folder = tls, caLifetime = 10 years, the key is 0600 on Mac and Linux, privateRanges
     Given a data folder with no tls folder
     When the CA is opened in it, twice
     Then tls/ca.key and the CA certificate are made once and reused at the next start: yes
     And the CA lasts 10 years
     And its name constraints are critical and permit localhost, this machine's hostname, hostname.local, loopback and the private ranges: yes
     And a leaf it signs for a name on the public web verifies: no
-    # not under test, checked by hand: serve opens the CA with -https (cmd/agentry/serve.go line 214); the ranges are 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 and fd00::/8 (internal/tlsca/ca.go lines 73 to 78), which the test compares with that list itself; leaves for <a 192.168 address>, <a 100.64 address>, <an fd00::/8 address> and loopback verify
-    # README.md, What the CA can sign; internal/tlsca/ca_test.go TestTheCAIsMadeOnceAndReused, TestTheCAIsNameConstrained and TestALeafForThePublicWebIsRefused; the leaves: internal/tlsca/issue_test.go TestTheCertificateNamesEveryHostAndVerifies
+    # not under test, checked by hand: serve opens the CA with -https (cmd/agentry/serve.go line 214); the ranges are 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 and fd00::/8 (internal/platform/tlsca/ca.go lines 73 to 78), which the test compares with that list itself; leaves for <a 192.168 address>, <a 100.64 address>, <an fd00::/8 address> and loopback verify
+    # README.md, What the CA can sign; internal/platform/tlsca/ca_test.go TestTheCAIsMadeOnceAndReused, TestTheCAIsNameConstrained and TestALeafForThePublicWebIsRefused; the leaves: internal/platform/tlsca/issue_test.go TestTheCertificateNamesEveryHostAndVerifies
 
   @OPS-36 @test
   Scenario: A CA key that others may read, a key that is a link, or a half-made CA is refused
-    # internal/tlsca/ca.go readKey: the key must be a regular file that only its owner may read (0600) on Mac and Linux; open: a key or a certificate without the other is an incomplete CA
-    # internal/tlsca/ca_test.go TestAKeyOthersMayReadIsRefused, TestAKeyThatIsALinkIsRefused, TestAHalfMadeOrMismatchedCAIsRefused
+    # internal/platform/tlsca/ca.go readKey: the key must be a regular file that only its owner may read (0600) on Mac and Linux; open: a key or a certificate without the other is an incomplete CA
+    # internal/platform/tlsca/ca_test.go TestAKeyOthersMayReadIsRefused, TestAKeyThatIsALinkIsRefused, TestAHalfMadeOrMismatchedCAIsRefused
     Given a tls folder holding a key that others may read, a key that is a link, or a key whose certificate is missing
     When the CA is opened
     Then the CA is refused, with what is wrong with it named: yes
-    # not under test, checked by hand: serve opens the CA with -https (cmd/agentry/serve.go line 214), and a certificate whose key is missing is refused alike (internal/tlsca/ca.go line 99)
-    # README.md, What the CA can sign; internal/tlsca/ca_test.go TestAKeyOthersMayReadIsRefused, TestAKeyThatIsALinkIsRefused and TestAHalfMadeOrMismatchedCAIsRefused
+    # not under test, checked by hand: serve opens the CA with -https (cmd/agentry/serve.go line 214), and a certificate whose key is missing is refused alike (internal/platform/tlsca/ca.go line 99)
+    # README.md, What the CA can sign; internal/platform/tlsca/ca_test.go TestAKeyOthersMayReadIsRefused, TestAKeyThatIsALinkIsRefused and TestAHalfMadeOrMismatchedCAIsRefused
 
   @OPS-14 @test
   Scenario: The server certificate is issued in memory and renewed by itself
-    # internal/tlsca/issue.go leafLifetime = 397 days, always localhost, 127.0.0.1, ::1; hosts.go adds the hostname, hostname.local and every network address
-    # internal/tlsca/issuer.go renewBefore = 30 days, hostsFresh = 30 seconds
+    # internal/platform/tlsca/issue.go leafLifetime = 397 days, always localhost, 127.0.0.1, ::1; hosts.go adds the hostname, hostname.local and every network address
+    # internal/platform/tlsca/issuer.go renewBefore = 30 days, hostsFresh = 30 seconds
     Given the certificate issuer a server with -https hands its handshakes
     Then every handshake while nothing changes gets the same certificate: yes
     And the certificate lasts 397 days and never past the CA's end: yes
@@ -258,7 +258,7 @@ Feature: Operations
     Then a new one is issued: yes
     And a client that trusts the CA connects: yes
     # not under test, checked by hand: serve's TLS config asks the issuer for each handshake's certificate (cmd/agentry/https.go line 20)
-    # README.md, HTTPS and installing the app on other devices; internal/tlsca/issuer_test.go TestTheSameCertificateWhileNothingChanges, TestANewCertificateWhenTheAddressesChange, TestTheHostsAreAskedForAtMostEvery30Seconds, TestANewCertificateNearItsEnd and TestAClientTrustingTheCAConnects; the 397 days: internal/tlsca/issue_test.go TestTheCertificateNamesEveryHostAndVerifies and TestALeafNeverOutlivesTheCA
+    # README.md, HTTPS and installing the app on other devices; internal/platform/tlsca/issuer_test.go TestTheSameCertificateWhileNothingChanges, TestANewCertificateWhenTheAddressesChange, TestTheHostsAreAskedForAtMostEvery30Seconds, TestANewCertificateNearItsEnd and TestAClientTrustingTheCAConnects; the 397 days: internal/platform/tlsca/issue_test.go TestTheCertificateNamesEveryHostAndVerifies and TestALeafNeverOutlivesTheCA
 
   @OPS-15 @test
   Scenario: One port serves https and plain http, and hands out the CA to any device that asks
@@ -290,7 +290,7 @@ Feature: Operations
 
   @OPS-17 @test
   Scenario: Regenerating the CA means every device, worker and connected Claude Code trusts again
-    # cmd/agentry/ca.go -regenerate; internal/tlsca/ca.go Regenerate
+    # cmd/agentry/ca.go -regenerate; internal/platform/tlsca/ca.go Regenerate
     Given a server stopped, with its data folder holding a CA
     When agentry ca -regenerate runs for that folder
     Then the CA's fingerprint differs from before: yes
@@ -554,12 +554,12 @@ Feature: Operations
 
   @OPS-41 @test
   Scenario: A test never starts, finds or stops the sessions of the Agentry running on the machine
-    # internal/sessions/session_test.go TestATestCantUseTheLiveSessions
+    # internal/platform/sessions/session_test.go TestATestCantUseTheLiveSessions
     Given go test running with no sessions folder of its own
     When a test starts a session, or attaches to one
     Then the start is refused, saying it is the live sessions folder, and the attach is refused: yes
     And nothing is written to the live sessions folder
-    # not under test, checked by hand: sessionstest gives each test package its own folder and fails a run that leaves a session or process behind (internal/sessions/sessionstest/sessionstest.go)
+    # not under test, checked by hand: sessionstest gives each test package its own folder and fails a run that leaves a session or process behind (internal/platform/sessions/sessionstest/sessionstest.go)
 
   # How a release is packaged
 
@@ -599,7 +599,7 @@ Feature: Operations
     # tools/packaging/desktop.go runDesktop: release/agentry-desktop-<version>-linux-amd64.tar.gz and release/agentry-desktop-<version>-windows-amd64.zip, the version from git describe as in make package
     # tools/packaging/desktop.go packLinuxDesktop and packWindowsDesktop: the folder Agentry, with the app beside the server, where cmd/agentry-desktop/desktop.go binaryNextTo looks; README.txt from tools/packaging/files/desktop-README.txt
     # tools/packaging/desktop.go buildDesktop: the server as in make package (buildAgentry, CGO_ENABLED=0); the Windows app with -H=windowsgui and the icon in cmd/agentry-desktop/rsrc_windows_amd64.syso
-    # internal/launch/launch.go Start calls procs.NoConsole: on Windows CREATE_NO_WINDOW (internal/procs/procs_windows.go), nothing elsewhere
+    # internal/platform/launch/launch.go Start calls procs.NoConsole: on Windows CREATE_NO_WINDOW (internal/platform/procs/procs_windows.go), nothing elsewhere
     # Steps:
     # 1. On a clean checkout of the tagged commit, on Linux with libwebkit2gtk-4.1-dev and libgtk-3-dev, run make desktop.
     # 2. List release/, run tar tvzf on the .tar.gz and unzip -l on the zip.

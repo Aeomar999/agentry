@@ -2,7 +2,7 @@ Feature: Workers
   A machine joined to Agentry so that agents can run on it.
   # Sources: cmd/agentry/worker.go, cmd/agentry/worker_manage.go,
   # internal/workers, internal/workerlink, internal/workerservice,
-  # internal/machines, internal/turns, internal/pinned, internal/web/workers_api.go
+  # internal/machines, internal/turns, internal/platform/pinned, internal/web/workers_api.go
   # and their tests.
 
   # ---- Joining ---------------------------------------------------------------
@@ -325,10 +325,10 @@ Feature: Workers
     Then the connection is refused: yes
     When the kept CA cannot be read
     Then even a server that CA vouched for is refused: yes
-    # not under test, checked by hand: the system's store is used instead: no (internal/pinned/pinned.go line 23); the test's server is one the system's store refuses too
+    # not under test, checked by hand: the system's store is used instead: no (internal/platform/pinned/pinned.go line 23); the test's server is one the system's store refuses too
     And a worker with 0 CA kept uses the plain defaults, as for a server over plain http
     And a certificate issued again by the same CA keeps working: yes
-    # internal/pinned/pinned_test.go TestAPinnedClientReachesTheServerItsCAVouchesFor, TestAPinnedClientRefusesAnotherCAEvenOneTheSystemTrusts,
+    # internal/platform/pinned/pinned_test.go TestAPinnedClientReachesTheServerItsCAVouchesFor, TestAPinnedClientRefusesAnotherCAEvenOneTheSystemTrusts,
     # TestAPinnedClientRefusesEverythingWhenItsCAIsUnreadable, TestWithNoCAItIsThePlainDefault, TestTheClientKeepsWorkingWhenTheLeafIsIssuedAgain
 
   @MACHINE-24 @worker @manual

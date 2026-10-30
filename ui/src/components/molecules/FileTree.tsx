@@ -7,7 +7,7 @@ export interface WorkspaceFile {
   change: Change;
 }
 
-// A file's git status, as an editor shows it (internal/workspace): modified,
+// A file's git status, as an editor shows it (internal/platform/workspace): modified,
 // added, deleted, untracked, or "" as committed.
 export type Change = "" | "M" | "A" | "D" | "U";
 

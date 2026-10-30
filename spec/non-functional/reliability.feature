@@ -199,20 +199,20 @@ Feature: Reliability
 
   @REL-17 @test
   Scenario: An agent's session lives in its own host process and keeps its last screen when the agent dies
-    # internal/sessions/host.go: the host runs the command in a pty and outlives the server that started it
+    # internal/platform/sessions/host.go: the host runs the command in a pty and outlives the server that started it
     Given a session started with the task's environment, 120 columns by 36 rows
     When the program in it is killed with Ctrl-C
     Then the session still exists: yes
     And its screen still holds the program's last output: yes
     And the session reports the program as running: no
     And a viewer attached to it is told the program died within 5 seconds: yes
-    # internal/sessions/session_test.go TestASessionRunsWithItsEnvironmentAndShowsACrash; the size: TestASessionResizesAndSnapshots; the host outlives the process that started it: TestAHostEndsWithTheTestsThatStartedIt
+    # internal/platform/sessions/session_test.go TestASessionRunsWithItsEnvironmentAndShowsACrash; the size: TestASessionResizesAndSnapshots; the host outlives the process that started it: TestAHostEndsWithTheTestsThatStartedIt
 
   @REL-18 @manual
   Scenario: Stop Agentry stops the server and the running sessions carry on
     # cmd/agentry/open.go runStopServer: procs.Terminate, then up to 50 waits of 100 ms = 5 seconds
-    # internal/procs/procs_unix.go Terminate sends SIGTERM; internal/procs/procs_windows.go Terminate kills the process, since Windows has no polite signal
-    # internal/sessions/session.go Start: each session's host is detached from the server
+    # internal/platform/procs/procs_unix.go Terminate sends SIGTERM; internal/platform/procs/procs_windows.go Terminate kills the process, since Windows has no polite signal
+    # internal/platform/sessions/session.go Start: each session's host is detached from the server
     # Steps:
     # 1. Start Agentry and make a task, so an agent's session is running.
     # 2. Run Stop Agentry (agentry stop).
@@ -540,8 +540,8 @@ Feature: Reliability
 
   @REL-38 @test
   Scenario: The hook's deadline is under the engine's own timeout, so the gate fails closed
-    # internal/engines/engine.go GateTimeoutSeconds = 1800; internal/turns/turns.go environment: deadline = 1800 - 10 = 1790 seconds
-    # internal/hookcall/hookcall.go EnvDeadline = AGENTRY_HOOK_DEADLINE
+    # internal/platform/engines/engine.go GateTimeoutSeconds = 1800; internal/turns/turns.go environment: deadline = 1800 - 10 = 1790 seconds
+    # internal/platform/hookcall/hookcall.go EnvDeadline = AGENTRY_HOOK_DEADLINE
     Given a turn's environment as the runner builds it
     Then AGENTRY_HOOK_DEADLINE is 1790 seconds, which is 10 seconds under the engine's 1800 second hook timeout: yes
     # internal/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt (AGENTRY_HOOK_DEADLINE=29m50s), TestTheHookGivesUpBeforeTheEngineKillsIt

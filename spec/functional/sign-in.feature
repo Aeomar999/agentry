@@ -1,7 +1,7 @@
 Feature: Signing in
   Signing devices in with one-time codes, trusting Agentry's CA, installing the app, and the desktop app.
   # Sources: cmd/agentry/trust.go, cmd/agentry-desktop, internal/web/signin.go,
-  # internal/tlsca, internal/launch, tools/packaging/desktop.go, tools/packaging/files,
+  # internal/platform/tlsca, internal/platform/launch, tools/packaging/desktop.go, tools/packaging/files,
   # ui/src/pages/SignInPage.tsx,
   # ui/src/components/organisms/SignInDeviceDialog.tsx, ui/src/lib/signin.ts,
   # ui/src/lib/trust.ts,
@@ -120,7 +120,7 @@ Feature: Signing in
 
   @SIGNIN-08 @user @test
   Scenario: The desktop app starts Agentry when none is running
-    # internal/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne and TestEnsureListensOnThisComputerByDefault
+    # internal/platform/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne and TestEnsureListensOnThisComputerByDefault
     # the data folder, default repo, binary, host and port: cmd/agentry-desktop/desktop_test.go TestLaunchOptions and TestTheAgentryBinaryIsNextToTheApp
     # started only when the start page asks: TestTheAppStartsAgentryWhenTheStartPageAsks, TestStopBeforeStartStartsNothing, TestStartReplySaysTheAppIsQuitting, TestStartPageAsksTheAppToStartAgentry and TestStartPageGoesWhereTheAppSays
     # docs/decisions.md, 2026-10-26
@@ -134,7 +134,7 @@ Feature: Signing in
 
   @SIGNIN-09 @user @test
   Scenario: The desktop app uses an Agentry that is already running
-    # internal/launch/launch_test.go TestEnsureReusesARunningServerAndLeavesItRunning and TestEnsureUsesAServerAnotherLaunchStarted
+    # internal/platform/launch/launch_test.go TestEnsureReusesARunningServerAndLeavesItRunning and TestEnsureUsesAServerAnotherLaunchStarted
     # docs/decisions.md, 2026-10-26
     Given Agentry already answering from the data folder, started by Start Agentry
     When the user opens the desktop app
@@ -144,7 +144,7 @@ Feature: Signing in
 
   @SIGNIN-10 @user @test
   Scenario: Quitting the desktop app stops only a server it started
-    # internal/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne, TestEnsureReusesARunningServerAndLeavesItRunning and TestStopDoesNotWaitForAProcessHoldingTheOutput
+    # internal/platform/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne, TestEnsureReusesARunningServerAndLeavesItRunning and TestStopDoesNotWaitForAProcessHoldingTheOutput
     # docs/decisions.md, 2026-10-26
     Given the desktop app started its own server
     When the user quits the app
@@ -157,7 +157,7 @@ Feature: Signing in
 
   @SIGNIN-11 @user @test
   Scenario: Links that leave Agentry open in the system browser, not the window
-    # cmd/agentry-desktop/desktop_test.go TestPageScriptSendsOutsideLinksToTheApp, TestLinksFollowTheRoute, TestOpensItselfWhereWailsRefuses and TestOpensItselfOpensTheLinkItChecked; internal/launch/launch_test.go TestRoute
+    # cmd/agentry-desktop/desktop_test.go TestPageScriptSendsOutsideLinksToTheApp, TestLinksFollowTheRoute, TestOpensItselfWhereWailsRefuses and TestOpensItselfOpensTheLinkItChecked; internal/platform/launch/launch_test.go TestRoute
     # docs/decisions.md, 2026-10-26
     Given Agentry's page in the desktop app's window
     When the user clicks a link to another site, such as GitHub or the docs, or a mail link, with the left or middle button, or the page opens one with window.open
@@ -197,7 +197,7 @@ Feature: Signing in
   @SIGNIN-14 @user @manual
   Scenario: Closing the desktop app's window quits it, and a second launch shows the first
     # cmd/agentry-desktop/main.go options, SingleInstanceLock, OnShutdown, quitOnSignal, exitCode and loaded; cmd/agentry-desktop/desktop.go agentry.stop and markQuit
-    # a quit before or during a start: internal/launch/launch_test.go TestEnsureStartsNothingAfterQuit and TestQuitStopsTheServerEnsureWaitsFor; cmd/agentry-desktop/desktop_test.go TestAQuitClosesLaunchQuitOnce and TestStartReplyAfterAQuitSaysTheAppIsQuitting
+    # a quit before or during a start: internal/platform/launch/launch_test.go TestEnsureStartsNothingAfterQuit and TestQuitStopsTheServerEnsureWaitsFor; cmd/agentry-desktop/desktop_test.go TestAQuitClosesLaunchQuitOnce and TestStartReplyAfterAQuitSaysTheAppIsQuitting
     # docs/decisions.md, 2026-10-26
     Given the desktop app open, on Linux, Windows or a Mac
     When the user closes its window
@@ -215,8 +215,8 @@ Feature: Signing in
 
   @SIGNIN-15 @user @test
   Scenario: The server the Mac desktop app starts finds claude where the user's shell does
-    # cmd/agentry-desktop/desktop.go serverPath, shellPath and agentry.start, set in cmd/agentry-desktop/main.go run; internal/procs KillGroupOnCancel; internal/launch Options.Path, Start and DefaultRepo
-    # cmd/agentry-desktop/desktop_test.go TestServerPathOnAMacIsTheShells, TestServerPathElsewhereIsTheAppsOwn, TestServerPathKeepsTheAppsOwnWhenTheShellGivesNone, TestShellPathGivesUpOnAShellThatHangs and TestServerPathIsAskedOnlyWhenTheAppStartsAServer; internal/launch/launch_test.go TestEnsureGivesTheServerAndGitThePath and TestLookPathInSkipsEntriesThatArentAbsolute; internal/procs/procs_unix_test.go TestKillGroupOnCancelStartsANewSession
+    # cmd/agentry-desktop/desktop.go serverPath, shellPath and agentry.start, set in cmd/agentry-desktop/main.go run; internal/platform/procs KillGroupOnCancel; internal/platform/launch Options.Path, Start and DefaultRepo
+    # cmd/agentry-desktop/desktop_test.go TestServerPathOnAMacIsTheShells, TestServerPathElsewhereIsTheAppsOwn, TestServerPathKeepsTheAppsOwnWhenTheShellGivesNone, TestShellPathGivesUpOnAShellThatHangs and TestServerPathIsAskedOnlyWhenTheAppStartsAServer; internal/platform/launch/launch_test.go TestEnsureGivesTheServerAndGitThePath and TestLookPathInSkipsEntriesThatArentAbsolute; internal/platform/procs/procs_unix_test.go TestKillGroupOnCancelStartsANewSession
     Given the desktop app opened from Finder or the Dock on a Mac, with launchd's PATH /usr/bin:/bin:/usr/sbin:/sbin, and claude in ~/.local/bin or /opt/homebrew/bin, which the user's shell files add to PATH
     When the app starts its own server
     Then the server and the git the app runs get the PATH the user's login shell sets up, so agents find claude: yes
@@ -284,7 +284,7 @@ Feature: Signing in
 
   @SIGNIN-19 @user @test
   Scenario: When the desktop app's server doesn't start, the window says why and shows its log
-    # internal/launch/launch_test.go TestEnsureSaysWhatTheServerThatDidNotStartLogged, TestNotStartedWithoutLines and TestEnsureSaysWhenTheServerDidNotStart
+    # internal/platform/launch/launch_test.go TestEnsureSaysWhatTheServerThatDidNotStartLogged, TestNotStartedWithoutLines and TestEnsureSaysWhenTheServerDidNotStart
     # cmd/agentry-desktop/desktop_test.go TestStartReplyCarriesTheServersLog, TestStartPageShowsWhatTheServerLogged, TestStartPageShowsTextOnly and TestLaunchOptions
     # where serve.log is: README.md, Desktop app; tools/packaging/desktop_test.go TestDesktopNotesFillEveryBlankForTheirSystem
     Given the desktop app starts its own server, its output in serve.log in the data folder, which holds lines from older runs
@@ -299,7 +299,7 @@ Feature: Signing in
 
   @SIGNIN-20 @user @test
   Scenario: When Agentry goes away, the desktop app's window says so and offers Try again
-    # internal/launch/launch_test.go TestExitedOfAServerFoundRunning, TestExitedOfAServerThisProgramStarted and TestNotStartedWithoutLines
+    # internal/platform/launch/launch_test.go TestExitedOfAServerFoundRunning, TestExitedOfAServerThisProgramStarted and TestNotStartedWithoutLines
     # cmd/agentry-desktop/desktop_test.go TestTheAppNoticesTheServerWentAway, TestStartPageSaysTheServerWentAway and TestStartPageTryAgain
     # sent back to the start page: cmd/agentry-desktop/main.go backToStart
     Given Agentry's page in the desktop app's window, from a server the app started

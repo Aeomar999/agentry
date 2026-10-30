@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/pinned"
+	"gitlab.com/dev.chempa/agentry/internal/platform/pinned"
 )
 
 // ServerFile is where `agentry serve` writes how to reach it, in its data

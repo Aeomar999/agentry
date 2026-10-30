@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
-	"gitlab.com/dev.chempa/agentry/internal/schema"
+	"gitlab.com/dev.chempa/agentry/internal/platform/client"
+	"gitlab.com/dev.chempa/agentry/internal/platform/schema"
 )
 
 // votes is an extension with one tool and a line in the instructions. The

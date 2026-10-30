@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/tlsca"
+	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 	"gitlab.com/dev.chempa/agentry/internal/workerlink"
 )
 

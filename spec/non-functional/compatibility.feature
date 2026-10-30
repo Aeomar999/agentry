@@ -136,7 +136,7 @@ Feature: Compatibility
     Then the adapters' names and the rules' known engines are the same list, and adapters named claude and codex are found: yes
     And an agent with another engine is refused by the rules: yes
     # not under test, checked by hand: the list is claude and codex alone (internal/rules/agent_rules.go line 15), and the refusal says "unknown engine" (line 92)
-    # README.md, What you need (Codex works too); internal/engines/engines_test.go TestTheRulesKnowExactlyTheEnginesThereAreAdaptersFor and TestParseHookGivesTheSameSignalsOnBothEngines; internal/rules/rules_test.go TestAgentRules
+    # README.md, What you need (Codex works too); internal/platform/engines/engines_test.go TestTheRulesKnowExactlyTheEnginesThereAreAdaptersFor and TestParseHookGivesTheSameSignalsOnBothEngines; internal/rules/rules_test.go TestAgentRules
 
   @COMPAT-13 @test
   Scenario: Claude Code is started in never-ask mode with Agentry's own settings file
@@ -145,7 +145,7 @@ Feature: Compatibility
     Then a resumed session's command is exactly claude --model <model> --resume <session> --settings <worktree>/.agentry/claude-settings.json --permission-mode bypassPermissions <prompt>
     And a fresh session's command holds --model <model> and --permission-mode bypassPermissions, resumes nothing and ends with the prompt: yes
     And the settings file is valid JSON holding the hooks, tui "default", spinnerTipsEnabled false and the env CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1
-    # README.md, What you need; internal/engines/engines_test.go TestLaunchIsNeverAskWithThePrompt, TestLaunchResumesTheSession, TestPrepareWritesHooksThatFailClosed and TestClaudeSettingsKeepItUnattended
+    # README.md, What you need; internal/platform/engines/engines_test.go TestLaunchIsNeverAskWithThePrompt, TestLaunchResumesTheSession, TestPrepareWritesHooksThatFailClosed and TestClaudeSettingsKeepItUnattended
 
   @COMPAT-14 @test
   Scenario: Codex is started in never-ask mode with its hooks in the worktree
@@ -155,8 +155,8 @@ Feature: Compatibility
     And a fresh session's command holds --model <model> and -a never, resumes nothing and ends with the prompt: yes
     And the hooks are written to <worktree>/.codex/hooks.json as valid JSON, with the gate hook ending in "|| exit 2" and the report hook in "|| true"
     And a Codex turn's tokens are not counted, with CodexTokensNotRead as the reason: yes
-    # not under test, checked by hand: the reason reads "Codex's token use isn't read" (internal/engines/codex.go line 69); the test compares with the constant itself
-    # README.md, What you need (Codex works too); registering Codex hook trust instead of --dangerously-bypass-hook-trust is not built; internal/engines/engines_test.go TestLaunchIsNeverAskWithThePrompt, TestLaunchResumesTheSession and TestPrepareWritesHooksThatFailClosed; internal/engines/tokens_test.go TestCodexTokensStayUnread
+    # not under test, checked by hand: the reason reads "Codex's token use isn't read" (internal/platform/engines/codex.go line 69); the test compares with the constant itself
+    # README.md, What you need (Codex works too); registering Codex hook trust instead of --dangerously-bypass-hook-trust is not built; internal/platform/engines/engines_test.go TestLaunchIsNeverAskWithThePrompt, TestLaunchResumesTheSession and TestPrepareWritesHooksThatFailClosed; internal/platform/engines/tokens_test.go TestCodexTokensStayUnread
 
   @COMPAT-15 @test
   Scenario: Both engines give Agentry's signals from their hooks
@@ -164,7 +164,7 @@ Feature: Compatibility
     When each is parsed by its engine's adapter
     Then each payload gives exactly the signal expected of it: 6 kinds from Claude Code (session started, prompt received, action requested, action finished, waiting, turn ended) and 4 from Codex (session started, prompt received, action requested, turn ended)
     And in both engines' configurations PreToolUse is a gate whose command ends in "|| exit 2", and Stop a report whose command ends in "|| true"
-    # docs/design/proofs.md, 07 engine-adapters; internal/engines/engines_test.go TestParseHookGivesTheSameSignalsOnBothEngines and TestPrepareWritesHooksThatFailClosed
+    # docs/design/proofs.md, 07 engine-adapters; internal/platform/engines/engines_test.go TestParseHookGivesTheSameSignalsOnBothEngines and TestPrepareWritesHooksThatFailClosed
 
   @COMPAT-16 @test
   Scenario: Claude Code's trust question is answered before the session, in both path forms on Windows
@@ -173,8 +173,8 @@ Feature: Compatibility
     Then the worktree is marked hasTrustDialogAccepted in the config: yes
     And the other project and the setting are kept, and the file's mode stays 0600
     And on Windows a folder has 2 keys, the second with forward slashes, since Claude Code writes either; elsewhere exactly 1
-    # not under test, checked by hand: with no CLAUDE_CONFIG_DIR the file is ~/.claude.json (internal/engines/claude_trust.go line 23); the folder is marked under each key (line 48), so the session never stops at "Do you trust this folder?"; CI runs the Unix half of the key test only
-    # internal/engines/engines_test.go TestPrepareTrustsTheWorktree; internal/engines/claude_test.go TestAWindowsFolderIsTrustedBothWays
+    # not under test, checked by hand: with no CLAUDE_CONFIG_DIR the file is ~/.claude.json (internal/platform/engines/claude_trust.go line 23); the folder is marked under each key (line 48), so the session never stops at "Do you trust this folder?"; CI runs the Unix half of the key test only
+    # internal/platform/engines/engines_test.go TestPrepareTrustsTheWorktree; internal/platform/engines/claude_test.go TestAWindowsFolderIsTrustedBothWays
 
   @COMPAT-17 @manual
   Scenario: Engine versions are read and shown, and no minimum is required
@@ -192,8 +192,8 @@ Feature: Compatibility
     Then the markers that tie a process to a running session are removed: CLAUDECODE, CLAUDE_CODE_CHILD_SESSION, CLAUDE_CODE_MESSAGING_TOKEN and CODEX_SANDBOX: yes
     And the user's own engine configuration is kept: CLAUDE_CONFIG_DIR, CLAUDE_CODE_USE_BEDROCK, CODEX_HOME and ANTHROPIC_API_KEY: yes
     And a second pass removes 0 more
-    # not under test, checked by hand: the other listed names and every CLAUDE_CODE_MESSAGING_ name go alike (internal/engines/inherited.go line 45), and an agent's session is started without them (internal/sessions/host.go line 335)
-    # README.md, From the source (agentry open); internal/engines/inherited_test.go TestOnlyParentSessionMarkersAreDropped; cmd/agentry/serve_test.go TestStartingDropsAParentSessionAndSaysWhat
+    # not under test, checked by hand: the other listed names and every CLAUDE_CODE_MESSAGING_ name go alike (internal/platform/engines/inherited.go line 45), and an agent's session is started without them (internal/platform/sessions/host.go line 335)
+    # README.md, From the source (agentry open); internal/platform/engines/inherited_test.go TestOnlyParentSessionMarkersAreDropped; cmd/agentry/serve_test.go TestStartingDropsAParentSessionAndSaysWhat
 
   @COMPAT-19 @manual
   Scenario: On Windows an engine installed as a .cmd launcher runs through cmd.exe
@@ -201,7 +201,7 @@ Feature: Compatibility
     When an agent's turn starts there
     Then the engine is found by its full path on the session's PATH, never by name alone, and a .cmd or .bat launcher is started as cmd.exe /c <launcher> with the engine's arguments after it
     And on every other system the program found is started as it is, with no shell in between
-    # internal/sessions/host.go lines 295-314; no test
+    # internal/platform/sessions/host.go lines 295-314; no test
 
   # --- Browsers that install the app ---
   # The code names no browser it supports. It names two that refuse a service worker on any page, and the README's trust steps name Safari on iPhone and iPad, Chrome on Linux and Firefox.
@@ -272,8 +272,8 @@ Feature: Compatibility
     When Agentry opens the CA on macOS or Linux
     Then a key readable by others is refused with "chmod 600", and a folder open to others is set back to 0700
     And a key that is a symbolic link is refused: yes
-    # not under test, checked by hand: the link is found with O_NOFOLLOW on macOS and Linux (internal/tlsca/key_unix.go line 14) and with Lstat on Windows, which has no O_NOFOLLOW (internal/tlsca/key_windows.go line 13); on Windows, which keeps no Unix permissions, the code makes no permission check (internal/tlsca/ca.go lines 120 and 332) and the 2 permission tests skip themselves
-    # README.md, What the CA can sign (0600 on macOS and Linux); internal/tlsca/ca_test.go TestAKeyOthersMayReadIsRefused, TestAFolderOpenToOthersIsClosed and TestAKeyThatIsALinkIsRefused
+    # not under test, checked by hand: the link is found with O_NOFOLLOW on macOS and Linux (internal/platform/tlsca/key_unix.go line 14) and with Lstat on Windows, which has no O_NOFOLLOW (internal/platform/tlsca/key_windows.go line 13); on Windows, which keeps no Unix permissions, the code makes no permission check (internal/platform/tlsca/ca.go lines 120 and 332) and the 2 permission tests skip themselves
+    # README.md, What the CA can sign (0600 on macOS and Linux); internal/platform/tlsca/ca_test.go TestAKeyOthersMayReadIsRefused, TestAFolderOpenToOthersIsClosed and TestAKeyThatIsALinkIsRefused
 
   @COMPAT-27 @manual
   Scenario: A worker on Windows is updated by moving the old agentry aside

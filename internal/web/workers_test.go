@@ -21,14 +21,14 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
-	"gitlab.com/dev.chempa/agentry/internal/sessions/sessionstest"
-	"gitlab.com/dev.chempa/agentry/internal/terminal"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions/sessionstest"
+	"gitlab.com/dev.chempa/agentry/internal/platform/terminal"
+	"gitlab.com/dev.chempa/agentry/internal/platform/workspace"
+	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
-	"gitlab.com/dev.chempa/agentry/internal/workspace"
-	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
 
 // A machine joins with the code from the page and runs a turn: the work

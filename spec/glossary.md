@@ -47,7 +47,7 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **dismiss**: dropping an idea with a note; the next Visionaries session in that repo is told, so it is not suggested again.
 - **dock**: the panel at the bottom of the page, `Ctrl+J` or Terminal in the status bar, with the Questions, Claude and Terminal tabs; a task's Workspace has its own dock.
 - **Done**: the board column of finished tasks, keeping the last 7 days; dragging a card there finishes the task as it is after one wrap-up turn.
-- **engine**: the agent CLI an agent runs in, `claude` or `codex`; set per agent, and the rest of Agentry never knows which it is (internal/engines).
+- **engine**: the agent CLI an agent runs in, `claude` or `codex`; set per agent, and the rest of Agentry never knows which it is (internal/platform/engines).
 - **engineer**: the Software team's agent whose work counts as building: it changes the code on the task branch and commits it, never pushes.
 - **epic**: a goal too big for one story, which its coordinator splits into stories, each a task of its own; shown as epic-N, closed only by the user once its stories are done.
 - **erase**: deleting every row of a task, from its archive too, and the copies of its words other tasks keep; the log keeps who erased it, when and why, never what it held, and nothing undoes it.
@@ -151,14 +151,14 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **token**: the unit a budget counts, every token the model read and wrote, cache reads included, shown per turn and per task; also a sign-in token, below.
 - **token, desk**: the desk's token, which creates, reads and answers tasks and nothing else, never approvals (internal/desk).
 - **token, helper**: the token of the user's Claude sessions in tasks' Workspaces, which sends the messages the user asks them to and nothing else (internal/web).
-- **token, hook**: the token `agentry hook` posts hook calls with, and nothing else; denied to every agent (internal/hookcall).
+- **token, hook**: the token `agentry hook` posts hook calls with, and nothing else; denied to every agent (internal/platform/hookcall).
 - **token, UI**: the page's token, printed in the link `agentry serve` prints, which signs a browser in and opens the page and the API; the agents never get it.
 - **top bar**: the bar at the top of the page, with the theme, Install app and the person button's menu: Sign in another device, Notifications on this device and Sign out.
 - **trail**: the handoffs of a task in order, as the page shows them and as the coordinator's brief lists them (internal/tasks).
 - **trust page**: `/trust/` on the server, reached over plain http before a device trusts the CA, with the fingerprint, the CA to download and the steps for each system.
 - **turn**: one agent working once in the task's worktree, from a brief to a report, in a fresh engine session or going on with its last one; each turn's tokens, status and time show on the page.
 - **turns**: a task's turn limit: the turns it may have without the user's answer before it stops and asks for guidance, `-max-turns` (24 by default) or the task's own, changed at any time or made unlimited; turn limit means the same.
-- **usage limit**: the engine account's limit, at which a turn stops and waits; Agentry records when it resets and the turn goes on once it does (internal/engines, internal/hooks).
+- **usage limit**: the engine account's limit, at which a turn stops and waits; Agentry records when it resets and the turn goes on once it does (internal/platform/engines, internal/hooks).
 - **use_for_everyone**: the policy.toml line that puts every agent under one profile, ignoring its own; the shipped default sets it to allow-everything, and the Policy and Agents pages say so while it is set.
 - **user**: the person at the page, or in Claude Code: the one who adds tasks, answers, approves and closes epics.
 - **verdict**: how a checker's report ends, `Verdict: approved` or `Verdict: changes needed`; every checker must approve the last change before the coordinator may finish.

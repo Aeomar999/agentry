@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/desk"
-	"gitlab.com/dev.chempa/agentry/internal/pinned"
+	"gitlab.com/dev.chempa/agentry/internal/platform/pinned"
 )
 
 // `agentry task` is how the desk (internal/desk) hands work to the

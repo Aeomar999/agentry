@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"gitlab.com/dev.chempa/agentry/internal/hookcall"
+	"gitlab.com/dev.chempa/agentry/internal/platform/hookcall"
 )
 
 // HTTP serves hook calls at hookcall.Path. Only callers with the hook token

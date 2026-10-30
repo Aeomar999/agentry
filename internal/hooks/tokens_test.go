@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/hookcall"
+	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
+	"gitlab.com/dev.chempa/agentry/internal/platform/hookcall"
 )
 
 // turnEnded is the data of the turn.ended the handler wrote for turn-2.

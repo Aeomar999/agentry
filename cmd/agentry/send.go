@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
-	"gitlab.com/dev.chempa/agentry/internal/pinned"
+	"gitlab.com/dev.chempa/agentry/internal/platform/hookcall"
+	"gitlab.com/dev.chempa/agentry/internal/platform/pinned"
 )
 
 // `agentry send "message"` is how Claude, in a task's Workspace

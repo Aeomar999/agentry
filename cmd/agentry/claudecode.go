@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/mcp"
+	"gitlab.com/dev.chempa/agentry/internal/platform/client"
 )
 
 // What lets Claude Code hear from Agentry between your messages, through

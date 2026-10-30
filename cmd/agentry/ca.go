@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"gitlab.com/dev.chempa/agentry/internal/launch"
-	"gitlab.com/dev.chempa/agentry/internal/tlsca"
+	"gitlab.com/dev.chempa/agentry/internal/platform/launch"
+	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 )
 
 // `agentry ca` shows the fingerprint of Agentry's own CA, which `serve

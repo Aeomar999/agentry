@@ -10,7 +10,7 @@ import (
 // enabled or visible, and their output is the text Claude reads.
 type Tool struct {
 	Name, Description string
-	Input             map[string]any // JSON Schema of its arguments (internal/schema)
+	Input             map[string]any // JSON Schema of its arguments (internal/platform/schema)
 	Run               func(ctx context.Context, arguments json.RawMessage) (string, error)
 }
 

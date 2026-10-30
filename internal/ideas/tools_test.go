@@ -10,9 +10,9 @@ import (
 	"sync"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/platform/client"
 )
 
 // A fake Agentry with ideas in every state and nothing else waiting. It

@@ -7,7 +7,7 @@ import { Button } from "@/components/atoms/Button";
 import { StatusDot, DotTone } from "@/components/atoms/StatusDot";
 import { terminalTheme } from "@/lib/terminal-theme";
 
-// A live terminal session over a websocket (internal/terminal). Everyone
+// A live terminal session over a websocket (internal/platform/terminal). Everyone
 // watches; Take control sends your keys, and the server drops keys from
 // anyone not in control. The session has one size: this view asks for the
 // size that fills its space, and shows whatever size the server says.

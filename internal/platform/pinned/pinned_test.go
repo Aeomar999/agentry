@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/tlsca"
+	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 )
 
 // agentryServer serves over TLS with the leaf issuer hands out, as `agentry

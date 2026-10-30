@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions"
 )
 
 // startedHere are the processes still running with a sessions folder in

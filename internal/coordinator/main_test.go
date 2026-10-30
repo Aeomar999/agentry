@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/sessions/sessionstest"
+	"gitlab.com/dev.chempa/agentry/internal/platform/sessions/sessionstest"
 )
 
 // Sessions trust their worktree in Claude Code's config (package engines):

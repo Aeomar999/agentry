@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/tlsca"
+	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 )
 
 // The addresses other machines can reach this server at, for the install

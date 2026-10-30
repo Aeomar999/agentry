@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
-	"gitlab.com/dev.chempa/agentry/internal/schema"
+	"gitlab.com/dev.chempa/agentry/internal/platform/client"
+	"gitlab.com/dev.chempa/agentry/internal/platform/schema"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 

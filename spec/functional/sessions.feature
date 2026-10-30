@@ -1,7 +1,7 @@
 Feature: Sessions
   A turn goes on with an agent's earlier session, starts fresh or forks one,
   and its live terminal.
-  # Sources: internal/sessions, internal/terminal, internal/tasks/resume.go,
+  # Sources: internal/platform/sessions, internal/platform/terminal, internal/tasks/resume.go,
   # internal/turns, ui/src/components/organisms/TerminalView.tsx and their tests.
 
   # ---- Going on with a session -----------------------------------------------
@@ -49,7 +49,7 @@ Feature: Sessions
 
   @SESSION-05 @user @test
   Scenario: The live terminal: everyone watches, only the one in control types
-    # internal/terminal/terminal_test.go TestOnlyTheViewerInControlCanType
+    # internal/platform/terminal/terminal_test.go TestOnlyTheViewerInControlCanType
     # the page's words for the seats, Watching, "You have control: typing goes to the session" and "Session ended", and its buttons "Take control" and "Hand back": ui/src/components/organisms/TerminalView.tsx lines 18 to 24 and 108 to 116
     # the route: internal/web/server.go line 181
     Given the engineer's session is running and 2 viewers watch its terminal

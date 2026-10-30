@@ -18,7 +18,7 @@ import (
 
 	texttemplate "text/template"
 
-	"gitlab.com/dev.chempa/agentry/internal/tlsca"
+	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
 )
 
 // The "Trust this device" page and what it hands out, under trustPrefix.

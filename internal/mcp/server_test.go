@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
+	"gitlab.com/dev.chempa/agentry/internal/platform/client"
 )
 
 // A fake Agentry: tasks, epics and a story of one, one action waiting for
