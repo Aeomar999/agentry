@@ -14,7 +14,7 @@ moved the code, the old paths it names are here on `dev`:
 | `internal/coordinator`, `internal/watchdog` | `internal/runtime/coordinator`, `internal/runtime/watchdog` |
 | `internal/storetest` | `internal/testkit/storetest` |
 | `internal/features` (`features.go`) | `internal/extensions` (`extensions.go`) |
-| `internal/ideas` | `internal/extensions/ideas` |
+| `internal/ideas` (`feature_test.go`, also written `ideas/feature_test.go`) | `internal/extensions/ideas` (`extension_test.go`) |
 | `internal/githost`, not written yet | a folder `githost` in `internal/extensions` |
 | `internal/web/api.go` | split into `internal/web/config_api.go`, `internal/web/domains.go` and each domain's `internal/domain/<area>/<area>api` |
 | `internal/web/dist`, committed | `internal/web/static/dist`, built, not committed |

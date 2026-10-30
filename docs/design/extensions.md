@@ -16,9 +16,10 @@ moved the code, the old paths it names are here on `dev`:
 | `internal/coordinator` (`ideas.go`) | `internal/runtime/coordinator`; `ideas.go` is now `internal/extensions/ideas/coordinator.go` |
 | `internal/features` | `internal/extensions` |
 | `internal/ideas` | `internal/extensions/ideas` |
-| `internal/mcp/ideas.go` | `internal/extensions/ideas/tools.go` |
-| `internal/web/ideas_api.go` | `internal/extensions/ideas/routes.go` |
-| `internal/web/agents_api.go`, `views.go` | `internal/domain/agents/agentsapi/agents_api.go`, `internal/domain/tasks/tasksapi/views.go` |
+| `internal/mcp/ideas.go`, `ideas_test.go` | `internal/extensions/ideas/tools.go`, `tools_test.go` |
+| `internal/web/ideas_api.go`, `ideas_api_test.go` | `internal/extensions/ideas/routes.go`, `routes_test.go` |
+| `internal/web/agents_api.go` | `internal/domain/agents/agentsapi/agents_api.go` |
+| `internal/web/board_api.go`, `views.go` (also written `web/board_api.go`, `web/views.go`) | `internal/domain/tasks/tasksapi/board_api.go`, `views.go` |
 | `internal/web/api.go` (also written `web/api.go`) | split into `internal/web/config_api.go`, `internal/web/domains.go` and each domain's `internal/domain/<area>/<area>api` |
 | `ui/src/features` (`index.ts`, `ideas/`) | `ui/src/extensions` (`index.ts`, `ideas/index.tsx`) |
 | `ui/src/components/templates/AdminShell.tsx`, `organisms/Sidebar.tsx` | `ui/src/shell/AdminShell.tsx`, `ui/src/shell/Sidebar.tsx` |
