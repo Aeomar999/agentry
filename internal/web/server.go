@@ -15,6 +15,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/current"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
+	"gitlab.com/dev.chempa/agentry/internal/domain/connections/connectionsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/notifications/webpush"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/hooks"
@@ -159,10 +160,8 @@ func (s *Server) Handler() http.Handler {
 	api("GET /api/workers/{name}", s.showWorker)
 	api("DELETE /api/workers/{name}", s.removeWorker)
 	api("GET /api/changes", s.waitForChanges)
-	api("POST /api/integrations/claude-code", s.inviteClaudeCode)
-	api("GET /api/integrations/connections", s.listConnections)
-	api("DELETE /api/integrations/connections/{id}", s.revokeConnection)
-	// A machine connecting its Claude Code, with its install command's code.
+	// A machine connecting its Claude Code, with its install command's code:
+	// these stay here, not in connectionsapi, as no extensions.Auth is open.
 	mux.HandleFunc("GET /integrations/claude-code.sh", s.claudeCodeScript)
 	mux.HandleFunc("GET /integrations/claude-code.ps1", s.claudeCodeWindowsScript)
 	mux.HandleFunc("GET /integrations/agentry", s.integrationBinary)
@@ -206,6 +205,7 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("GET /api/desk/terminal", s.requireUI(s.config.Desk.ServeHTTP))
 	}
 	s.mount("the settings domain", settingsapi.API{Log: s.store, State: s.state}.Routes(), mux)
+	s.mount("the connections domain", connectionsapi.API{Log: s.store, State: s.state, InstallCommands: s.installCommands}.Routes(), mux)
 	// Last, so an extension's route that clashes with any core or domain
 	// route is the one that fails, naming its extension.
 	for _, f := range s.config.Extensions {

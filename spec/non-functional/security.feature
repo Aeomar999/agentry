@@ -427,7 +427,7 @@ Feature: Security
     Given the desk's Claude session holds the desk token
     When it lists, creates or shows a task
     Then every call is allowed
-    # not under test, checked by hand: reading a task's events, answering a question and filing a task under an epic are open to the desk too (internal/web/server.go lines 99 to 101)
+    # not under test, checked by hand: reading a task's events, answering a question and filing a task under an epic are open to the desk too (internal/web/server.go lines 101 to 103)
     # README.md, Use it; internal/web/api_test.go TestTheDeskTokenOpensOnlyTasks
 
   @SEC-48 @test
@@ -444,7 +444,7 @@ Feature: Security
     When it posts a message to a task's claude/message route
     Then the message is allowed
     And it reaches the task as the user's, marked as sent through Claude: yes
-    # every Workspace's session holds the same helper token, and the route takes it for any task (internal/web/server.go line 120)
+    # every Workspace's session holds the same helper token, and the route takes it for any task (internal/web/server.go line 122)
     # README.md, Use it; internal/web/claude_api_test.go TestClaudeSendsWhatYouAskedAndNothingElse
 
   @SEC-50 @test

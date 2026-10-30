@@ -1,7 +1,8 @@
 Feature: Agentry from Claude Code
   Plain claude in any repo hands work to Agentry through its MCP tools and hears back from it.
   # Sources: cmd/agentry/mcp.go, cmd/agentry/claudecode.go, internal/mcp,
-  # internal/extensions/ideas/tools.go, internal/domain/connections, internal/web/integrations_api.go
+  # internal/extensions/ideas/tools.go, internal/domain/connections,
+  # internal/domain/connections/connectionsapi, internal/web/integrations_api.go
   # and their tests.
 
   # ---- Installing the integration --------------------------------------------
@@ -44,7 +45,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: the code works for 15 minutes (internal/domain/connections/connections.go line 21, InviteLifetime)
     And the install script fetched with the code carries that code and runs `agentry mcp connect`: yes
     And a script fetched with a wrong code is refused with status 401
-    # internal/web/api_test.go TestClaudeCodeConnectsFromTheIntegrationsPage; every address: internal/web/addresses_test.go TestInstallCommands;
+    # internal/domain/connections/connectionsapi/connectionsapi_test.go TestClaudeCodeConnectsFromTheIntegrationsPage; every address: internal/web/addresses_test.go TestInstallCommands;
     # PowerShell and the wrong code: internal/web/api_test.go TestInstallCommandsForWindows
 
   @TOOLS-04 @claude-code @test
@@ -57,14 +58,14 @@ Feature: Agentry from Claude Code
     And the script fetched with the used code is refused with status 401
     And a request to the API with the credential is answered with status 200
     And the Integrations page lists 1 connection, naming the machine, without the credential itself
-    # internal/web/api_test.go TestClaudeCodeConnectsFromTheIntegrationsPage
+    # internal/domain/connections/connectionsapi/connectionsapi_test.go TestClaudeCodeConnectsFromTheIntegrationsPage
 
   @TOOLS-05 @claude-code @test
   Scenario: Revoke stops a connected machine at once
     Given a machine connected with its own credential
     When the user revokes that connection on the Integrations page
     Then a request to the API with that credential is answered with status 401
-    # internal/web/api_test.go TestClaudeCodeConnectsFromTheIntegrationsPage
+    # internal/domain/connections/connectionsapi/connectionsapi_test.go TestClaudeCodeConnectsFromTheIntegrationsPage
 
   @TOOLS-06 @claude-code @test
   Scenario: A connected machine's credential cannot issue sign-in codes

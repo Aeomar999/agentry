@@ -51,7 +51,7 @@ Feature: Sessions
   Scenario: The live terminal: everyone watches, only the one in control types
     # internal/platform/terminal/terminal_test.go TestOnlyTheViewerInControlCanType
     # the page's words for the seats, Watching, "You have control: typing goes to the session" and "Session ended", and its buttons "Take control" and "Hand back": ui/src/components/organisms/TerminalView.tsx lines 18 to 24 and 108 to 116
-    # the route: internal/web/server.go line 181
+    # the route: internal/web/server.go line 179
     Given the engineer's session is running and 2 viewers watch its terminal
     When a viewer types while only watching
     Then the keys are dropped: 0 of them reach the session

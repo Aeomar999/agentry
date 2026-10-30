@@ -13,9 +13,10 @@ import (
 )
 
 // The Integrations page connects Claude Code on any machine to Agentry
-// (agentry mcp): you make an install command, run it there, and that
-// machine's Claude Code has Agentry's tools. Each connection is listed, and
-// revoking it stops its credential working.
+// (agentry mcp): you make an install command (connectionsapi), run it
+// there, and that machine's Claude Code has Agentry's tools. Here is what
+// that machine calls with its code, before it has a credential, and the
+// check that its credential opens what the page's token does.
 
 //go:embed claude-code.sh
 var claudeCodeTemplate string
@@ -24,17 +25,6 @@ var claudeCodeTemplate string
 var claudeCodeWindowsTemplate string
 
 const unknownInstallCode = "That install command is unknown, used or expired. Make a new one on the Integrations page."
-
-// inviteClaudeCode makes a one-time install command.
-func (s *Server) inviteClaudeCode(w http.ResponseWriter, r *http.Request) {
-	code, invited := connections.Invite(httpapi.You, time.Now())
-	if !httpapi.ProposeOrRefuse(w, s.store, invited) {
-		return
-	}
-	answer := s.installCommands(r, "/integrations/claude-code", code)
-	answer["expires"] = time.Now().Add(connections.InviteLifetime)
-	httpapi.Reply(w, answer)
-}
 
 // claudeCodeScript is the install script: for sh, or for PowerShell on Windows.
 func (s *Server) claudeCodeScript(w http.ResponseWriter, r *http.Request) {
@@ -68,23 +58,6 @@ func (s *Server) connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.Reply(w, map[string]string{"credential": credential, "page": s.publicURL(r)})
-}
-
-func (s *Server) listConnections(w http.ResponseWriter, _ *http.Request) {
-	roster, err := s.connections()
-	if err != nil {
-		httpapi.Failed(w, err)
-		return
-	}
-	list := roster.Connections
-	if list == nil {
-		list = []connections.Connection{}
-	}
-	httpapi.Reply(w, map[string]any{"connections": list})
-}
-
-func (s *Server) revokeConnection(w http.ResponseWriter, r *http.Request) {
-	httpapi.Propose(w, s.store, connections.Revocation(httpapi.You, r.PathValue("id")))
 }
 
 func (s *Server) connectionCodeWorks(code string) bool {
