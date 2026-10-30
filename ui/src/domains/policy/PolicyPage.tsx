@@ -8,11 +8,11 @@ import { ResourceTable, Column } from "@/components/molecules/ResourceTable";
 import { DecisionBadge } from "@/components/molecules/StatusBadges";
 import { Mono } from "@/components/molecules/Mono";
 import { AgentName } from "@/components/molecules/AgentName";
-import { DefaultProfiles } from "@/components/organisms/DefaultProfiles";
-import { PolicyHistory } from "@/components/organisms/PolicyHistory";
-import { UnshippedMissingProfiles } from "@/components/organisms/MissingProfiles";
+import { DefaultProfiles } from "@/domains/policy/DefaultProfiles";
+import { PolicyHistory } from "@/domains/policy/PolicyHistory";
+import { UnshippedMissingProfiles } from "@/domains/policy/MissingProfiles";
 import { UseForEveryoneNotice } from "@/components/organisms/UseForEveryoneNotice";
-import { TryPolicyCall } from "@/components/organisms/TryPolicyCall";
+import { TryPolicyCall } from "@/domains/policy/TryPolicyCall";
 import type { Policy, PolicyProfile, TriedCall } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 

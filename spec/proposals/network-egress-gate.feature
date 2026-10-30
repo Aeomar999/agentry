@@ -88,7 +88,7 @@ Feature: Network egress gate
   @PROP-85 @user @test @to-policy
   Scenario: Where the system does not allow the block, Agentry says so plainly
     # the Policy page shows each profile (@POLICY-01); the autonomous profile's why names the gap today (internal/domain/policy/default.toml profiles.autonomous)
-    # test: ui/src/pages/PolicyPage.test.tsx and internal/egress/block_test.go (to write)
+    # test: ui/src/domains/policy/PolicyPage.test.tsx and internal/egress/block_test.go (to write)
     Given a machine whose system Agentry cannot block traffic on, or a worker without the permission to block it
     When the Policy page shows a profile with a network allowlist
     Then it reads "Traffic is not blocked at the system level on this machine: a program that ignores the proxy can reach any host." beside the profile: yes

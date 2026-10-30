@@ -3,9 +3,9 @@ Feature: Policy
   and the Policy page.
   # Sources: cmd/agentry/hook.go, cmd/agentry/policy.go, internal/domain/policy,
   # internal/domain/policy/hooks, internal/domain/policy/policyapi, internal/domain/agents/agent.go,
-  # ui/src/pages/PolicyPage.tsx, ui/src/components/organisms/TryPolicyCall.tsx,
-  # ui/src/components/organisms/DefaultProfiles.tsx,
-  # ui/src/components/organisms/PolicyHistory.tsx and their tests.
+  # ui/src/domains/policy/PolicyPage.tsx, ui/src/domains/policy/TryPolicyCall.tsx,
+  # ui/src/domains/policy/DefaultProfiles.tsx,
+  # ui/src/domains/policy/PolicyHistory.tsx and their tests.
 
   # ---- The Policy page -------------------------------------------------------
 
@@ -23,7 +23,7 @@ Feature: Policy
   @POLICY-02 @user @test
   Scenario: A missing default profile is added from the page, logged with its diff and a backup
     # internal/domain/policy/policyapi/policyapi_test.go TestAMissingProfileIsAddedFromThePageAndLogged; internal/domain/policy/live_test.go TestAgentryKeepsItsNewestBackups
-    # the 20 newest backups are kept: internal/domain/policy/live.go line 57; the row "missing" with "Add this profile": ui/src/components/organisms/DefaultProfiles.tsx lines 82 to 89 and 124
+    # the 20 newest backups are kept: internal/domain/policy/live.go line 57; the row "missing" with "Add this profile": ui/src/domains/policy/DefaultProfiles.tsx lines 82 to 89 and 124
     Given a policy file without read-mostly, whose row reads "Your file doesn't have it. Adding it appends the <version> default, under a comment naming the version."
     When "Add this profile" is sent without the file's hash, or with a stale one
     Then it is refused with 409 "changed since the page loaded it: try again"
@@ -39,7 +39,7 @@ Feature: Policy
   @POLICY-03 @user @test
   Scenario: An outdated default is updated; one you changed is never overwritten, only replaced by choice
     # internal/domain/policy/policyapi/policyapi_test.go TestAnOutdatedProfileIsUpdatedAndAnEditedOneOnlyByChoice
-    # the rows "outdated" and "yours" with "Update to the <version> default", "Keep mine" and "Use the default": ui/src/components/organisms/DefaultProfiles.tsx lines 91 to 113 and 121 to 131
+    # the rows "outdated" and "yours" with "Update to the <version> default", "Keep mine" and "Use the default": ui/src/domains/policy/DefaultProfiles.tsx lines 91 to 113 and 121 to 131
     Given a policy file from a build before v0.1.0, whose read-only is outdated
     When the user clicks "Update to the <version> default" on read-only
     Then the file holds this version's read-only and exactly 1 event, yours, "updated read-only to the <version> default", with its diff
@@ -65,7 +65,7 @@ Feature: Policy
   @POLICY-05 @user @test
   Scenario: Try a call against a profile: the rule that decides, the verdict and who decides today
     # internal/domain/policy/policyapi/policyapi_test.go TestACallIsTriedAsAProfileWouldJudgeIt, TestATriedCallSaysWhichRuleDecidedByItsPlace, TestATriedCallSaysWhoDecidesOnlyWhenAnotherProfileDoes, TestTryingACallChangesNothing and TestATriedCallIsRefusedWhenItCantBeJudged
-    # the form "Try a call against <profile>" with Tool, 7 suggested tools, "Command or path" and Try: ui/src/components/organisms/TryPolicyCall.tsx lines 10 and 55 to 80; the lines under it: lines 93 to 104
+    # the form "Try a call against <profile>" with Tool, 7 suggested tools, "Command or path" and Try: ui/src/domains/policy/TryPolicyCall.tsx lines 10 and 55 to 80; the lines under it: lines 93 to 104
     # a verdict no profile rule made has Order 0, no rule place: internal/domain/policy/verdict.go line 28; none of the named tests asserts it
     # the page's words "as if run in <workspace>" and "But today allow-everything decides for every agent:" are TryPolicyCall.tsx's; the tests assert the reply they are drawn from
     Given the policy as shipped and the developer profile's panel
@@ -84,7 +84,7 @@ Feature: Policy
   @POLICY-06 @user @test
   Scenario: History lists every version, newest first, and Revert restores one as a new version after showing its diff
     # internal/domain/policy/policyapi/policyapi_test.go TestEveryVersionShowsInTheHistoryAndCanBeRestored, TestAVersionShowsWhatRevertingToItWouldChange and TestARevertMayNotTakeAProfileFromItsAgents
-    # the panel "History", who made each version, "refused", "in force", Diff and Revert: ui/src/components/organisms/PolicyHistory.tsx lines 26 to 91 and 135 to 138; the dialog: lines 96 to 129
+    # the panel "History", who made each version, "refused", "in force", Diff and Revert: ui/src/domains/policy/PolicyHistory.tsx lines 26 to 91 and 135 to 138; the dialog: lines 96 to 129
     Given 3 versions: one loaded without its text, the first loaded, and use_for_everyone turned off on the page
     When the history is read
     Then exactly 3 versions come newest first: "turned off use_for_everyone", "first loaded", "loaded"
@@ -101,9 +101,9 @@ Feature: Policy
 
   @POLICY-07 @user @manual
   Scenario: The Policy page's panels and banners: each profile, the override, the file, a mistake in it and the reload within 2 seconds
-    # ui/src/pages/PolicyPage.tsx lines 47 to 60, the path and the hash; lines 63 to 73, the banners; lines 89 to 93, the file; lines 99 to 161, a profile's panel
+    # ui/src/domains/policy/PolicyPage.tsx lines 47 to 60, the path and the hash; lines 63 to 73, the banners; lines 89 to 93, the file; lines 99 to 161, a profile's panel
     # the notice: ui/src/components/organisms/UseForEveryoneNotice.tsx lines 21 to 47, on the Agents page too: ui/src/domains/agents/AgentsPage.tsx lines 139 to 143
-    # the file is watched every 2 seconds: cmd/agentry/serve.go line 280; "Profiles agents need": ui/src/components/organisms/MissingProfiles.tsx lines 26 to 48
+    # the file is watched every 2 seconds: cmd/agentry/serve.go line 280; "Profiles agents need": ui/src/domains/policy/MissingProfiles.tsx lines 26 to 48
     # README.md, The policy
     Given the Policy page
     When it is shown

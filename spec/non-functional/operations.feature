@@ -7,7 +7,7 @@ Feature: Operations
     When the file is saved with a mistake in it and read again
     Then the new file is refused and the policy before it is kept in force: yes
     And GET /api/policy gives what is wrong with the file: yes
-    # not under test, checked by hand: serve reads the file again every 2 seconds (cmd/agentry/serve.go line 280), and the Policy page shows the problem (ui/src/pages/PolicyPage.tsx line 63)
+    # not under test, checked by hand: serve reads the file again every 2 seconds (cmd/agentry/serve.go line 280), and the Policy page shows the problem (ui/src/domains/policy/PolicyPage.tsx line 63)
     # README.md, The policy; internal/domain/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne, internal/web/api_test.go TestThePolicyShowsWithItsProblem
 
   # Every number below comes from the code; the comment on each names its

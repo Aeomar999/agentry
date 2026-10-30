@@ -6,7 +6,7 @@ import { Mono } from "@/components/molecules/Mono";
 import { Panel } from "@/components/molecules/Panel";
 import { addDefaultProfile, takeDefaultProfile, updateDefaultProfile } from "@/api/client";
 import type { DefaultProfile } from "@/api/types";
-import { MissingProfileUsers } from "@/components/organisms/MissingProfiles";
+import { MissingProfileUsers } from "@/domains/policy/MissingProfiles";
 import { usePolicyChange } from "@/lib/policy-change";
 
 // The profiles this Agentry ships, against your file. A missing one can be
