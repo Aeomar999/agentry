@@ -1,6 +1,7 @@
 Feature: Worktrees and branches
   Each task works in its own worktree on its own branch, shown on the Workspace page.
-  # Sources, for the scenarios from the workers' file: internal/worktrees/handoff.go and its tests.
+  # Sources: internal/worktrees, internal/workspace, internal/web/workspace_api.go,
+  # ui/src/pages/WorkspacePage.tsx and their tests.
 
   # ---- Worktrees and branches ------------------------------------------------
 

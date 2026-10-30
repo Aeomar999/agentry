@@ -1,5 +1,8 @@
 Feature: Notifications
   Pushes to the user's devices when something newly waits for them.
+  # Sources: cmd/agentry/push.go, internal/webpush, internal/web/push_api.go,
+  # ui/src/components/organisms/NotifyDeviceDialog.tsx, ui/src/lib/push.ts,
+  # ui/public/sw.js and their tests.
 
   # ---- Turning notifications on ----------------------------------------------
 

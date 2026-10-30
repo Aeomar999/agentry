@@ -1,5 +1,10 @@
 Feature: Settings
   The Settings page, and redacting a text from a task or from everywhere.
+  # Sources: internal/extensions, internal/web/extensions_api.go,
+  # internal/web/redact_api.go, internal/web/redact_log_api.go,
+  # internal/store/redact.go, internal/rules/redact_rules.go,
+  # ui/src/pages/SettingsPage.tsx, ui/src/components/organisms/RedactText.tsx,
+  # ui/src/components/organisms/RedactLog.tsx and their tests.
 
   # ---- Features that are off -------------------------------------------------
 

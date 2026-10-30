@@ -1,6 +1,8 @@
 Feature: Shared files
   Files that are not in git, shared with a task in .agentry/files, that follow it from machine to machine.
-  # Sources, for the scenarios from the workers' file: internal/sharedfiles and its tests.
+  # Sources: internal/sharedfiles, internal/tasks/files.go,
+  # internal/coordinator/files.go, internal/web/shared_api.go,
+  # ui/src/components/organisms/SharedFiles.tsx and their tests.
 
   # ---- Adding and downloading ------------------------------------------------
 

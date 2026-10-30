@@ -1,6 +1,9 @@
 Feature: The coordinator and its handoffs
   An ordinary agent that reads every report and ends each turn with a decision the loop carries out:
   a task's life, briefs, reports, issues, safety stops and limits.
+  # Sources: internal/coordinator, internal/watchdog, internal/tasks,
+  # internal/web/chat_api.go, ui/src/components/organisms/CoordinatorChat.tsx and
+  # their tests.
 
   # ---- A task's life ---------------------------------------------------------
 

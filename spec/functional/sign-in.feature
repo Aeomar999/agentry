@@ -1,5 +1,9 @@
 Feature: Signing in
   Signing devices in with one-time codes, trusting Agentry's CA, installing the app, and the desktop app.
+  # Sources: cmd/agentry/trust.go, cmd/agentry-desktop, internal/web/signin.go,
+  # internal/tlsca, internal/launch, packaging/desktop.go, packaging/files,
+  # ui/src/pages/SignInPage.tsx, ui/src/lib/signin.ts, ui/src/lib/trust.ts,
+  # ui/src/lib/install.ts and their tests.
 
   # ---- Sign-in codes ---------------------------------------------------------
 

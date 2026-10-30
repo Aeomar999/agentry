@@ -584,3 +584,47 @@ func TestATargetTagOutsideProposalsFails(t *testing.T) {
 	expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text}),
 		"tasks-and-board.feature:5: target tag @to-policy belongs only in a file directly under spec/proposals; a built scenario drops it")
 }
+
+func TestEveryPathAFeaturesSourcesNamesExists(t *testing.T) {
+	repo := map[string]string{
+		"../internal/tasks/task.go":    "package tasks\n",
+		"../ui/src/pages/TaskPage.tsx": "",
+		"../README.md":                 "# Agentry\n",
+		"../scripts/build.sh":          "",
+	}
+	feature := func(sources string) string {
+		return strings.Replace(goodScenario, "  What the person at the page does.\n", "  What the person at the page does.\n"+sources, 1)
+	}
+	for name, c := range map[string]struct{ sources, want string }{
+		"no Sources": {"", ""},
+		"a good sentence over lines": {
+			"  # Sources: internal/tasks, internal/web/api_test.go,\n  # ui/src/pages/TaskPage.tsx, README.md and their\n  # tests.\n", ""},
+		"a missing path": {
+			"  # Sources: internal/tasks, internal/nope and their tests.\n",
+			"tasks-and-board.feature:3: Sources names internal/nope, which doesn't exist"},
+		"a missing path on a later line": {
+			"  # Sources: internal/tasks,\n  # ui/src/pages/Gone.tsx and its tests.\n",
+			"tasks-and-board.feature:4: Sources names ui/src/pages/Gone.tsx, which doesn't exist"},
+		"a missing file in a folder that exists": {
+			"  # Sources: internal/tasks/gone.go and its tests.\n",
+			"tasks-and-board.feature:3: Sources names internal/tasks/gone.go, which doesn't exist"},
+		"the full stop ends it": {
+			"  # Sources: internal/tasks and their tests.\n  # internal/nope is a later comment, not a source\n", ""},
+		"a blank line ends it": {
+			"  # Sources: internal/tasks,\n\n  # internal/nope\n", ""},
+		"an unlisted top folder": {
+			"  # Sources: internal/tasks, scripts/build.sh and their tests.\n",
+			"tasks-and-board.feature:3: cited path scripts/build.sh is under scripts/, a top folder rootFolders does not list"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			files := maps.Clone(repo)
+			files["functional/tasks-and-board.feature"] = feature(c.sources)
+			got := problemsOf(t, files)
+			if c.want == "" {
+				expectProblems(t, got)
+			} else {
+				expectProblems(t, got, c.want)
+			}
+		})
+	}
+}

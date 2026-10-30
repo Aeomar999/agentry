@@ -1,5 +1,10 @@
 Feature: Teams and templates
   The teams on the Agents page, teams of the user's own, templates and each agent's page.
+  # Sources: internal/agents, internal/web/agents_api.go,
+  # internal/web/templates_api.go, ui/src/pages/AgentsPage.tsx,
+  # ui/src/pages/AgentPage.tsx, ui/src/pages/AgentEditPage.tsx,
+  # ui/src/components/organisms/TeamPanel.tsx, ui/src/lib/teams.ts,
+  # ui/src/lib/templates.ts and their tests.
 
   # ---- The Agents page and its teams -----------------------------------------
 

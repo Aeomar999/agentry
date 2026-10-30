@@ -1,6 +1,9 @@
 Feature: Policy
   The policy profiles each agent runs under, the gate that judges every action,
   and the Policy page.
+  # Sources: cmd/agentry/hook.go, cmd/agentry/policy.go, internal/policy,
+  # internal/hooks, internal/agents/agent.go, internal/web/policy_api.go,
+  # ui/src/pages/PolicyPage.tsx and their tests.
 
   # ---- The Policy page -------------------------------------------------------
 

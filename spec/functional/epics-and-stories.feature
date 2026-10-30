@@ -1,6 +1,9 @@
 Feature: Epics and stories
   A goal too big for one change is an epic, split into stories that wait in the
   Backlog, ordered in Plan, and closed once every story is done.
+  # Sources: internal/tasks, internal/coordinator/epics.go,
+  # internal/web/epics_api.go, ui/src/pages/PlanPage.tsx, ui/src/lib/epics.ts and
+  # their tests.
 
   # ---- Making epics and stories ----------------------------------------------
 

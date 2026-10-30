@@ -1,5 +1,9 @@
 Feature: Approvals and questions
   What waits for the user: actions the policy held, and the questions coordinators ask.
+  # Sources: internal/hooks, internal/waitlist, internal/tasks/waiting.go,
+  # internal/web/questions_api.go, internal/web/waiting_api.go,
+  # ui/src/components/organisms/NeedsYouPanel.tsx,
+  # ui/src/components/organisms/QuestionsPanel.tsx and their tests.
 
   # ---- Held actions and approvals --------------------------------------------
 

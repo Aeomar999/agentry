@@ -1,6 +1,11 @@
 Feature: Tasks and the board
   Adding a task, the board and its columns, the Tasks page, a task's page,
   running limits, search, the keys and the archive.
+  # Sources: internal/tasks, internal/archive, internal/settings,
+  # internal/coordinator/slots.go, internal/web/api.go, internal/web/board_api.go,
+  # internal/web/erase_api.go, internal/web/archives.go, ui/src/pages/TasksPage.tsx,
+  # ui/src/pages/TaskPage.tsx, ui/src/components/organisms/TaskBoard.tsx and their
+  # tests.
 
   # ---- Adding a task ---------------------------------------------------------
 

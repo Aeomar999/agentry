@@ -19,6 +19,9 @@
 //   - is numbered above its prefix's entry in lastIDBeforeLineRule and
 //     cites "line N" or "lines N".
 //
+// It also reports a path that a feature file's "# Sources:" comment names
+// and the repo doesn't have, in any file, proposals/ too.
+//
 // A file directly under the folder's proposals/ holds a feature that is
 // agreed and not built. Any file name is allowed there, and its scenarios
 // follow the rules above with these changes: the ID tag is @PROP-nn; each

@@ -1,6 +1,8 @@
 Feature: Sessions
   A turn goes on with an agent's earlier session, starts fresh or forks one,
   and its live terminal.
+  # Sources: internal/sessions, internal/terminal, internal/tasks/resume.go,
+  # internal/turns, ui/src/components/organisms/TerminalView.tsx and their tests.
 
   # ---- Going on with a session -----------------------------------------------
 
