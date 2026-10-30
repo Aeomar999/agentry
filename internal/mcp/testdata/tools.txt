@@ -1,0 +1,19 @@
+# Every tool `agentry mcp` lists, and whose it is. Written by
+# `go test ./internal/mcp -run TestTheToolTableIsUpToDate -update`; reviewers read its diff.
+# Every extension serve installs is shown: ideas, schedules.
+accept_idea              the ideas extension
+answer_question          the tasks domain
+attach_file              the shared files domain
+close_epic               the tasks domain
+create_task              the tasks domain
+dismiss_idea             the ideas extension
+file_under_epic          the tasks domain
+get_file                 the shared files domain
+list_ideas               the ideas extension
+list_tasks               the tasks domain
+review_approvals         the tasks domain
+set_priority             the tasks domain
+show_task                the tasks domain
+start                    the tasks domain
+status                   the tasks domain
+tell_coordinator         the tasks domain
