@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="654" viewBox="0 0 860 654" font-family="Helvetica, Arial, sans-serif">
+<rect width="860" height="654" fill="#ffffff"/>
+<text x="24" y="32" font-size="18" font-weight="bold" fill="#111">Layers: each imports only what is below it</text>
+<text x="836" y="32" font-size="13" fill="#555" text-anchor="end">may import</text>
+<rect x="24" y="56" width="812" height="52" fill="#eef2f7" stroke="#8a96a8" stroke-width="1"/>
+<text x="40" y="78" font-size="15" font-weight="bold" fill="#111">cmd/*, tools/*</text>
+<text x="40" y="97" font-size="13" fill="#333">the binaries and the repo's tools</text>
+<text x="820" y="88" font-size="13" fill="#333" text-anchor="end">everything</text>
+<rect x="24" y="118" width="812" height="52" fill="#eef2f7" stroke="#8a96a8" stroke-width="1"/>
+<text x="40" y="140" font-size="15" font-weight="bold" fill="#111">web, mcp</text>
+<text x="40" y="159" font-size="13" fill="#333">the surfaces: sign-in, the page, mounting</text>
+<text x="820" y="150" font-size="13" fill="#333" text-anchor="end">everything below; not each other</text>
+<rect x="24" y="180" width="812" height="52" fill="#eef2f7" stroke="#8a96a8" stroke-width="1"/>
+<text x="40" y="202" font-size="15" font-weight="bold" fill="#111">domain/&lt;area&gt;/&lt;sub&gt;, features/&lt;name&gt;</text>
+<text x="40" y="221" font-size="13" fill="#333">a domain's routes, tools and jobs; each feature</text>
+<text x="820" y="212" font-size="13" fill="#333" text-anchor="end">everything below; own folder only</text>
+<rect x="24" y="242" width="812" height="52" fill="#eef2f7" stroke="#8a96a8" stroke-width="1"/>
+<text x="40" y="264" font-size="15" font-weight="bold" fill="#111">runtime/*</text>
+<text x="40" y="283" font-size="13" fill="#333">coordinator, turns, watchdog, archive, machines, desk</text>
+<text x="820" y="274" font-size="13" fill="#333" text-anchor="end">core, features, domain roots, platform</text>
+<rect x="24" y="304" width="812" height="52" fill="#e6efe6" stroke="#8a96a8" stroke-width="1"/>
+<text x="40" y="326" font-size="15" font-weight="bold" fill="#111">core: store, current, rules, httpapi</text>
+<text x="40" y="345" font-size="13" fill="#333">the log, the read model, check 3</text>
+<text x="820" y="336" font-size="13" fill="#333" text-anchor="end">features, domain roots, platform</text>
+<rect x="24" y="366" width="812" height="52" fill="#eef2f7" stroke="#8a96a8" stroke-width="1"/>
+<text x="40" y="388" font-size="15" font-weight="bold" fill="#111">features</text>
+<text x="40" y="407" font-size="13" fill="#333">the feature framework</text>
+<text x="820" y="398" font-size="13" fill="#333" text-anchor="end">domain roots, core/events, platform</text>
+<rect x="24" y="428" width="812" height="52" fill="#eef2f7" stroke="#8a96a8" stroke-width="1"/>
+<text x="40" y="450" font-size="15" font-weight="bold" fill="#111">domain/&lt;area&gt;</text>
+<text x="40" y="469" font-size="13" fill="#333">each domain's model: state from events</text>
+<text x="820" y="460" font-size="13" fill="#333" text-anchor="end">core/events, platform, other roots</text>
+<rect x="24" y="490" width="812" height="52" fill="#e6efe6" stroke="#8a96a8" stroke-width="1"/>
+<text x="40" y="512" font-size="15" font-weight="bold" fill="#111">core/events</text>
+<text x="40" y="531" font-size="13" fill="#333">what the log holds</text>
+<text x="820" y="522" font-size="13" fill="#333" text-anchor="end">platform</text>
+<rect x="24" y="552" width="812" height="52" fill="#eef2f7" stroke="#8a96a8" stroke-width="1"/>
+<text x="40" y="574" font-size="15" font-weight="bold" fill="#111">platform/*</text>
+<text x="40" y="593" font-size="13" fill="#333">OS, git, engines, TLS, encodings</text>
+<text x="820" y="584" font-size="13" fill="#333" text-anchor="end">platform only</text>
+<text x="24" y="628" font-size="12" fill="#555">Green rows are core: events sits below the domain models, the rest of core above them. testkit/* is for tests only.</text>
+</svg>
