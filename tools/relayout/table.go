@@ -106,6 +106,7 @@ var allowed = map[string]string{
 	"internal/speccheck/sources.go":              "compares a path's parts with \"..\" to refuse paths out of the repo",
 	"internal/speccheck/check_test.go":           "its ../ paths are fixtures' and its Chdirs go into temp folders; tools/speccheck is as deep as internal/speccheck",
 	"packaging/check_test.go":                    "Chdirs into a temp repo",
+	"packaging/root_test.go":                     "Chdirs into a temp repo",
 }
 
 // areas are step 7's areas, in the order the doc moves them.
