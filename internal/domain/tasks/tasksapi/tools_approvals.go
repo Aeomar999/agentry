@@ -50,7 +50,7 @@ func (c Client) closable(id string) (title, text string, ok bool) {
 	if q, asking := c.questionOf(id); asking && slices.Contains(q.Options, waitlist.CloseEpic) {
 		return q.TaskTitle, q.Text, true
 	}
-	var epic task
+	var epic Task
 	if err := c.Agentry.Call("GET", "/api/tasks/"+id, nil, &epic); err != nil || epic.Closing == "" {
 		return "", "", false
 	}

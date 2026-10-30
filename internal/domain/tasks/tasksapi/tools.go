@@ -28,8 +28,9 @@ type Client struct {
 	Repo    string
 }
 
-// The parts of the API's tasks and questions the tools read.
-type task struct {
+// Task is the part of a task on the board, as GET /api/tasks lists it, that
+// the tools and the news read.
+type Task struct {
 	ID, Title, Repo, Status, CurrentAgent, NeedsYou, Kind, Epic, Parked, Closing, Column string
 	Labels, BlockedBy                                                                    []string
 	Pushed, DoneByYou                                                                    bool
@@ -40,7 +41,7 @@ type task struct {
 }
 
 type detail struct {
-	task
+	Task
 	Description, Summary, Coordinator, TokensUnknown string
 	Archived                                         bool // read back from its archive: it takes no events
 	ArchivedAt                                       time.Time
@@ -51,6 +52,7 @@ type detail struct {
 	}
 }
 
+// question is the part of a question waiting for the user that the tools read.
 type question struct {
 	waitlist.Question
 	Tool, Reason string
@@ -106,7 +108,7 @@ func (c Client) status(_ context.Context, arguments json.RawMessage) (string, er
 	if err != nil {
 		return "", err
 	}
-	shown, idOf := c.inScope(all, a.All), shownIDs(all)
+	shown, idOf := c.inScope(all, a.All), ShownIDs(all)
 	var b strings.Builder
 	fmt.Fprintf(&b, "Agentry board for %s (%s)\n", c.scope(a.All), c.Agentry.PageURL("/tasks"))
 	// What needs you is everywhere: it waits for you whichever repo it is in.
@@ -120,7 +122,7 @@ func (c Client) status(_ context.Context, arguments json.RawMessage) (string, er
 		}
 		return waitlist.Line(q.Question), true
 	}))
-	section(&b, "Running", lines(shown, func(t task) (string, bool) {
+	section(&b, "Running", lines(shown, func(t Task) (string, bool) {
 		if t.Status != "working" || t.Kind == "epic" {
 			return "", false
 		}
@@ -132,18 +134,18 @@ func (c Client) status(_ context.Context, arguments json.RawMessage) (string, er
 			what += " (" + tasks.ColumnName(t.Column) + ")"
 		}
 		if len(t.BlockedBy) > 0 {
-			what = "waits for " + strings.Join(idsAs(t.BlockedBy, idOf), ", ")
+			what = "waits for " + strings.Join(IDsAs(t.BlockedBy, idOf), ", ")
 		}
-		return t.shown() + " " + t.Title + ": " + what + " · " + usageOf(t), true
+		return t.Shown() + " " + t.Title + ": " + what + " · " + usageOf(t), true
 	}))
-	section(&b, "Epics", lines(shown, func(t task) (string, bool) {
+	section(&b, "Epics", lines(shown, func(t Task) (string, bool) {
 		if t.Closing != "" && t.Status == "working" {
-			return fmt.Sprintf("%s %s: all %d stories done, open until the user closes it (close_epic) or adds a story", t.shown(), t.Title, t.Stories), t.Kind == "epic"
+			return fmt.Sprintf("%s %s: all %d stories done, open until the user closes it (close_epic) or adds a story", t.Shown(), t.Title, t.Stories), t.Kind == "epic"
 		}
-		return fmt.Sprintf("%s %s: %d of %d stories done", t.shown(), t.Title, t.StoriesDone, t.Stories), t.Kind == "epic" && t.Status != "done"
+		return fmt.Sprintf("%s %s: %d of %d stories done", t.Shown(), t.Title, t.StoriesDone, t.Stories), t.Kind == "epic" && t.Status != "done"
 	}))
-	section(&b, "Not started (in the Backlog or To do)", lines(shown, func(t task) (string, bool) {
-		line := t.shown() + " " + t.Title
+	section(&b, "Not started (in the Backlog or To do)", lines(shown, func(t Task) (string, bool) {
+		line := t.Shown() + " " + t.Title
 		if t.Epic != "" {
 			line += " (story of " + tasks.ShownEpic(t.Epic) + ")"
 		}
@@ -171,7 +173,7 @@ func (c Client) listTasks(_ context.Context, arguments json.RawMessage) (string,
 		if t.Column != "" && t.Column != "done" { // done says it already
 			status += " · " + tasks.ColumnName(t.Column)
 		}
-		fmt.Fprintf(&b, "%s [%s] %s", t.shown(), status, t.Title)
+		fmt.Fprintf(&b, "%s [%s] %s", t.Shown(), status, t.Title)
 		switch {
 		case t.Kind == "epic":
 			fmt.Fprintf(&b, " (epic, %d of %d stories done)", t.StoriesDone, t.Stories)
@@ -204,7 +206,7 @@ func (c Client) showTask(_ context.Context, arguments json.RawMessage) (string, 
 		return "", err
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s: %s\nStatus: %s · %s · coordinator %s · repo %s\nOn the page: %s\n", t.shown(), t.Title, statusOf(t.task), columnOf(t.task), t.Coordinator, t.Repo,
+	fmt.Fprintf(&b, "%s: %s\nStatus: %s · %s · coordinator %s · repo %s\nOn the page: %s\n", t.Shown(), t.Title, statusOf(t.Task), columnOf(t.Task), t.Coordinator, t.Repo,
 		c.Agentry.PageURL("/tasks/"+t.ID))
 	if t.Status == "done" && t.DoneByYou {
 		b.WriteString("Moved to Done by you.\n")
@@ -217,7 +219,7 @@ func (c Client) showTask(_ context.Context, arguments json.RawMessage) (string, 
 	} else if t.Epic != "" {
 		fmt.Fprintf(&b, "A story of %s.\n", tasks.ShownEpic(t.Epic))
 	}
-	fmt.Fprintf(&b, "Budget: %s\n", usageOf(t.task))
+	fmt.Fprintf(&b, "Budget: %s\n", usageOf(t.Task))
 	if t.TokensUnknown != "" {
 		fmt.Fprintf(&b, "%s\n", t.TokensUnknown)
 	}
@@ -247,7 +249,7 @@ func (c Client) showTask(_ context.Context, arguments json.RawMessage) (string, 
 
 // statusOf is the task's status, with a done task whose work an agent
 // pushed said to be shipped.
-func statusOf(t task) string {
+func statusOf(t Task) string {
 	if t.Status == "done" && t.Pushed {
 		return "shipped"
 	}
@@ -255,16 +257,16 @@ func statusOf(t task) string {
 }
 
 // columnOf is where the task shows on the board: "on the board: Shipping".
-func columnOf(t task) string {
+func columnOf(t Task) string {
 	return "on the board: " + tasks.ColumnName(t.Column)
 }
 
 // usageOf is what the task has used of its budget and its turns, shown
 // with no limit too: "1.2M tokens (no limit) · 14 turns (no limit)".
-func usageOf(t task) string { return budgetOf(t) + " · " + turnsOf(t) }
+func usageOf(t Task) string { return budgetOf(t) + " · " + turnsOf(t) }
 
 // budgetOf is what the task has used of its budget: "1.2M of 5M tokens".
-func budgetOf(t task) string {
+func budgetOf(t Task) string {
 	if t.Budget == 0 {
 		return coordinator.Tokens(t.TokensUsed) + " tokens (no limit)"
 	}
@@ -273,7 +275,7 @@ func budgetOf(t task) string {
 
 // turnsOf is how many turns the task has had since the user last answered,
 // against its limit: "18 of 24 turns"; with no limit, all its turns.
-func turnsOf(t task) string {
+func turnsOf(t Task) string {
 	if t.MaxTurns == 0 {
 		return fmt.Sprintf("%d turns (no limit)", t.Turns)
 	}
@@ -294,7 +296,7 @@ func (c Client) createTask(_ context.Context, arguments json.RawMessage) (string
 	if a.Repo == "" {
 		a.Repo = c.Repo
 	}
-	a.Epic, a.Stories = tasks.StoredID(a.Epic), idsAs(a.Stories, tasks.StoredID)
+	a.Epic, a.Stories = tasks.StoredID(a.Epic), IDsAs(a.Stories, tasks.StoredID)
 	if a.Epic != "" {
 		a.Repo = "" // a story works where its epic does
 	}
@@ -371,15 +373,15 @@ func (c Client) fileUnder(_ context.Context, arguments json.RawMessage) (string,
 func (c Client) setPriority(_ context.Context, arguments json.RawMessage) (string, error) {
 	var a struct{ Tasks []string }
 	json.Unmarshal(arguments, &a)
-	a.Tasks = idsAs(a.Tasks, tasks.StoredID)
+	a.Tasks = IDsAs(a.Tasks, tasks.StoredID)
 	all, _, err := c.board()
 	if err != nil {
 		return "", err
 	}
-	idOf := shownIDs(all)
+	idOf := ShownIDs(all)
 	var ranks []float64
 	for _, id := range a.Tasks {
-		i := slices.IndexFunc(all, func(t task) bool { return t.ID == id })
+		i := slices.IndexFunc(all, func(t Task) bool { return t.ID == id })
 		if i < 0 {
 			return "", fmt.Errorf("no task %s", id)
 		}
@@ -391,27 +393,27 @@ func (c Client) setPriority(_ context.Context, arguments json.RawMessage) (strin
 			return "", fmt.Errorf("%s: %w", idOf(id), err)
 		}
 	}
-	return "In this order now: " + strings.Join(idsAs(a.Tasks, idOf), ", ") + ".", nil
+	return "In this order now: " + strings.Join(IDsAs(a.Tasks, idOf), ", ") + ".", nil
 }
 
 func (c Client) start(_ context.Context, arguments json.RawMessage) (string, error) {
 	var a struct{ Tasks []string }
 	json.Unmarshal(arguments, &a)
-	a.Tasks = idsAs(a.Tasks, tasks.StoredID)
+	a.Tasks = IDsAs(a.Tasks, tasks.StoredID)
 	idOf := c.ShownNow()
 	for _, id := range a.Tasks {
 		if err := c.Agentry.Call("POST", "/api/tasks/"+id+"/direct", map[string]string{"to": "in-progress"}, nil); err != nil {
 			return "", fmt.Errorf("%s: %w", idOf(id), err)
 		}
 	}
-	return "Started " + strings.Join(idsAs(a.Tasks, idOf), ", ") + ". They are on the Tasks board now.", nil
+	return "Started " + strings.Join(IDsAs(a.Tasks, idOf), ", ") + ". They are on the Tasks board now.", nil
 }
 
 // ---- the board -----------------------------------------------------------------
 
 // board is every task, and everything waiting for you.
-func (c Client) board() ([]task, []question, error) {
-	var all []task
+func (c Client) board() ([]Task, []question, error) {
+	var all []Task
 	if err := c.Agentry.Call("GET", "/api/tasks", nil, &all); err != nil {
 		return nil, nil, err
 	}
@@ -436,11 +438,11 @@ func (c Client) questionOf(id string) (question, bool) {
 }
 
 // inScope are the tasks of this repo, or all of them.
-func (c Client) inScope(all []task, everywhere bool) []task {
+func (c Client) inScope(all []Task, everywhere bool) []Task {
 	if everywhere || c.Repo == "" {
 		return all
 	}
-	var mine []task
+	var mine []Task
 	for _, t := range all {
 		if t.Repo == c.Repo {
 			mine = append(mine, t)
@@ -478,15 +480,15 @@ func lines[T any](items []T, line func(T) (string, bool)) []string {
 	return out
 }
 
-// shown is the task's id as you read it: epic-N for an epic.
-func (t task) shown() string { return tasks.ShownID(t.ID, tasks.Kind(t.Kind)) }
+// Shown is the task's id as you read it: epic-N for an epic.
+func (t Task) Shown() string { return tasks.ShownID(t.ID, tasks.Kind(t.Kind)) }
 
 // shown is the id of the task q waits on, as you read it.
 func (q question) shown() string { return tasks.ShownID(q.Task, tasks.Kind(q.TaskKind)) }
 
-// shownIDs gives each task's id as you read it, by its kind on the board
+// ShownIDs gives each task's id as you read it, by its kind on the board
 // all; an id not on it stays as it is.
-func shownIDs(all []task) func(id string) string {
+func ShownIDs(all []Task) func(id string) string {
 	kinds := map[string]tasks.Kind{}
 	for _, t := range all {
 		kinds[t.ID] = tasks.Kind(t.Kind)
@@ -497,13 +499,13 @@ func shownIDs(all []task) func(id string) string {
 // ShownNow is shownIDs of the board now: when it can't be read, every id
 // stays as it is.
 func (c Client) ShownNow() func(id string) string {
-	var all []task
+	var all []Task
 	c.Agentry.Call("GET", "/api/tasks", nil, &all)
-	return shownIDs(all)
+	return ShownIDs(all)
 }
 
-// idsAs are the ids, each as id gives it, such as tasks.StoredID.
-func idsAs(ids []string, id func(string) string) []string {
+// IDsAs are the ids, each as id gives it, such as tasks.StoredID.
+func IDsAs(ids []string, id func(string) string) []string {
 	var out []string
 	for _, each := range ids {
 		out = append(out, id(each))

@@ -445,7 +445,7 @@ Feature: Workers
     Given a worker online with 1 task on it
     When it goes offline
     Then the news for the user says the machine went offline, and the task waits until it is back: yes
-    # not under test, checked by hand: it is 1 line, and a worker offline with 0 tasks on it is news: no (internal/mcp/waiting.go line 74)
+    # not under test, checked by hand: it is 1 line, and a worker offline with 0 tasks on it is news: no (internal/mcp/waiting.go line 68)
     # internal/runtime/coordinator/worktrees.go moveWork: when the work's machine is offline and the next agent runs elsewhere, the task asks the user to bring it online and answer
     # internal/mcp/waiting_test.go TestTheNewsIsWhatIsNew
 

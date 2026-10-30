@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks/tasksapi"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/platform/client"
 )
@@ -23,13 +24,6 @@ import (
 // "needs you", "done" (a task finished), "said" (a coordinator told you),
 // "offline" (a machine), or an extension's own.
 type Waiting = extensions.Waiting
-
-// task is the part of a task on the board the news reads; it mirrors
-// internal/domain/tasks/tasksapi/tools.go's task.
-type task struct {
-	ID, Title, Status, Kind string
-	Told                    *struct{ At, From, Text string }
-}
 
 // WaitingFor is what GET /api/waiting lists for a session in repo ("" when
 // not known): the core's entries oldest first, then each extension's.
@@ -49,17 +43,17 @@ func News(agentry client.Client) ([]Waiting, error) {
 	if err != nil {
 		return nil, err
 	}
-	var board []task
+	var board []tasksapi.Task
 	if err := agentry.Call("GET", "/api/tasks", nil, &board); err != nil {
 		return nil, err
 	}
 	for _, t := range board {
 		if t.Status == "done" {
-			all = append(all, Waiting{Key: "done/" + t.ID, Task: t.ID, Line: t.shown() + " is done: " + t.Title, Kind: "done"})
+			all = append(all, Waiting{Key: "done/" + t.ID, Task: t.ID, Line: t.Shown() + " is done: " + t.Title, Kind: "done"})
 		}
 		if t.Told != nil {
 			all = append(all, Waiting{Key: "said/" + t.ID + "/" + t.Told.At, Task: t.ID, Kind: "said",
-				Line: fmt.Sprintf("%s (%s): %s says: %s", t.shown(), t.Title, t.Told.From, tasks.OneLine(t.Told.Text, 400))})
+				Line: fmt.Sprintf("%s (%s): %s says: %s", t.Shown(), t.Title, t.Told.From, tasks.OneLine(t.Told.Text, 400))})
 		}
 	}
 	var fleet struct {
@@ -73,7 +67,7 @@ func News(agentry client.Client) ([]Waiting, error) {
 		for _, w := range fleet.Workers {
 			if !w.Online && len(w.Tasks) > 0 { // offline with nothing on it is no news
 				all = append(all, Waiting{Key: "offline/" + w.Name + "/" + w.Since, Task: w.Tasks[0], Kind: "offline",
-					Line: fmt.Sprintf("the machine %s went offline; %s waits until it is back", w.Name, strings.Join(idsAs(w.Tasks, shownIDs(board)), ", "))})
+					Line: fmt.Sprintf("the machine %s went offline; %s waits until it is back", w.Name, strings.Join(tasksapi.IDsAs(w.Tasks, tasksapi.ShownIDs(board)), ", "))})
 			}
 		}
 	}
@@ -148,29 +142,4 @@ func (s *Server) waitingNote() string {
 		b.WriteString("\n- " + note)
 	}
 	return b.String()
-}
-
-// shown is the task's id as you read it: epic-N for an epic. It mirrors
-// internal/domain/tasks/tasksapi/tools.go's.
-func (t task) shown() string { return tasks.ShownID(t.ID, tasks.Kind(t.Kind)) }
-
-// shownIDs gives each task's id as you read it, by its kind on the board
-// all; an id not on it stays as it is. It mirrors
-// internal/domain/tasks/tasksapi/tools.go's.
-func shownIDs(all []task) func(id string) string {
-	kinds := map[string]tasks.Kind{}
-	for _, t := range all {
-		kinds[t.ID] = tasks.Kind(t.Kind)
-	}
-	return func(id string) string { return tasks.ShownID(id, kinds[id]) }
-}
-
-// idsAs are the ids, each as id gives it. It mirrors
-// internal/domain/tasks/tasksapi/tools.go's.
-func idsAs(ids []string, id func(string) string) []string {
-	var out []string
-	for _, each := range ids {
-		out = append(out, id(each))
-	}
-	return out
 }

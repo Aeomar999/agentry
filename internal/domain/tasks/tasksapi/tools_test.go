@@ -151,12 +151,12 @@ func TestAHeldApprovalSaysWhenItWasHeld(t *testing.T) {
 // and its turns, with no limit too, and none used yet.
 func TestTheTaskSaysItsLimits(t *testing.T) {
 	for _, c := range []struct {
-		task task
+		task Task
 		want string
 	}{
-		{task{Budget: 5_000_000, TokensUsed: 1_200_000, MaxTurns: 24, Turns: 30, TurnsSinceAnswer: 18}, "1.2M of 5M tokens · 18 of 24 turns"},
-		{task{TokensUsed: 950, Turns: 14, TurnsSinceAnswer: 3}, "950 tokens (no limit) · 14 turns (no limit)"},
-		{task{}, "0 tokens (no limit) · 0 turns (no limit)"},
+		{Task{Budget: 5_000_000, TokensUsed: 1_200_000, MaxTurns: 24, Turns: 30, TurnsSinceAnswer: 18}, "1.2M of 5M tokens · 18 of 24 turns"},
+		{Task{TokensUsed: 950, Turns: 14, TurnsSinceAnswer: 3}, "950 tokens (no limit) · 14 turns (no limit)"},
+		{Task{}, "0 tokens (no limit) · 0 turns (no limit)"},
 	} {
 		if got := usageOf(c.task); got != c.want {
 			t.Errorf("%+v: %q, want %q", c.task, got, c.want)
@@ -173,12 +173,12 @@ func TestTheTaskSaysItShipped(t *testing.T) {
 		t.Errorf("show_task should say it shipped and who moved it:\n%s", text)
 	}
 	for _, c := range []struct {
-		task task
+		task Task
 		want string
 	}{
-		{task{Status: "done", Pushed: true}, "shipped"},
-		{task{Status: "done"}, "done"},
-		{task{Status: "working", Pushed: true}, "working"},
+		{Task{Status: "done", Pushed: true}, "shipped"},
+		{Task{Status: "done"}, "done"},
+		{Task{Status: "working", Pushed: true}, "working"},
 	} {
 		if got := statusOf(c.task); got != c.want {
 			t.Errorf("%+v: %q, want %q", c.task, got, c.want)
@@ -188,10 +188,10 @@ func TestTheTaskSaysItShipped(t *testing.T) {
 
 // show_task says where the task is on the board, as the board names it.
 func TestTheTaskSaysItsColumn(t *testing.T) {
-	if got := columnOf(task{Column: "shipping"}); got != "on the board: Shipping" {
+	if got := columnOf(Task{Column: "shipping"}); got != "on the board: Shipping" {
 		t.Errorf("shipping: %q", got)
 	}
-	if got := columnOf(task{Column: "in-progress"}); got != "on the board: In progress" {
+	if got := columnOf(Task{Column: "in-progress"}); got != "on the board: In progress" {
 		t.Errorf("in progress: %q", got)
 	}
 }
