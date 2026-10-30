@@ -2,7 +2,7 @@ Feature: Sessions
   A turn goes on with an agent's earlier session, starts fresh or forks one,
   and its live terminal.
   # Sources: internal/platform/sessions, internal/platform/terminal, internal/domain/tasks/resume.go,
-  # internal/turns, ui/src/components/organisms/TerminalView.tsx and their tests.
+  # internal/runtime/turns, ui/src/components/organisms/TerminalView.tsx and their tests.
 
   # ---- Going on with a session -----------------------------------------------
 
@@ -14,7 +14,7 @@ Feature: Sessions
     Then it resumes exactly that session
     And its brief is the resumed one, with no "## The task" section, shorter than the whole brief
     And it starts fresh, saying why, when any of these holds: first turn, last turn failed, last turn stopped by the user, work moved to another machine, another engine, no session id, or the session's context is over 150,000 tokens
-    # MaxResumedContext = 150_000: internal/domain/tasks/resume.go; the shorter brief: internal/coordinator/resumed_brief_test.go TestAResumedBriefIsShorterThanTheWholeOne and TestTheLoopBriefsATurnAsItStarts
+    # MaxResumedContext = 150_000: internal/domain/tasks/resume.go; the shorter brief: internal/runtime/coordinator/resumed_brief_test.go TestAResumedBriefIsShorterThanTheWholeOne and TestTheLoopBriefsATurnAsItStarts
 
   @SESSION-02 @coordinator @test
   Scenario: A story's first turn can go on with a sibling story's session
@@ -24,26 +24,26 @@ Feature: Sessions
     Then it goes on with the agent's latest ended turn's session on any sibling story, held to the same rules as its own
     And the brief says this is a new task, with its own worktree and branch, and only this task's trail is shown, from its start
     And once the agent has had a turn on this story, its own latest session is used, even when a sibling's is newer
-    # the brief: internal/coordinator/carried_brief_test.go TestABriefFromASiblingsSessionSaysItIsANewTask; own first: internal/domain/tasks/share_test.go TestAStorysOwnSessionWinsOverANewerSiblings
+    # the brief: internal/runtime/coordinator/carried_brief_test.go TestABriefFromASiblingsSessionSaysItIsANewTask; own first: internal/domain/tasks/share_test.go TestAStorysOwnSessionWinsOverANewerSiblings
 
   @SESSION-03 @coordinator @test
   Scenario: A busy session is forked, never resumed in place
-    # internal/turns/share_test.go TestAFirstTurnOnAStoryGoesOnWithASiblingsSessionAndForksItWhenBusy
+    # internal/runtime/turns/share_test.go TestAFirstTurnOnAStoryGoesOnWithASiblingsSessionAndForksItWhenBusy
     Given a session that another turn is open in, or that an open turn started from
     When a turn on a sibling story goes on with it
     Then the turn goes on with a copy of the session, marked forked, and the original is kept by the open turn
     And 2 stories starting at once from 1 session never both resume it in place: 1 goes on in place and 1 forks
     # not under test, checked by hand: the one that forks is the later
-    # SessionBusy: internal/domain/tasks/resume.go; the race: internal/turns/share_test.go TestTwoStoriesStartingAtOnceFromOneSessionNeverBothResumeIt
+    # SessionBusy: internal/domain/tasks/resume.go; the race: internal/runtime/turns/share_test.go TestTwoStoriesStartingAtOnceFromOneSessionNeverBothResumeIt
 
   @SESSION-04 @coordinator @test
   Scenario: With session resume off, every turn starts fresh
-    # internal/turns/share_test.go TestResumeOffKeepsEveryStoryFresh
+    # internal/runtime/turns/share_test.go TestResumeOffKeepsEveryStoryFresh
     Given the server was started with -resume-sessions=false
     When any turn starts, on a story with sibling sessions or not
     Then it starts fresh, and the reason is exactly "resume is off"
     # not under test, checked by hand: the reason is kept on the turn; the test reads the runner's choice
-    # the flag, default true: cmd/agentry/serve.go; ResumeOff: internal/turns/turns.go
+    # the flag, default true: cmd/agentry/serve.go; ResumeOff: internal/runtime/turns/turns.go
 
   # ---- The live terminal -----------------------------------------------------
 

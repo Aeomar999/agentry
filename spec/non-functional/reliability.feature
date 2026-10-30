@@ -7,19 +7,19 @@ Feature: Reliability
     When the watchdog checks the turn 4 seconds after it started, past the 3 second start grace
     Then the watchdog raises an issue saying the process exited, and stops the session: yes
     And no turn is left open, so the coordinator gets the issue: yes
-    # not under test, checked by hand: the watchdog checks once a second (internal/watchdog/watchdog.go line 73); the test calls Check with the clock moved on
-    # internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace; the coordinator gets it: internal/domain/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
+    # not under test, checked by hand: the watchdog checks once a second (internal/runtime/watchdog/watchdog.go line 73); the test calls Check with the clock moved on
+    # internal/runtime/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace; the coordinator gets it: internal/domain/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
 
   # Every number below comes from the code; the comment on each names its
   # file and constant. The watchdog checks every task with an open turn
-  # once a second (internal/watchdog/watchdog.go Run), so each limit is
+  # once a second (internal/runtime/watchdog/watchdog.go Run), so each limit is
   # met within about a second of passing.
 
   # The watchdog
 
   @REL-02 @test
   Scenario: A dead agent process is an issue for the coordinator after the start grace
-    # internal/watchdog/watchdog.go DefaultLimits.StartGrace = 3 seconds
+    # internal/runtime/watchdog/watchdog.go DefaultLimits.StartGrace = 3 seconds
     Given a task whose open turn started 1 second ago and whose agent process is not running
     When the watchdog checks the turn
     Then it raises 0 issues, because the process may not be up yet within 3 seconds of the start
@@ -27,88 +27,88 @@ Feature: Reliability
     Then it stops the task's session: yes
     And it raises an issue saying the agent's process exited: yes
     And the open turn has ended, so the task goes back to its coordinator: yes
-    # not under test, checked by hand: the issue goes on "(crashed or was killed)" (internal/watchdog/watchdog.go line 134)
-    # internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace; the coordinator gets it: internal/domain/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
+    # not under test, checked by hand: the issue goes on "(crashed or was killed)" (internal/runtime/watchdog/watchdog.go line 134)
+    # internal/runtime/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace; the coordinator gets it: internal/domain/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
 
   @REL-03 @test
   Scenario: A turn with no event for 10 minutes is a stall
-    # internal/watchdog/watchdog.go DefaultLimits.Silence = 10 minutes
+    # internal/runtime/watchdog/watchdog.go DefaultLimits.Silence = 10 minutes
     Given a task whose open turn took its prompt and has no approved tool call running
     And nothing has happened on the turn since its last event
     When 11 minutes have passed since that event
     Then the watchdog raises an issue saying the agent has been silent: yes
-    # not under test, checked by hand: the issue says "for over 10m0s" (internal/watchdog/watchdog.go line 150), and raising it stops the session (line 268)
-    # internal/watchdog/watchdog_test.go TestASilentTurnIsAStall
+    # not under test, checked by hand: the issue says "for over 10m0s" (internal/runtime/watchdog/watchdog.go line 150), and raising it stops the session (line 268)
+    # internal/runtime/watchdog/watchdog_test.go TestASilentTurnIsAStall
 
   @REL-04 @test
   Scenario: A turn waiting for the user is not a stall
-    # internal/watchdog/watchdog.go findProblem isWaitingForYou
+    # internal/runtime/watchdog/watchdog.go findProblem isWaitingForYou
     Given a task whose open turn asked for a command and the policy asked the user about it
     And the user has not answered
     When 1 hour has passed with no event on the turn
     Then the watchdog raises 0 issues, because a held action waits for the user, not the agent
-    # internal/watchdog/watchdog_test.go TestWaitingForYouIsNotAStall
+    # internal/runtime/watchdog/watchdog_test.go TestWaitingForYouIsNotAStall
 
   @REL-05 @test
   Scenario: An approved tool call with no result for 20 minutes is an issue
-    # internal/watchdog/watchdog.go DefaultLimits.Tool = 20 minutes
+    # internal/runtime/watchdog/watchdog.go DefaultLimits.Tool = 20 minutes
     Given a task whose open turn has 1 approved tool call, npm test, with no result yet
     When 15 minutes have passed since the call was requested
     Then the watchdog raises 0 issues, because a running tool is not silence and is within its limit
     When 21 minutes have passed since the call was requested
     Then the watchdog raises an issue naming the command, npm test: yes
-    # not under test, checked by hand: the issue says the tool call has run for over 20m0s with no result (internal/watchdog/watchdog.go line 144)
-    # internal/watchdog/watchdog_test.go TestAToolOpenTooLong
+    # not under test, checked by hand: the issue says the tool call has run for over 20m0s with no result (internal/runtime/watchdog/watchdog.go line 144)
+    # internal/runtime/watchdog/watchdog_test.go TestAToolOpenTooLong
 
   @REL-06 @test
   Scenario: The same command requested 5 times in a row is a loop
-    # internal/watchdog/watchdog.go DefaultLimits.Repeats = 5
+    # internal/runtime/watchdog/watchdog.go DefaultLimits.Repeats = 5
     Given a task whose open turn requested the same tool and command 5 times in a row, each approved and each with a result
     When the watchdog checks the turn
     Then it raises an issue saying the same command was requested 5 times in a row: yes
-    # not under test, checked by hand: the issue names the command (internal/watchdog/watchdog.go line 140), and raising it stops the session (line 268)
-    # internal/watchdog/watchdog_test.go TestTheSameCommandRepeated
+    # not under test, checked by hand: the issue names the command (internal/runtime/watchdog/watchdog.go line 140), and raising it stops the session (line 268)
+    # internal/runtime/watchdog/watchdog_test.go TestTheSameCommandRepeated
 
   @REL-07 @test
   Scenario: Different commands with the same description are not a loop
-    # internal/watchdog/watchdog.go repeatedCommand compares the tool and the command, never the description
+    # internal/runtime/watchdog/watchdog.go repeatedCommand compares the tool and the command, never the description
     Given a turn with 5 WebSearch calls whose commands all differ, and the same, empty, description
     When the watchdog counts the repeats
     Then the count is 1
     Given a turn with 5 calls whose commands Agentry could not read
     When the watchdog counts the repeats
     Then the count is 0, because an unreadable command says nothing about a loop
-    # internal/watchdog/repeat_test.go TestDifferentSearchesAreNotALoop
+    # internal/runtime/watchdog/repeat_test.go TestDifferentSearchesAreNotALoop
 
   @REL-08 @test
   Scenario: A prompt not acknowledged within 60 seconds asks the user to open the terminal
-    # internal/watchdog/watchdog.go DefaultLimits.Acknowledge = 60 seconds
+    # internal/runtime/watchdog/watchdog.go DefaultLimits.Acknowledge = 60 seconds
     Given a task whose open turn started but whose engine has not echoed its prompt
     When 61 seconds have passed since the turn started
     Then the turn waits on a question for the user that names trusting the repository: yes
     And the task's status shown is Needs you
     When the engine acknowledges the prompt
     Then the task's status shown is Working, not Needs you
-    # not under test, checked by hand: the question, recorded as agent.waiting, says the agent hasn't received its prompt after 1m0s and to open its terminal (internal/watchdog/watchdog.go lines 116 to 118)
-    # internal/watchdog/watchdog_test.go TestAPromptThatNeverArrivesWaitsForYou
+    # not under test, checked by hand: the question, recorded as agent.waiting, says the agent hasn't received its prompt after 1m0s and to open its terminal (internal/runtime/watchdog/watchdog.go lines 116 to 118)
+    # internal/runtime/watchdog/watchdog_test.go TestAPromptThatNeverArrivesWaitsForYou
 
   @REL-09 @test
   Scenario: A resumed or forked session whose process exited before taking the prompt is retried fresh once
-    # internal/watchdog/watchdog.go resumeFailed, DefaultLimits.StartGrace = 3 seconds
+    # internal/runtime/watchdog/watchdog.go resumeFailed, DefaultLimits.StartGrace = 3 seconds
     Given a task whose open turn went on with the agent's last session, or a fork of it, or a sibling story's session
     And the turn has not acknowledged its prompt and its process is not running
     When 4 seconds have passed since the turn started
     Then the watchdog stops the session and raises an issue with retryFresh set to yes, saying the resumed session didn't start, or the forked session when the turn forked
-    # internal/watchdog/watchdog_test.go TestAResumeThatDidNotStartIsRetriedFresh; once: internal/coordinator/retry_fresh_test.go TestAFailedResumeIsRetriedFreshOnce (the fresh retry's failure is a plain issue)
+    # internal/runtime/watchdog/watchdog_test.go TestAResumeThatDidNotStartIsRetriedFresh; once: internal/runtime/coordinator/retry_fresh_test.go TestAFailedResumeIsRetriedFreshOnce (the fresh retry's failure is a plain issue)
 
   @REL-45 @test
   Scenario: A fresh session, or one that took its prompt, whose process exited is a dead process, not retried fresh
-    # internal/watchdog/watchdog.go resumeFailed is only for a resumed session that never took its prompt
+    # internal/runtime/watchdog/watchdog.go resumeFailed is only for a resumed session that never took its prompt
     Given a task whose open turn was fresh, or had acknowledged its prompt before its process exited
     And its process is not running
     When 4 seconds have passed since the turn started
     Then the issue says the process exited, with retryFresh set to no
-    # internal/watchdog/watchdog_test.go TestAResumeThatDidNotStartIsRetriedFresh
+    # internal/runtime/watchdog/watchdog_test.go TestAResumeThatDidNotStartIsRetriedFresh
 
   # A usage limit
 
@@ -124,7 +124,7 @@ Feature: Reliability
 
   @REL-11 @test
   Scenario: A limited turn is retried once, 1 minute after the engine's reset time
-    # internal/watchdog/watchdog.go ResetSlack = 1 minute, CarryOn
+    # internal/runtime/watchdog/watchdog.go ResetSlack = 1 minute, CarryOn
     Given a turn limited with a reset time 30 minutes away
     When 30 minutes have passed
     Then 0 lines have been typed into the session and the turn is still limited
@@ -133,27 +133,27 @@ Feature: Reliability
     And it stops the session: no
     When 33 minutes have passed
     Then the line has been typed exactly 1 time
-    # internal/watchdog/watchdog_test.go TestALimitedTurnIsRetriedOnceJustAfterTheReset
+    # internal/runtime/watchdog/watchdog_test.go TestALimitedTurnIsRetriedOnceJustAfterTheReset
 
   @REL-12 @test
   Scenario: A limit whose reset time the engine did not say is retried after 1 hour
-    # internal/watchdog/watchdog.go UnknownReset = 1 hour, counted from the turn's last event
+    # internal/runtime/watchdog/watchdog.go UnknownReset = 1 hour, counted from the turn's last event
     Given a turn limited with no reset time
     When 59 minutes and 59 seconds have passed
     Then 0 lines have been typed into the session
     When 1 hour and 1 second have passed
     Then 1 line has been typed into the session
-    # internal/watchdog/watchdog_test.go TestALimitWithNoResetTimeIsRetriedAfterAnHour
+    # internal/runtime/watchdog/watchdog_test.go TestALimitWithNoResetTimeIsRetriedAfterAnHour
 
   @REL-13 @test
   Scenario: A limit said to reset days away is retried after 24 hours at most
-    # internal/watchdog/watchdog.go MaxLimitWait = 24 hours
+    # internal/runtime/watchdog/watchdog.go MaxLimitWait = 24 hours
     Given a turn limited with a reset time 3 days away
     When 23 hours, 59 minutes and 59 seconds have passed
     Then 0 lines have been typed into the session
     When 24 hours and 1 second have passed
     Then 1 line has been typed into the session
-    # internal/watchdog/watchdog_test.go TestALimitResetDaysAwayIsRetriedAfterADayAtMost
+    # internal/runtime/watchdog/watchdog_test.go TestALimitResetDaysAwayIsRetriedAfterADayAtMost
 
   @REL-14 @test
   Scenario: A turn that hits the limit again straight after its retry is an issue, not another wait
@@ -169,31 +169,31 @@ Feature: Reliability
     Given a turn retried by the watchdog when its limit reset, which made a tool call after the retry
     When its engine reports the usage limit again
     Then the turn is kept open and limited, with its retry cleared: yes
-    # not under test, checked by hand: the watchdog waits out any limited turn (internal/watchdog/watchdog.go lines 111 and 160)
+    # not under test, checked by hand: the watchdog waits out any limited turn (internal/runtime/watchdog/watchdog.go lines 111 and 160)
     # internal/domain/policy/hooks/handler_test.go TestALimitAfterWorkSinceTheRetryIsWaitedOut
 
   @REL-15 @test
   Scenario: A limited turn that the log refuses to resume is a stall 10 minutes after the reset
-    # internal/watchdog/watchdog.go checkLimited, DefaultLimits.Silence = 10 minutes
+    # internal/runtime/watchdog/watchdog.go checkLimited, DefaultLimits.Silence = 10 minutes
     Given a limited turn whose turn.resumed proposal the log refuses when its reset time comes
     When the reset time has passed
     Then 0 lines are typed into the session
     When more than 10 minutes have passed since the retry was due
     Then the watchdog raises an issue saying the usage limit was due to reset: yes
-    # not under test, checked by hand: the issue says the agent has been silent for over 10m0s since then (internal/watchdog/watchdog.go line 167)
-    # internal/watchdog/watchdog_test.go TestARefusedResumeTypesNothingAndStallsAfterTheReset
+    # not under test, checked by hand: the issue says the agent has been silent for over 10m0s since then (internal/runtime/watchdog/watchdog.go line 167)
+    # internal/runtime/watchdog/watchdog_test.go TestARefusedResumeTypesNothingAndStallsAfterTheReset
 
   @REL-16 @test
   Scenario: A tool open across a usage limit is found open too long from the resume, not from its start
-    # internal/watchdog/watchdog.go toolClock, DefaultLimits.Tool = 20 minutes
+    # internal/runtime/watchdog/watchdog.go toolClock, DefaultLimits.Tool = 20 minutes
     Given a turn with 1 approved tool call open when its engine hit the usage limit
     And the turn was resumed when the limit reset
     When 20 minutes have passed since the tool call was requested but fewer than 20 minutes since the resume
     Then the watchdog finds no problem with the tool: yes
     When more than 20 minutes have passed since the resume
     Then the watchdog finds the tool call open too long: yes
-    # not under test, checked by hand: Check raises what findProblem finds (internal/watchdog/watchdog.go line 107)
-    # internal/watchdog/watchdog_test.go TestAToolOpenAtALimitIsTimedFromTheResume
+    # not under test, checked by hand: Check raises what findProblem finds (internal/runtime/watchdog/watchdog.go line 107)
+    # internal/runtime/watchdog/watchdog_test.go TestAToolOpenAtALimitIsTimedFromTheResume
 
   # A stop and start keeping sessions
 
@@ -229,25 +229,25 @@ Feature: Reliability
 
   @REL-19 @test
   Scenario: An agent's next turn on a task goes on with its last session
-    # cmd/agentry/serve.go -resume-sessions default true; internal/turns/turns.go Config.NoResume
+    # cmd/agentry/serve.go -resume-sessions default true; internal/runtime/turns/turns.go Config.NoResume
     Given a task whose agent ended a turn in session s-1
     And the runner has resume on, as -resume-sessions at its default, true, sets it
     When the agent's next turn starts
     Then the engine is launched with --resume s-1: yes
     And the turn records s-1 as the session it came from
     # not under test, checked by hand: serve's -resume-sessions defaults to true (cmd/agentry/serve.go line 104) and sets NoResume to its opposite (line 271)
-    # internal/turns/turns_test.go TestATurnGoesOnWithTheAgentsLastSession
+    # internal/runtime/turns/turns_test.go TestATurnGoesOnWithTheAgentsLastSession
 
   @REL-47 @test
   Scenario: With -resume-sessions=false every turn starts a fresh session
-    # internal/turns/turns.go Config.NoResume, ResumeOff = "resume is off"
+    # internal/runtime/turns/turns.go Config.NoResume, ResumeOff = "resume is off"
     Given a task whose agent ended a turn in session s-1
     And the runner has resume off, as -resume-sessions=false sets it
     When the agent's next turn starts
     Then the engine is launched with --resume: no
     And the reason the turn records for starting fresh is exactly "resume is off"
     # not under test, checked by hand: serve sets NoResume from -resume-sessions (cmd/agentry/serve.go line 271)
-    # internal/turns/turns_test.go TestATurnGoesOnWithTheAgentsLastSession
+    # internal/runtime/turns/turns_test.go TestATurnGoesOnWithTheAgentsLastSession
 
   @REL-20 @test
   Scenario: An action left asking the user when the server stops is held for the user
@@ -266,22 +266,22 @@ Feature: Reliability
   @REL-21 @test
   Scenario: After a start, a worker that was online is waited for, not refused at once
     # internal/domain/workers/workerlink/server.go ForgetConnections records every worker offline at start
-    # internal/machines/fleet.go OfflineGrace = 30 seconds
+    # internal/runtime/machines/fleet.go OfflineGrace = 30 seconds
     Given a fleet that expects a worker which has not dialed in since the start
     And an agent that may run only on that worker
     When the fleet is asked where the agent's turn runs and the worker connects 300 milliseconds later
     Then the fleet gives that worker: yes
-    # not under test, checked by hand: the wait ends after OfflineGrace, 30 seconds (internal/coordinator/loop.go line 204), and the agent is refused then
-    # README.md, Work across machines; internal/machines/fleet_test.go TestTheFleetWaitsForAWorkerComingBack
+    # not under test, checked by hand: the wait ends after OfflineGrace, 30 seconds (internal/runtime/coordinator/loop.go line 204), and the agent is refused then
+    # README.md, Work across machines; internal/runtime/machines/fleet_test.go TestTheFleetWaitsForAWorkerComingBack
 
   @REL-48 @test
   Scenario: An agent whose only worker has never been seen is refused a turn
-    # internal/machines/fleet.go: the grace is for a worker that was online, never for one unseen
+    # internal/runtime/machines/fleet.go: the grace is for a worker that was online, never for one unseen
     Given a fleet whose worker has never dialed in
     And an agent that may run only on that worker
     When the fleet is asked where the agent's turn runs
     Then the fleet refuses it with an error: yes
-    # README.md, Work across machines; internal/machines/fleet_test.go TestTheFleetWaitsForAWorkerComingBack
+    # README.md, Work across machines; internal/runtime/machines/fleet_test.go TestTheFleetWaitsForAWorkerComingBack
 
   # Startup replay of the log and the snapshot
 
@@ -380,7 +380,7 @@ Feature: Reliability
 
   @REL-28 @test
   Scenario: The archiver runs a round at start and then every hour
-    # internal/archive/archive.go roundEvery = 1 hour
+    # internal/runtime/archive/archive.go roundEvery = 1 hour
     Given an archiver started with the server
     When it starts
     Then it runs a round at once: yes
@@ -388,11 +388,11 @@ Feature: Reliability
     Then it runs another round: yes
     When the server closes during a round
     Then the task under way finishes and the rest wait: yes
-    # README.md, Archiving, erasing and redacting; internal/archive/archive_test.go TestTheArchiverRunsAtStartAndThenHourly, TestCloseStopsARoundAfterTheTaskUnderWay
+    # README.md, Archiving, erasing and redacting; internal/runtime/archive/archive_test.go TestTheArchiverRunsAtStartAndThenHourly, TestCloseStopsARoundAfterTheTaskUnderWay
 
   @REL-29 @test
   Scenario: A round archives only tasks done for the age with no turn open, and an epic after its stories
-    # internal/archive/archive.go chosen
+    # internal/runtime/archive/archive.go chosen
     Given a task done 30 days ago and another done just under 30 days ago
     When a round runs
     Then 1 task is archived
@@ -405,7 +405,7 @@ Feature: Reliability
     Given a task archived, then unarchived less than 30 days ago and not reopened
     When a round runs
     Then it is archived: no, because it waits the whole 30 days again from its unarchiving
-    # README.md, Archiving, erasing and redacting; internal/archive/archive_test.go TestATaskIsArchivedOnceDoneForTheAge, TestATaskWithATurnRunningWaitsForTheRoundAfterItEnds, TestAnEpicWaitsForItsStories, TestAnUnarchivedTaskWaitsTheAgeAgain
+    # README.md, Archiving, erasing and redacting; internal/runtime/archive/archive_test.go TestATaskIsArchivedOnceDoneForTheAge, TestATaskWithATurnRunningWaitsForTheRoundAfterItEnds, TestAnEpicWaitsForItsStories, TestAnUnarchivedTaskWaitsTheAgeAgain
 
   @REL-30 @test
   Scenario: Archiving moves a task's rows into one file and leaves a marker with its summary
@@ -465,7 +465,7 @@ Feature: Reliability
 
   @REL-33 @test
   Scenario: After a round that archived, the space goes back to the disk and a snapshot is asked for
-    # internal/archive/archive.go afterArchiving; internal/core/store/vacuum.go GiveBackSpace and VacuumOnce
+    # internal/runtime/archive/archive.go afterArchiving; internal/core/store/vacuum.go GiveBackSpace and VacuumOnce
     Given a round that archived at least 1 task
     Then the store gives its free pages back and empties the WAL 1 time
     And 1 snapshot is asked for
@@ -474,7 +474,7 @@ Feature: Reliability
     Given a log file made before incremental vacuum whose one full VACUUM failed
     When the next round runs
     Then the VACUUM is tried again: yes
-    # README.md, Archiving, erasing and redacting; internal/archive/archive_test.go TestOnlyARoundThatArchivedGivesBackSpaceAndSnapshots, TestAFailedVacuumIsTriedAgainAtTheNextRound; the WAL: internal/core/store/vacuum_test.go TestGiveBackSpaceShrinksTheFileAndTheWAL
+    # README.md, Archiving, erasing and redacting; internal/runtime/archive/archive_test.go TestOnlyARoundThatArchivedGivesBackSpaceAndSnapshots, TestAFailedVacuumIsTriedAgainAtTheNextRound; the WAL: internal/core/store/vacuum_test.go TestGiveBackSpaceShrinksTheFileAndTheWAL
 
   @REL-34 @benchmark
   Scenario: An archived task opens in time
@@ -540,11 +540,11 @@ Feature: Reliability
 
   @REL-38 @test
   Scenario: The hook's deadline is under the engine's own timeout, so the gate fails closed
-    # internal/platform/engines/engine.go GateTimeoutSeconds = 1800; internal/turns/turns.go environment: deadline = 1800 - 10 = 1790 seconds
+    # internal/platform/engines/engine.go GateTimeoutSeconds = 1800; internal/runtime/turns/turns.go environment: deadline = 1800 - 10 = 1790 seconds
     # internal/platform/hookcall/hookcall.go EnvDeadline = AGENTRY_HOOK_DEADLINE
     Given a turn's environment as the runner builds it
     Then AGENTRY_HOOK_DEADLINE is 1790 seconds, which is 10 seconds under the engine's 1800 second hook timeout: yes
-    # internal/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt (AGENTRY_HOOK_DEADLINE=29m50s), TestTheHookGivesUpBeforeTheEngineKillsIt
+    # internal/runtime/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt (AGENTRY_HOOK_DEADLINE=29m50s), TestTheHookGivesUpBeforeTheEngineKillsIt
 
   @REL-39 @test
   Scenario: The server stops waiting on an ask 5 seconds before the hook's deadline, or a quarter of a short one
@@ -573,15 +573,15 @@ Feature: Reliability
 
   @REL-41 @test
   Scenario: A worker that went offline is taken to still run its turns for 30 seconds
-    # internal/machines/offline.go Offline.IsRunning; internal/machines/fleet.go OfflineGrace = 30 seconds
+    # internal/runtime/machines/offline.go Offline.IsRunning; internal/runtime/machines/fleet.go OfflineGrace = 30 seconds
     Given a worker whose link dropped less than 30 seconds ago, with an agent's turn running on it
     When the fleet is asked whether the task's agent is running
     Then the answer is yes
     Given a worker whose link dropped 30 seconds ago or more
     When the fleet is asked whether the task's agent is running
     Then the answer is no
-    # not under test, checked by hand: the watchdog asks through the runner (cmd/agentry/serve.go line 279, internal/turns/turns.go line 192), so a yes raises 0 issues and a no is judged as a dead process would be
-    # README.md, Work across machines; internal/machines/fleet_test.go TestTheFleetPicksWhereAnAgentWorks
+    # not under test, checked by hand: the watchdog asks through the runner (cmd/agentry/serve.go line 279, internal/runtime/turns/turns.go line 192), so a yes raises 0 issues and a no is judged as a dead process would be
+    # README.md, Work across machines; internal/runtime/machines/fleet_test.go TestTheFleetPicksWhereAnAgentWorks
 
   @REL-42 @manual
   Scenario: A worker dials the server again, waiting 1 second, then twice as long each time, up to 30 seconds
@@ -603,12 +603,12 @@ Feature: Reliability
 
   @REL-43 @test
   Scenario: The coordinator asks the user when the agent's only machines are offline
-    # internal/coordinator/loop.go startTurn: the fleet is waited for OfflineGrace, then the user is asked
+    # internal/runtime/coordinator/loop.go startTurn: the fleet is waited for OfflineGrace, then the user is asked
     Given a worker that joined and is offline, and an engineer who may run only on it
     When the coordinator assigns the task to the engineer
     Then the task asks the user a question, saying the engineer can't run anywhere now because the worker is offline: yes
     And the task has 1 turn, the coordinator's: no engineer turn was started
-    # README.md, Work across machines; internal/coordinator/loop_test.go TestAnAgentWhoseWorkersAreOfflineAsksYou
+    # README.md, Work across machines; internal/runtime/coordinator/loop_test.go TestAnAgentWhoseWorkersAreOfflineAsksYou
 
   @REL-44 @test
   Scenario: A join code works once, for 1 hour

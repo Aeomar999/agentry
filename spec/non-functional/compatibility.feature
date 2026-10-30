@@ -125,7 +125,7 @@ Feature: Compatibility
     Then the worker connects, since it dials out to the server: no port is opened on the machine
     And status shows the engines found with their versions, as claude <version> or codex <version>, and lists git under missing with "(agents need it)" when it is not on the PATH
     And the Workers page shows the machine's os/arch and the same engines, or "no engines found"
-    # README.md, Add machines; internal/machines/describe.go lines 18-33; cmd/agentry/worker_manage.go lines 104-131; ui/src/pages/WorkersPage.tsx lines 39, 48; no test of the output
+    # README.md, Add machines; internal/runtime/machines/describe.go lines 18-33; cmd/agentry/worker_manage.go lines 104-131; ui/src/pages/WorkersPage.tsx lines 39, 48; no test of the output
 
   # --- Engines: Claude Code and Codex ---
 
@@ -183,7 +183,7 @@ Feature: Compatibility
     Then each engine found is listed as its name and the first word of its --version output that starts with a digit, asked with a 10 second limit
     And an engine that is not on the PATH is left out; one that is there but prints no version is listed by name only
     And no version is compared against a minimum: Agentry has no lowest supported version of Claude Code or Codex, and starts any it finds
-    # README.md, Add machines (agentry worker status); internal/machines/describe.go lines 18-61; no test
+    # README.md, Add machines (agentry worker status); internal/runtime/machines/describe.go lines 18-61; no test
 
   @COMPAT-18 @test
   Scenario: A session started from inside Claude Code or Codex drops only the parent's markers

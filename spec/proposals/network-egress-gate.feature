@@ -15,8 +15,8 @@ Feature: Network egress gate
 
   @PROP-78 @agent @test @to-policy
   Scenario: An agent's session is started with Agentry's proxy as its way out
-    # the old build plan, "agent traffic through an Agentry proxy"; a turn's environment is set by Agentry (internal/turns/turns.go environment, internal/platform/sessions/session.go Env)
-    # test: internal/turns/turns_test.go (to write)
+    # the old build plan, "agent traffic through an Agentry proxy"; a turn's environment is set by Agentry (internal/runtime/turns/turns.go environment, internal/platform/sessions/session.go Env)
+    # test: internal/runtime/turns/turns_test.go (to write)
     Given an agent whose profile has a network allowlist
     When its turn starts
     Then its session's environment names Agentry's proxy for http, https and every other proxy setting the common tools read: yes

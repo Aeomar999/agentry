@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/desk"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/desk"
 )
 
 // The desk's commands send what it wrote to the API with its token.

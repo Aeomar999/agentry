@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/platform/pinned"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 )
 
 // runHook is `agentry hook <event>`, which an engine runs with the event's

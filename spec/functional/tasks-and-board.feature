@@ -1,8 +1,8 @@
 Feature: Tasks and the board
   Adding a task, the board and its columns, the Tasks page, a task's page,
   running limits, search, the keys and the archive.
-  # Sources: internal/domain/tasks, internal/archive, internal/domain/settings,
-  # internal/coordinator/slots.go, internal/web/api.go, internal/web/board_api.go,
+  # Sources: internal/domain/tasks, internal/runtime/archive, internal/domain/settings,
+  # internal/runtime/coordinator/slots.go, internal/web/api.go, internal/web/board_api.go,
   # internal/web/erase_api.go, internal/web/archives.go,
   # internal/web/settings_api.go, ui/src/pages/TasksPage.tsx,
   # ui/src/pages/TaskPage.tsx, ui/src/components/organisms/TaskBoard.tsx,
@@ -332,7 +332,7 @@ Feature: Tasks and the board
 
   @TASK-29 @user @test
   Scenario: Over the limit, the other tasks wait as queued
-    # internal/coordinator/slots_test.go TestTheLoopRunsNoMoreTasksThanTheLimit and TestALimitUnderWhatRunsQueuesEveryOneWaiting
+    # internal/runtime/coordinator/slots_test.go TestTheLoopRunsNoMoreTasksThanTheLimit and TestALimitUnderWhatRunsQueuesEveryOneWaiting
     Given a limit of 2 and 4 tasks started
     When the loop runs
     Then exactly 2 tasks have a turn at once
@@ -683,9 +683,9 @@ Feature: Tasks and the board
 
   @TASK-55 @user @test
   Scenario: A task done for the archive age is archived, in a round at start and then every hour
-    # internal/archive/archive_test.go TestATaskIsArchivedOnceDoneForTheAge and TestTheArchiverRunsAtStartAndThenHourly
-    # the age: 30 days unless -archive-after says otherwise, and 0 never archives: cmd/agentry/serve.go lines 70 to 72 and 105; the test's age, 30 days: internal/archive/archive_test.go line 22
-    # a round every hour: internal/archive/archive.go line 20, roundEvery
+    # internal/runtime/archive/archive_test.go TestATaskIsArchivedOnceDoneForTheAge and TestTheArchiverRunsAtStartAndThenHourly
+    # the age: 30 days unless -archive-after says otherwise, and 0 never archives: cmd/agentry/serve.go lines 70 to 72 and 105; the test's age, 30 days: internal/runtime/archive/archive_test.go line 22
+    # a round every hour: internal/runtime/archive/archive.go line 20, roundEvery
     # the task list still shows an archived task as done, with its summary; its page is marked Archived and read only: @TASK-52 and @TASK-53; README.md, Archiving, erasing and redacting
     Given the default archive age, 30 days, and 3 tasks done, task-1 first, task-3 reopened since
     When a round runs 30 days after task-1 was done

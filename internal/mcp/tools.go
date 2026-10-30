@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks/waitlist"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/platform/schema"
 	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/coordinator"
 )
 
 // The parts of the API's tasks and questions the tools read.

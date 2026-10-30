@@ -1,7 +1,7 @@
 Feature: Epics and stories
   A goal too big for one change is an epic, split into stories that wait in the
   Backlog, ordered in Plan, and closed once every story is done.
-  # Sources: internal/domain/tasks, internal/coordinator/epics.go,
+  # Sources: internal/domain/tasks, internal/runtime/coordinator/epics.go,
   # internal/web/epics_api.go, ui/src/pages/PlanPage.tsx, ui/src/lib/epics.ts and
   # their tests.
 
@@ -21,14 +21,14 @@ Feature: Epics and stories
 
   @EPIC-02 @coordinator @test
   Scenario: A split turns the task into an epic whose stories wait in the Backlog
-    # internal/coordinator/epics_test.go TestAnEpicRunsItsStoriesAndFinishesWithThem
+    # internal/runtime/coordinator/epics_test.go TestAnEpicRunsItsStoriesAndFinishesWithThem
     Given an epic with no stories yet, whose brief says to split it before anything else
     When the coordinator decides a split with 3 stories, 1 of them for the Writing team
     Then exactly 3 tasks are made, each parked in the user's Backlog with 0 turns
     And each story is kept at the same budget and limit of turns as the epic
     And the Writing team's story goes to that team's coordinator once the user starts it, its description and brief saying it is a story of the epic
     # not under test, checked by hand: the other stories say so too; the test reads the Writing team's story only
-    # a story's limits: internal/domain/tasks/limits.go NewLimits; "parked": "backlog": internal/coordinator/loop.go split
+    # a story's limits: internal/domain/tasks/limits.go NewLimits; "parked": "backlog": internal/runtime/coordinator/loop.go split
 
   @EPIC-03 @coordinator @manual
   Scenario: A split adds 1 to 12 stories
@@ -36,29 +36,29 @@ Feature: Epics and stories
     When the coordinator decides a split with 0 stories, or with 13
     Then the decision is refused with the reason "a "split" decision needs "stories": 1 to 12 of them"
     And a split with 12 stories, each with a title and a brief, is allowed
-    # MaxStories = 12: internal/coordinator/decision.go checkStories
+    # MaxStories = 12: internal/runtime/coordinator/decision.go checkStories
     # Steps: end an epic's coordinator turn with a split of 13 one-line stories and read the issue in the trail;
     # then with 12 and check 12 stories appear in the Backlog.
 
   @EPIC-04 @coordinator @test
   Scenario: A story's after list says which stories it builds on
-    # internal/coordinator/epics_test.go TestASplitStoryBuildsOnAnExistingStoryOrAnEarlierOne; the wait: TestAnEpicRunsItsStoriesAndFinishesWithThem
+    # internal/runtime/coordinator/epics_test.go TestASplitStoryBuildsOnAnExistingStoryOrAnEarlierOne; the wait: TestAnEpicRunsItsStoriesAndFinishesWithThem
     Given a split whose second story has "after": [1], and an epic with an existing story task-N
     When the stories are made
     Then the second story's after list names the first story's id, and an "after" naming task-N is kept as that id
     And a story that builds on others is not started until every one of them is done
     And a story whose "after" names itself, a story later in the list, or a number outside it, is refused
     # not under test, checked by hand: the waiting story's branch starts from a dev that has their work, and an "after" naming a task not in this epic is refused
-    # the refusal: internal/coordinator/epics_test.go TestASplitStoryAfterAStoryNotBeforeItIsRefused; blocked: internal/coordinator/loop.go
+    # the refusal: internal/runtime/coordinator/epics_test.go TestASplitStoryAfterAStoryNotBeforeItIsRefused; blocked: internal/runtime/coordinator/loop.go
 
   @EPIC-05 @coordinator @test
   Scenario: A story cannot itself be split
-    # internal/coordinator/epics_test.go TestAStoryCantBeSplitAndAnEpicIsntAssigned
+    # internal/runtime/coordinator/epics_test.go TestAStoryCantBeSplitAndAnEpicIsntAssigned
     Given a story of an epic
     When its coordinator decides a split
     Then the decision is refused as an issue saying a story can't be split
     And a task the user made a story is never split either
-    # not under test, checked by hand: the issue says to put what else the epic needs in its summary, and an assign on an epic is refused as an issue saying its work is done in its stories: internal/coordinator/next.go line 151
+    # not under test, checked by hand: the issue says to put what else the epic needs in its summary, and an assign on an epic is refused as an issue saying its work is done in its stories: internal/runtime/coordinator/next.go line 151
 
   # ---- Plan ------------------------------------------------------------------
 
@@ -110,8 +110,8 @@ Feature: Epics and stories
 
   @EPIC-10 @user @test
   Scenario: A story that builds on another waits until that one is done
-    # internal/coordinator/wrapup_test.go TestAStoryAfterAnArchivedTaskStarts
-    # a blocked story gets no turn: internal/coordinator/loop.go line 134
+    # internal/runtime/coordinator/wrapup_test.go TestAStoryAfterAnArchivedTaskStarts
+    # a blocked story gets no turn: internal/runtime/coordinator/loop.go line 134
     Given a story that builds on a task not yet done
     When the loop looks at it
     Then the story is counted as blocked and cannot start
@@ -122,7 +122,7 @@ Feature: Epics and stories
   @EPIC-11 @user @manual
   Scenario: A waiting story says what it waits for, and stays parked when that is done
     # ui/src/lib/epics.ts waitingLine; the ready count: ui/src/pages/PlanPage.tsx line 175
-    # a parked story gets no turn: internal/coordinator/next.go line 55
+    # a parked story gets no turn: internal/runtime/coordinator/next.go line 55
     # what blocks it empties when task-8 is done: internal/web/views.go lines 133 to 143
     # "Not started" and Start: ui/src/pages/PlanPage.tsx lines 298 to 304 and 341
     Given epic-7 with task-8 not started and task-9 that builds on task-8, both in the Backlog
@@ -135,8 +135,8 @@ Feature: Epics and stories
 
   @EPIC-12 @user @manual
   Scenario: A story started before the one it builds on waits, then starts once
-    # a blocked story gets no worktree: internal/coordinator/loop.go line 134
-    # the epic wakes its stories without a worktree: internal/coordinator/loop.go lines 532 to 541
+    # a blocked story gets no worktree: internal/runtime/coordinator/loop.go line 134
+    # the epic wakes its stories without a worktree: internal/runtime/coordinator/loop.go lines 532 to 541
     Given epic-7 with task-8 not done and task-9 that builds on task-8
     When the user clicks Start on task-9 while task-8 is not done
     Then task-9 is shown on the Tasks board and gets no worktree
@@ -158,8 +158,8 @@ Feature: Epics and stories
 
   @EPIC-14 @user @test
   Scenario: An epic with every story done asks once, and waits quietly if left open
-    # internal/coordinator/epics_test.go TestAnEpicStaysOpenWithEveryStoryDone
-    # the question with the option "Close the epic": internal/coordinator/loop.go lines 375 to 378
+    # internal/runtime/coordinator/epics_test.go TestAnEpicStaysOpenWithEveryStoryDone
+    # the question with the option "Close the epic": internal/runtime/coordinator/loop.go lines 375 to 378
     Given an epic whose 1 story is done
     When its coordinator finishes
     Then the epic asks the user exactly once whether to close it
@@ -172,7 +172,7 @@ Feature: Epics and stories
   @EPIC-15 @user @test
   Scenario: Close the epic from its page, and one Visionaries session follows
     # internal/web/api_test.go TestYouCloseAnEpicYouLeftOpen and TestYouCloseAnEpic
-    # internal/coordinator/followups_test.go TestClosingAnEpicStartsOneVisionariesSessionAboutIt
+    # internal/runtime/coordinator/followups_test.go TestClosingAnEpicStartsOneVisionariesSessionAboutIt
     # ui/src/components/organisms/OpenEpic.tsx lines 34 to 45; internal/web/api.go lines 417 to 426
     # the words "that is approved on the page": internal/web/api.go line 420; the test asserts the 403 only
     Given an epic left open with every story done, whose page shows the panel "All 1 stories done" with the button "Close the epic"
@@ -187,7 +187,7 @@ Feature: Epics and stories
 
   @EPIC-16 @coordinator @test
   Scenario: Only an epic with stories may wait
-    # internal/coordinator/next_test.go TestWhenAnEpicMayWait
+    # internal/runtime/coordinator/next_test.go TestWhenAnEpicMayWait
     Given a task that is not an epic, or an epic with no stories yet
     When its coordinator decides {"action": "wait"}
     Then the decision is refused as an issue saying only an epic with stories can wait
@@ -195,30 +195,30 @@ Feature: Epics and stories
 
   @EPIC-17 @coordinator @test
   Scenario: The epic's coordinator waits while stories run and asks the user to close it when all are done
-    # internal/coordinator/epics_test.go TestAnEpicStaysOpenWithEveryStoryDone; the wait while stories run, and the question: TestAnEpicRunsItsStoriesAndFinishesWithThem
+    # internal/runtime/coordinator/epics_test.go TestAnEpicStaysOpenWithEveryStoryDone; the wait while stories run, and the question: TestAnEpicRunsItsStoriesAndFinishesWithThem
     Given an epic whose stories are all running
     When its coordinator decides {"action": "wait"}
     Then no turn starts on the epic until a story's summary comes back to it
     And once every story is done, a done decision asks the user "Close it?" with the option "Close the epic", and the epic is not done until they do
     And if the user leaves it open, it stays open with no further question until they close it or add a story
-    # CloseEpic: internal/coordinator/epics.go; the question: internal/coordinator/loop.go apply, Finish
+    # CloseEpic: internal/runtime/coordinator/epics.go; the question: internal/runtime/coordinator/loop.go apply, Finish
 
   @EPIC-18 @user @test
   Scenario: Closing a done epic starts one Visionaries follow-up session about it
-    # internal/coordinator/followups_test.go TestClosingAnEpicStartsOneVisionariesSessionAboutIt
+    # internal/runtime/coordinator/followups_test.go TestClosingAnEpicStartsOneVisionariesSessionAboutIt
     Given a team made from the Visionaries template, and the Ideas page setting for sessions on epic close is on
     When the user answers "Close the epic" on a done epic
     Then exactly 1 new task is made for that team, titled "Follow-ups after <the epic's title>", with the epic's and each story's summary in its brief
     And a second pass over the same close makes no second session
     And the session takes the server's limits, not the epic's
-    # "about" and "close" mark the session: internal/coordinator/followups.go followUp
+    # "about" and "close" mark the session: internal/runtime/coordinator/followups.go followUp
 
   @EPIC-19 @user @test
   Scenario: No follow-up session when turned off, when the epic was dragged to Done, or for a close before the loop started
-    # internal/coordinator/followups_test.go TestNoSessionWhenTheSettingIsOff
+    # internal/runtime/coordinator/followups_test.go TestNoSessionWhenTheSettingIsOff
     Given the Ideas page setting for sessions on epic close is off
     When the user closes a done epic
     Then no session is made and no note is left on the epic
     And an epic moved to Done on the board gets no session either
     And an epic closed before the server's loop started gets no session, only closes after it do
-    # TestAnEpicMovedToDoneGetsNoSession and TestTheLoopFollowsUpOnlyCloseAfterItStarted in the same file; startedAt: internal/coordinator/loop.go NewLoop
+    # TestAnEpicMovedToDoneGetsNoSession and TestTheLoopFollowsUpOnlyCloseAfterItStarted in the same file; startedAt: internal/runtime/coordinator/loop.go NewLoop

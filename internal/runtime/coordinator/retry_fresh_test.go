@@ -11,9 +11,9 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/platform/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/platform/sessions/sessionstest"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/turns"
+	watchdogs "gitlab.com/dev.chempa/agentry/internal/runtime/watchdog"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
-	"gitlab.com/dev.chempa/agentry/internal/turns"
-	watchdogs "gitlab.com/dev.chempa/agentry/internal/watchdog"
 )
 
 // A resumed session that never takes its prompt is retried once, by the

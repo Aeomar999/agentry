@@ -45,8 +45,8 @@ Feature: Supervisor agents
 
   @PROP-56 @agent @test @to-coordinator-and-handoffs
   Scenario: A supervisor's brief names the agents it may hand the task to, and how
-    # the coordinator's brief lists the agents (internal/coordinator/brief.go coordinatorBrief); a worker's brief is handoffBrief or the worker brief (internal/coordinator/loop.go briefFor)
-    # test: internal/coordinator/handoff_brief_test.go (to write)
+    # the coordinator's brief lists the agents (internal/runtime/coordinator/brief.go coordinatorBrief); a worker's brief is handoffBrief or the worker brief (internal/runtime/coordinator/loop.go briefFor)
+    # test: internal/runtime/coordinator/handoff_brief_test.go (to write)
     Given the reviewer of the Software team may assign
     When the coordinator hands it the task
     Then its brief lists the Software team's agents but the coordinator and the reviewer itself, each with its description: yes
@@ -56,8 +56,8 @@ Feature: Supervisor agents
 
   @PROP-57 @agent @test @to-coordinator-and-handoffs
   Scenario: A supervisor's report ending with an assign hands the task to that agent
-    # builds on @HANDOFF-01 and @HANDOFF-06 (internal/coordinator/loop.go, where the coordinator's decision becomes task.assigned)
-    # test: internal/coordinator/loop_test.go (to write)
+    # builds on @HANDOFF-01 and @HANDOFF-06 (internal/runtime/coordinator/loop.go, where the coordinator's decision becomes task.assigned)
+    # test: internal/runtime/coordinator/loop_test.go (to write)
     Given the reviewer may assign, and its turn ends with the report "Two tests fail on Windows paths." and {"action": "assign", "agent": "engineer", "instructions": "Fix the path joins in internal/x."}
     When the loop reads the task
     Then exactly 1 task.assigned is written, by the reviewer, naming the engineer with those instructions
@@ -68,7 +68,7 @@ Feature: Supervisor agents
   Scenario: The coordinator stays the one deciding: every report after a supervisor's assign goes back to it
     # @HANDOFF-11: every agent's report returns to the coordinator; docs/decisions.md, 2026-10-16, "supervisor is just an agent"
     # the rule: a supervisor's assign is taken only on a turn the coordinator handed it; on a turn another supervisor handed it, its assign is not taken and the report goes back to the coordinator
-    # test: internal/coordinator/loop_test.go (to write)
+    # test: internal/runtime/coordinator/loop_test.go (to write)
     Given the reviewer assigned the task to the engineer
     When the engineer's turn ends with its report
     Then the next turn is the coordinator's, not the reviewer's: yes
@@ -82,7 +82,7 @@ Feature: Supervisor agents
   @PROP-59 @agent @test @to-coordinator-and-handoffs
   Scenario: A supervisor's report with no decision goes back to the coordinator, as every report does
     # @HANDOFF-11; a supervisor's report is not a coordinator's reply, so no decision is not an issue (@HANDOFF-13 is for the coordinator)
-    # test: internal/coordinator/loop_test.go (to write)
+    # test: internal/runtime/coordinator/loop_test.go (to write)
     Given the reviewer may assign
     When its turn ends with "Verdict: approved" and no decision
     Then the next turn is the coordinator's, with the report in its brief, and 0 issues are written
@@ -90,7 +90,7 @@ Feature: Supervisor agents
   @PROP-60 @agent @test @to-coordinator-and-handoffs
   Scenario: A supervisor's assign gets the checks the coordinator's gets, and a refused one is an issue for the coordinator
     # the checks on task.assigned: internal/core/rules/task_rules.go (noOpenTurn, noQuestionOpen, notToTheCoordinator, notUndoingYourMove) and internal/core/rules/agent_rules.go assigneeExists; a refused assign is an issue: @HANDOFF-07
-    # test: internal/core/rules/rules_test.go and internal/coordinator/next_test.go (to write)
+    # test: internal/core/rules/rules_test.go and internal/runtime/coordinator/next_test.go (to write)
     Given the reviewer of the Software team may assign
     When its report ends with an assign to an agent of the Writing team, to no agent of that name, to the coordinator, or to itself
     # "reviewer can't assign the task to itself" is a new check: notToTheCoordinator covers only the coordinator
@@ -125,7 +125,7 @@ Feature: Supervisor agents
   @PROP-63 @test @to-limits
   Scenario: Turns a supervisor starts count toward the task's turn limit and budget
     # @HANDOFF-26: the turn limit asks the user; @HANDOFF-29: the budget stop
-    # test: internal/coordinator/next_test.go (to write)
+    # test: internal/runtime/coordinator/next_test.go (to write)
     Given a task with the turn limit 24, and a coordinator and a reviewer that may assign, the reviewer handing the task to the engineer on each of its turns
     When its turns reach 24 since the user last answered, the coordinator's, the reviewer's and the engineer's counted alike
     Then no turn starts, and the user is asked, as for any task at its turn limit: yes

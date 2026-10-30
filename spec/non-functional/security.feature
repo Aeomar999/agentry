@@ -42,7 +42,7 @@ Feature: Security
     When a turn's environment is prepared
     Then the hook's own deadline is more than 0 and less than 1800 seconds, so the hook fails closed and never open
     # internal/platform/engines/engine.go line 62 GateTimeoutSeconds = 1800; the test uses the constant
-    # internal/turns/turns_test.go TestTheHookGivesUpBeforeTheEngineKillsIt
+    # internal/runtime/turns/turns_test.go TestTheHookGivesUpBeforeTheEngineKillsIt
 
   @SEC-06 @test
   Scenario: The server answers before the hook's deadline
@@ -597,7 +597,7 @@ Feature: Security
     Given a turn's environment prepared for an agent
     When the user reads the hook deadline variable in that environment
     Then its value is "29m50s", exactly 1790 seconds
-    # internal/turns/turns.go environment, GateTimeoutSeconds minus 10; no test asserts the number
+    # internal/runtime/turns/turns.go environment, GateTimeoutSeconds minus 10; no test asserts the number
 
   @SEC-69 @test
   Scenario: The desktop app never shows the UI token in its output or logs

@@ -2,7 +2,7 @@ Feature: Workers
   A machine joined to Agentry so that agents can run on it.
   # Sources: cmd/agentry/worker.go, cmd/agentry/worker_manage.go,
   # internal/domain/workers, internal/domain/workers/workerlink, internal/domain/workers/workerservice,
-  # internal/machines, internal/turns, internal/platform/pinned, internal/web/workers_api.go
+  # internal/runtime/machines, internal/runtime/turns, internal/platform/pinned, internal/web/workers_api.go
   # and their tests.
 
   # ---- Joining ---------------------------------------------------------------
@@ -314,7 +314,7 @@ Feature: Workers
     When the worker's link drops
     Then the fleet takes it as gone, unless a newer link replaced it: yes
     # not under test, checked by hand: the server records it offline (internal/domain/workers/workerlink/server.go line 88)
-    # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork; the link dropping: internal/machines/fleet_test.go TestTheFleetPicksWhereAnAgentWorks
+    # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork; the link dropping: internal/runtime/machines/fleet_test.go TestTheFleetPicksWhereAnAgentWorks
 
   @MACHINE-23 @worker @test
   Scenario: Over https a worker trusts only Agentry's own CA
@@ -335,12 +335,12 @@ Feature: Workers
   Scenario: A machine advertises its system, its tools and its disk
     Given a worker connected
     When its details are read
-    # internal/machines/about.go AboutHere
+    # internal/runtime/machines/about.go AboutHere
     Then they give its host, system as its maker names it, kernel, arch, CPU, CPUs, memory in all and free, 3 load averages, boot time, time and zone
     And the disk in all and free where its worktrees are, 2 numbers
-    # internal/machines/about.go toolsKept
+    # internal/runtime/machines/about.go toolsKept
     And each engine and git, with version and path, read again only after 5 minutes
-    # internal/machines/about.go output: each program asked for its version gets 3 seconds
+    # internal/runtime/machines/about.go output: each program asked for its version gets 3 seconds
     And agentry's version, its path, its folder, the PATH agents get, the tasks running, the worktrees and the copies of repos there, 7 more facts
     # 1. Open a worker on the Workers page and read its details.
     # 2. Check the system, kernel, arch, CPU, memory, load, boot time, disk and time with the machine itself.
@@ -368,7 +368,7 @@ Feature: Workers
     Then it stays there: yes
     When the agent may run only on a worker without its engine, or only on an offline one
     Then it is placed: no, and the reason names each machine, such as offline or has no engine
-    # internal/machines/fleet_test.go TestTheFleetPicksWhereAnAgentWorks
+    # internal/runtime/machines/fleet_test.go TestTheFleetPicksWhereAnAgentWorks
 
   @MACHINE-27 @worker @test
   Scenario: A coordinator can send an agent to a named machine
@@ -382,29 +382,29 @@ Feature: Workers
     When the coordinator names a machine that does not exist
     Then the coordinator hears there is no machine by that name, with the machines listed
     When the coordinator names a machine that is offline, by its host's name
-    # internal/machines/fleet.go WaitOn refuses at once; the 30 second OfflineGrace wait applies only to a worker that went offline within the last 30 seconds or is expected back after a restart, covered by internal/machines/fleet_test.go TestTheFleetWaitsForAWorkerComingBack
+    # internal/runtime/machines/fleet.go WaitOn refuses at once; the 30 second OfflineGrace wait applies only to a worker that went offline within the last 30 seconds or is expected back after a restart, covered by internal/runtime/machines/fleet_test.go TestTheFleetWaitsForAWorkerComingBack
     Then the host's name is taken as that machine, the turn starts: no, and the coordinator hears that it couldn't start where it chose, as the machine is offline
     When the coordinator names a machine the agent may use, in any letter case
     Then the turn runs there, and the trail names that machine: yes
-    # internal/coordinator/machines_test.go TestTheCoordinatorChoosesTheMachine
+    # internal/runtime/coordinator/machines_test.go TestTheCoordinatorChoosesTheMachine
 
   @MACHINE-28 @worker @test
   Scenario: An agent whose machines are all offline asks the user
     Given an agent whose Runs on names 1 worker, which is offline
     When the coordinator assigns the agent
     Then the task asks the user: the agent can't run anywhere now, naming the offline worker, after 1 turn
-    # not under test, checked by hand: the question says to bring one of its workers online, or change where it runs, and answer to carry on (internal/coordinator/loop.go line 219)
-    # internal/coordinator/loop_test.go TestAnAgentWhoseWorkersAreOfflineAsksYou
+    # not under test, checked by hand: the question says to bring one of its workers online, or change where it runs, and answer to carry on (internal/runtime/coordinator/loop.go line 219)
+    # internal/runtime/coordinator/loop_test.go TestAnAgentWhoseWorkersAreOfflineAsksYou
 
   @MACHINE-29 @worker @test
   Scenario: After a restart, a worker that may be running agents is waited for
     Given Agentry just started, with a worker the log had online before
     When an agent that runs only on that worker is placed
-    # internal/machines/fleet.go OfflineGrace, WaitFor: checked every 250 milliseconds for 30 seconds
+    # internal/runtime/machines/fleet.go OfflineGrace, WaitFor: checked every 250 milliseconds for 30 seconds
     Then the placement waits until the worker dials back in, and runs there: yes
     And a worker never seen is found: no
-    # not under test, checked by hand: the wait is at most 30 seconds, and a worker never seen is not waited for (internal/machines/fleet.go line 147)
-    # internal/machines/fleet_test.go TestTheFleetWaitsForAWorkerComingBack
+    # not under test, checked by hand: the wait is at most 30 seconds, and a worker never seen is not waited for (internal/runtime/machines/fleet.go line 147)
+    # internal/runtime/machines/fleet_test.go TestTheFleetWaitsForAWorkerComingBack
 
   @MACHINE-30 @worker @test
   Scenario: A turn runs on the worker, resuming its session, and its terminal shows on the server
@@ -432,13 +432,13 @@ Feature: Workers
   Scenario: A worker that goes offline is taken to still run its turn for a while
     Given a worker running a task's turn
     When its link drops
-    # internal/machines/fleet.go OfflineGrace
+    # internal/runtime/machines/fleet.go OfflineGrace
     Then just after, the task counts as running there: yes
     And once its grace has passed, nothing runs there that Agentry can see
-    # not under test, checked by hand: the grace is 30 seconds (internal/machines/fleet.go line 28; the test uses the constant), so the watchdog takes the agent as crashed: no
+    # not under test, checked by hand: the grace is 30 seconds (internal/runtime/machines/fleet.go line 28; the test uses the constant), so the watchdog takes the agent as crashed: no
     And a worker never seen runs anything: no
     And a stale link's end removes a newer link: no
-    # internal/machines/fleet_test.go TestTheFleetPicksWhereAnAgentWorks
+    # internal/runtime/machines/fleet_test.go TestTheFleetPicksWhereAnAgentWorks
 
   @MACHINE-33 @worker @test
   Scenario: The user hears that a machine went offline with work on it
@@ -446,7 +446,7 @@ Feature: Workers
     When it goes offline
     Then the news for the user says the machine went offline, and the task waits until it is back: yes
     # not under test, checked by hand: it is 1 line, and a worker offline with 0 tasks on it is news: no (internal/mcp/waiting.go line 67)
-    # internal/coordinator/loop.go moveWork: when the work's machine is offline and the next agent runs elsewhere, the task asks the user to bring it online and answer
+    # internal/runtime/coordinator/loop.go moveWork: when the work's machine is offline and the next agent runs elsewhere, the task asks the user to bring it online and answer
     # internal/mcp/waiting_test.go TestTheNewsIsWhatIsNew
 
   @MACHINE-34 @worker @manual

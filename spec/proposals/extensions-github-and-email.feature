@@ -63,8 +63,8 @@ Feature: Shipping through GitHub, and email
 
   @PROP-34 @coordinator @test @to-coordinator-and-handoffs
   Scenario: The task is done at the push, as today, and its pull request opens just after
-    # docs/design/t-019-shipping.md section 4, decision 5 in section 12; the coordinator finishes once a ship turn pushed (internal/coordinator/checks.go recordOf, internal/domain/tasks/task.go Pushed), @TURN-14
-    # test: internal/coordinator/next_test.go (to write)
+    # docs/design/t-019-shipping.md section 4, decision 5 in section 12; the coordinator finishes once a ship turn pushed (internal/runtime/coordinator/checks.go recordOf, internal/domain/tasks/task.go Pushed), @TURN-14
+    # test: internal/runtime/coordinator/next_test.go (to write)
     Given a ship turn whose push of the task branch was approved and finished
     When the coordinator decides done
     Then the task is done: yes

@@ -7,8 +7,8 @@ Feature: Limits
     When its turns have used 110k tokens
     Then the coordinator's next move asks the user, not a turn, the question saying 110k tokens of its 100k budget: yes
     And after the user's answer the next move is the coordinator's turn: yes
-    # not under test, checked by hand: the question goes on "Raise the budget to go on, or tell the coordinator to wrap up." (internal/coordinator/next.go line 70), and after that one turn the budget asks again, as it waits for a turn since the answer (line 67)
-    # README.md, Use it, Budgets and turn limits; internal/coordinator/next_test.go TestTheBudgetSendsTheTaskToYou
+    # not under test, checked by hand: the question goes on "Raise the budget to go on, or tell the coordinator to wrap up." (internal/runtime/coordinator/next.go line 70), and after that one turn the budget asks again, as it waits for a turn since the answer (line 67)
+    # README.md, Use it, Budgets and turn limits; internal/runtime/coordinator/next_test.go TestTheBudgetSendsTheTaskToYou
 
   @LIM-02 @manual
   Scenario: A new task's budget is 5,000,000 tokens unless the flags say otherwise
@@ -64,8 +64,8 @@ Feature: Limits
     Then the coordinator's next move asks the user, not a turn: yes
     And the question says "24 of its 24 turns"
     And after the user's answer the next move is a turn: yes
-    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/coordinator/loop.go line 325); the question goes on " without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on." (internal/coordinator/next.go line 65); the answer sets the count of turns since it to 0 (internal/domain/tasks/apply.go line 463); the answer hands the task to the coordinator (internal/domain/tasks/apply.go line 464)
-    # README.md, Use it; internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
+    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/runtime/coordinator/loop.go line 325); the question goes on " without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on." (internal/runtime/coordinator/next.go line 65); the answer sets the count of turns since it to 0 (internal/domain/tasks/apply.go line 463); the answer hands the task to the coordinator (internal/domain/tasks/apply.go line 464)
+    # README.md, Use it; internal/runtime/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
 
   @LIM-08 @test
   Scenario: A negative budget or turn limit is refused by the rules
@@ -99,7 +99,7 @@ Feature: Limits
     And waiting tasks are admitted in priority order, the newer task first on a tie, never the older
     And only tasks on the board with a turn open take a slot, so a wrap-up turn takes none
     And when one running task ends its turn exactly 1 waiting task is started
-    # README.md, Use it; internal/coordinator/slots_test.go TestOnlyTasksInProgressTakeASlot, TestSlotsGoInYourPriorityOrder, TestATieOfRankAdmitsTheNewerTask, TestALimitUnderWhatRunsQueuesEveryOneWaiting and TestTheLoopRunsNoMoreTasksThanTheLimit
+    # README.md, Use it; internal/runtime/coordinator/slots_test.go TestOnlyTasksInProgressTakeASlot, TestSlotsGoInYourPriorityOrder, TestATieOfRankAdmitsTheNewerTask, TestALimitUnderWhatRunsQueuesEveryOneWaiting and TestTheLoopRunsNoMoreTasksThanTheLimit
 
   @LIM-12 @manual
   Scenario: A team may ask another team at most 3 requests deep
@@ -107,7 +107,7 @@ Feature: Limits
     When the user asks the task's coordinator in its chat to request work from the other team
     Then the decision is refused with "this task is already 3 requests deep; do the work in this team, or ask the user"
     And the refusal is shown in the task's Activity
-    # README.md, Use it; the depth is set in internal/coordinator/next.go
+    # README.md, Use it; the depth is set in internal/runtime/coordinator/next.go
 
   @LIM-13 @manual
   Scenario: One split adds 1 to 12 stories
@@ -115,7 +115,7 @@ Feature: Limits
     When the user asks the coordinator in its chat to split the epic into 13 one-line stories, and then into 12
     Then the split of 13 is refused with 'a "split" decision needs "stories": 1 to 12 of them', shown in Activity
     And the split of 12 files exactly 12 stories in the Backlog
-    # README.md, Use it; the cap is set in internal/coordinator/decision.go
+    # README.md, Use it; the cap is set in internal/runtime/coordinator/decision.go
 
   @LIM-14 @test
   Scenario: Three issues in a row stop the task
@@ -124,8 +124,8 @@ Feature: Limits
     Then the coordinator's next move asks the user, not a turn: yes
     And the question is "3 issues in a row, the last: " followed by the issue's reason and ". Fix what's wrong and answer, and the coordinator carries on."
     And a retry still counts as an issue, so retries are bounded at 3
-    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/coordinator/loop.go line 325); a turn that ends normally, or the user's answer, sets the count of issues in a row to 0 (internal/domain/tasks/apply.go lines 386 and 463)
-    # README.md, How a task moves; internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou; the retry: internal/domain/tasks/retry_fresh_test.go TestARetryFreshIssueHandsTheSameStepBack and internal/coordinator/next_test.go TestIssuesInARowEndingInARetryQuoteTheIssue
+    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/runtime/coordinator/loop.go line 325); a turn that ends normally, or the user's answer, sets the count of issues in a row to 0 (internal/domain/tasks/apply.go lines 386 and 463)
+    # README.md, How a task moves; internal/runtime/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou; the retry: internal/domain/tasks/retry_fresh_test.go TestARetryFreshIssueHandsTheSameStepBack and internal/runtime/coordinator/next_test.go TestIssuesInARowEndingInARetryQuoteTheIssue
 
   @LIM-15 @test
   Scenario: Done tasks are archived after 30 days unless the flag says otherwise
@@ -159,8 +159,8 @@ Feature: Limits
     And the task with an open turn is not archived in that round
     And the epic is not archived while any of its stories is still in the state
     And a task brought back is not archived again until the age has passed since it was brought back
-    # not under test, checked by hand: a round takes the tasks in creation order (internal/archive/archive.go line 148)
-    # README.md, Archiving, erasing and redacting; internal/archive/archive_test.go TestTheArchiverRunsAtStartAndThenHourly, TestATaskIsArchivedOnceDoneForTheAge, TestATaskWithATurnRunningWaitsForTheRoundAfterItEnds, TestAnEpicWaitsForItsStories and TestAnUnarchivedTaskWaitsTheAgeAgain; at the server's start: cmd/agentry/serve_test.go TestServeArchivesOnlyWithArchiveAfter
+    # not under test, checked by hand: a round takes the tasks in creation order (internal/runtime/archive/archive.go line 148)
+    # README.md, Archiving, erasing and redacting; internal/runtime/archive/archive_test.go TestTheArchiverRunsAtStartAndThenHourly, TestATaskIsArchivedOnceDoneForTheAge, TestATaskWithATurnRunningWaitsForTheRoundAfterItEnds, TestAnEpicWaitsForItsStories and TestAnUnarchivedTaskWaitsTheAgeAgain; at the server's start: cmd/agentry/serve_test.go TestServeArchivesOnlyWithArchiveAfter
 
   @LIM-19 @test
   Scenario: A signed webhook's request body is at most 1 MiB
@@ -232,7 +232,7 @@ Feature: Limits
     And the story's summary quoted to its epic is at most 1,500 bytes
     And the epic's description quoted to a story is at most 2,000 bytes
     And an epic's closing summary quoted to a follow-up is at most 4,000 bytes
-    # README.md, How a task moves; the sizes are set in internal/coordinator/brief.go, epics.go and followups.go
+    # README.md, How a task moves; the sizes are set in internal/runtime/coordinator/brief.go, epics.go and followups.go
 
   @LIM-27 @manual
   Scenario: A task has at most 12 labels of at most 32 bytes
@@ -252,8 +252,8 @@ Feature: Limits
     And no event at all for 10 minutes is a stall, unless the turn waits for the user
     And one approved tool call with no result after 20 minutes is an issue
     And the same command requested 5 times in a row is an issue
-    # not under test, checked by hand: the watchdog checks once a second (internal/watchdog/watchdog.go line 73), the tests call Check with the clock moved on; the prompt's question says to open the task's terminal (internal/watchdog/watchdog.go lines 116 to 118)
-    # README.md, How a task moves; internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace, TestAPromptThatNeverArrivesWaitsForYou, TestASilentTurnIsAStall, TestWaitingForYouIsNotAStall, TestAToolOpenTooLong and TestTheSameCommandRepeated
+    # not under test, checked by hand: the watchdog checks once a second (internal/runtime/watchdog/watchdog.go line 73), the tests call Check with the clock moved on; the prompt's question says to open the task's terminal (internal/runtime/watchdog/watchdog.go lines 116 to 118)
+    # README.md, How a task moves; internal/runtime/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace, TestAPromptThatNeverArrivesWaitsForYou, TestASilentTurnIsAStall, TestWaitingForYouIsNotAStall, TestAToolOpenTooLong and TestTheSameCommandRepeated
 
   @LIM-29 @test
   Scenario: A worker join code works once, until it expires
@@ -300,7 +300,7 @@ Feature: Limits
     When the task starts and the clone runs
     Then the clone is stopped after exactly 10 minutes and the turn is an issue
     And a session that has not started 2 minutes after its turn began is an issue
-    # README.md, Use it; the timeouts are set in internal/platform/worktrees/repo.go and internal/turns/turns.go
+    # README.md, Use it; the timeouts are set in internal/platform/worktrees/repo.go and internal/runtime/turns/turns.go
 
   @LIM-34 @manual
   Scenario: The server waits at most 10 seconds for a request's headers
@@ -316,5 +316,5 @@ Feature: Limits
     When the coordinator briefs a checking agent with the handoff
     Then for the 41 files the handoff does not list them one by one: it says "It touches <n> files; list them with `git diff --stat <base>..HEAD`.", n being 41
     And for the 40 files they are listed one by one, the 40th by name: yes
-    # not under test, checked by hand: each file is one line (internal/coordinator/brief.go line 325)
-    # README.md, How it works, How a task moves; the cap is mostFilesListed in internal/coordinator/brief.go; internal/coordinator/handoff_brief_test.go TestAHandoffCapsALongFileList
+    # not under test, checked by hand: each file is one line (internal/runtime/coordinator/brief.go line 325)
+    # README.md, How it works, How a task moves; the cap is mostFilesListed in internal/runtime/coordinator/brief.go; internal/runtime/coordinator/handoff_brief_test.go TestAHandoffCapsALongFileList

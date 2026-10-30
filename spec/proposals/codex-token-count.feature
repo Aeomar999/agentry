@@ -65,7 +65,7 @@ Feature: Codex token count
   @PROP-28 @test @to-limits
   Scenario: A Codex task stops at its token budget
     # @LIM-01: a task stops at its token budget; today a Codex task never reaches it, as its turns count 0
-    # test: internal/coordinator/next_test.go (to write)
+    # test: internal/runtime/coordinator/next_test.go (to write)
     Given a task with a token budget of 100k tokens, whose agents run on Codex
     When its turns have used 110k tokens
     Then the coordinator's next move asks the user, not a turn, the question saying 110k tokens of its 100k budget: yes

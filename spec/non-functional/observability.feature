@@ -122,8 +122,8 @@ Feature: Observability
     When the coordinator's briefs are written
     Then the first holds "1. you → tech-lead: Remove the TODOs"
     And the one after the engineer's turn holds "engineer → tech-lead: Removed 3 TODOs and committed."
-    # not under test, checked by hand: the trail is under the section "What has happened so far", every step numbered as "N. from → to: text" (internal/coordinator/brief.go lines 50 and 124)
-    # README.md, How it works, How a task moves; internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
+    # not under test, checked by hand: the trail is under the section "What has happened so far", every step numbered as "N. from → to: text" (internal/runtime/coordinator/brief.go lines 50 and 124)
+    # README.md, How it works, How a task moves; internal/runtime/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
 
   @OBS-13 @test
   Scenario: A viewer of the live terminal gets the screen so far, then the live output

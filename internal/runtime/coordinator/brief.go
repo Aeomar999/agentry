@@ -11,8 +11,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
-	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/workspace"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 )
 
 // A brief is everything an agent is given for one turn. In a fresh session

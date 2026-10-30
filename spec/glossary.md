@@ -36,11 +36,11 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **credential**: what a worker or a connected machine proves itself with after joining with a code; the machine keeps it and the log holds only its hash.
 - **critic**: a checker that ends its report with `Verdict: approved` or `Verdict: changes needed`, as the reviewer, tester, fact-checker and network checkers do (README.md, Checks).
 - **data folder**: `.agentry` in the user's home folder, or where `-data` points: the log, the settings, the tokens, the CA and the tasks' worktrees.
-- **decision**: what a coordinator's reply ends with, in a fixed format the loop parses: hand the task to an agent, ask the user, move it, or say it is done; also the policy's decision on one action, allow, ask or deny (internal/coordinator).
+- **decision**: what a coordinator's reply ends with, in a fixed format the loop parses: hand the task to an agent, ask the user, move it, or say it is done; also the policy's decision on one action, allow, ask or deny (internal/runtime/coordinator).
 - **default repo**: the repo new tasks work in unless the task names another: `-repo`, or the git repo `Agentry` in the user's home folder, made on first start.
 - **deny**: the policy's decision that refuses an action; a denied action never runs and a denial stays a denial.
 - **deployer**: the Software team's agent whose work counts as shipping: it merges `origin/dev`, runs the tests and build, pushes `HEAD:dev` when the user approves the push, and reports the pushed commit's pipeline once.
-- **desk**: the Claude Code session Agentry runs for the user in the dock's Claude tab; it has its own token and can create, read and answer tasks, never approve (internal/desk).
+- **desk**: the Claude Code session Agentry runs for the user in the dock's Claude tab; it has its own token and can create, read and answer tasks, never approve (internal/runtime/desk).
 - **Details tab**: the task page's tab with its repo, epic, budget, turn limit, Change repo and Erase this task.
 - **desktop app**: `agentry-desktop`, Agentry's page in a window of its own, signed in: it uses the Agentry running from the data folder or starts the agentry binary beside it on this computer only, opens links that leave Agentry in the system browser, and when it quits stops only a server it started (cmd/agentry-desktop).
 - **developer**: the shipped profile of the engineer, tester and deployer: writes inside the worktree allowed, reaching outside asks, dangerous commands denied, every push asks.
@@ -63,7 +63,7 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **handoff**: one pass of a task between the coordinator and an agent, a brief one way and a report back; the Handoffs tab shows each as a card.
 - **Handoffs tab**: the task page's list of every brief and report between the coordinator and its agents.
 - **held**: a task parked in To do or the Backlog until the user moves it on, its status on the page; also an ask the hook gave up waiting on, kept for the user after the turn moved on (internal/domain/tasks).
-- **helper**: the user's own Claude Code session beside a task, in its worktree on the machine the work is on; it changes no files and sends the coordinator a change only when the user asks, with `agentry send` (internal/machines).
+- **helper**: the user's own Claude Code session beside a task, in its worktree on the machine the work is on; it changes no files and sends the coordinator a change only when the user asks, with `agentry send` (internal/runtime/machines).
 - **hook**: `agentry hook`, which the engine calls before each action and at each signal; it posts to the server with the hook token and exits 2 on any failure, so a killed or slow hook blocks.
 - **idea**: a feature a Visionaries session suggests for a repo: the problem, the proposal, why now, a size, the risks and which agents backed or doubted it; the user accepts it as a task or an epic, or dismisses it.
 - **Ideas page**: where open ideas are grouped by the session that suggested them, with Accept, Dismiss, Ask the visionaries, the auto-accept settings and the History of ideas decided.
@@ -76,7 +76,7 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **list**: the Tasks page as rows, key `1`, which keeps every task and drags to set priority.
 - **live terminal**: the working agent's terminal shown live in the browser, on the task's Terminal tab and in the dock; Take control lets the user type into it.
 - **log**: the one append-only event log, in SQLite in the data folder, that every piece of Agentry writes to and reads from; the only state.
-- **loop**: what carries out each coordinator decision: it reads the log by position and does the one move the decision gives, a worktree, a turn, an issue or a question for the user (internal/coordinator).
+- **loop**: what carries out each coordinator decision: it reads the log by position and does the one move the decision gives, a worktree, a turn, an issue or a question for the user (internal/runtime/coordinator).
 - **machine**: where agents work: the machine Agentry runs on, called This machine on the Workers page, or a worker that has joined.
 - **marker**: the row the log keeps where an archived or erased task's rows were, with the archived task's summary.
 - **model**: the engine's model an agent uses, set on the agent with the engine's short names.
@@ -149,7 +149,7 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **theme**: dark or light, switched in the top bar; every colour comes from one token file, and each Claude session starts in the page's theme.
 - **To do**: the board column that parks a task: a turn in progress stops after a short wrap-up, and nothing runs until the user moves it on.
 - **token**: the unit a budget counts, every token the model read and wrote, cache reads included, shown per turn and per task; also a sign-in token, below.
-- **token, desk**: the desk's token, which creates, reads and answers tasks and nothing else, never approvals (internal/desk).
+- **token, desk**: the desk's token, which creates, reads and answers tasks and nothing else, never approvals (internal/runtime/desk).
 - **token, helper**: the token of the user's Claude sessions in tasks' Workspaces, which sends the messages the user asks them to and nothing else (internal/web).
 - **token, hook**: the token `agentry hook` posts hook calls with, and nothing else; denied to every agent (internal/platform/hookcall).
 - **token, UI**: the page's token, printed in the link `agentry serve` prints, which signs a browser in and opens the page and the API; the agents never get it.

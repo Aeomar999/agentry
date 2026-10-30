@@ -15,8 +15,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
+	watch "gitlab.com/dev.chempa/agentry/internal/runtime/watchdog"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
-	watch "gitlab.com/dev.chempa/agentry/internal/watchdog"
 )
 
 // You move a task to Done while the engineer works: it is done at once, and

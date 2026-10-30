@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/core/current"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
@@ -21,6 +20,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
 

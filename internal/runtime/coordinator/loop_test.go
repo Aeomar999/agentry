@@ -17,11 +17,11 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/extensions/ideas"
-	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/platform/sessions/sessionstest"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/turns"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
-	"gitlab.com/dev.chempa/agentry/internal/turns"
 )
 
 // The whole loop on a real store, real sessions and git, with a fake `claude` that

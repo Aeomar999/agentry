@@ -65,7 +65,7 @@ Feature: Output gate
   @PROP-70 @agent @test @to-policy
   Scenario: A blocked result never reaches the agent, and the coordinator is told
     # a denied action is shown to the coordinator under Actions Agentry refused: @HANDOFF-20
-    # test: internal/domain/policy/hooks/output_test.go and internal/coordinator/brief_test.go (to write)
+    # test: internal/domain/policy/hooks/output_test.go and internal/runtime/coordinator/brief_test.go (to write)
     Given a rule "no pages from paste sites" that blocks results from WebFetch of a page whose address has "paste"
     When the engineer fetches such a page
     Then the agent gets only "Agentry blocked this result: no pages from paste sites", and none of the page

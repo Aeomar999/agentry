@@ -17,12 +17,12 @@ Feature: Worktrees and branches
 
   @TREE-02 @coordinator @test
   Scenario: Each worktree leases a port between 7900 and 7999
-    # internal/platform/worktrees/worktree_test.go TestLeasePortSkipsTakenAndBusyPorts; PORT: internal/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt
+    # internal/platform/worktrees/worktree_test.go TestLeasePortSkipsTakenAndBusyPorts; PORT: internal/runtime/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt
     Given port 7900 is held by another unfinished task and 7901 has something listening on it
     When a new task's worktree is prepared
     Then its port is exactly 7902
     And a turn starts with the worktree's port in its PORT environment variable: yes
-    # FirstPort = 7900, LastPort = 7999: internal/platform/worktrees/ports.go; PORT: internal/turns/turns.go environment
+    # FirstPort = 7900, LastPort = 7999: internal/platform/worktrees/ports.go; PORT: internal/runtime/turns/turns.go environment
 
   @TREE-03 @coordinator @test
   Scenario: A finished task's worktree is removed only once its branch is merged into dev
@@ -41,7 +41,7 @@ Feature: Worktrees and branches
     Then what was left uncommitted is committed first, the branch goes to the repo Agentry runs from, and the other machine's worktree made from that branch is clean, with 0 changes showing
     And the worktree it left is no longer on the first machine
     # not under test, checked by hand: the leftovers are exactly 1 commit
-    # the coordinator's choice of machine: internal/coordinator/machines_test.go TestTheCoordinatorChoosesTheMachine
+    # the coordinator's choice of machine: internal/runtime/coordinator/machines_test.go TestTheCoordinatorChoosesTheMachine
 
   @TREE-05 @worker @test
   Scenario: A task's branch follows the work through the hub and back
@@ -147,7 +147,7 @@ Feature: Worktrees and branches
 
   @TREE-12 @user @test
   Scenario: Claude in the dock starts in the page's theme, runs agentry task without asking, and edits nothing
-    # internal/desk/desk_test.go TestTheDeskStartsClaudeWithWhatItNeeds
+    # internal/runtime/desk/desk_test.go TestTheDeskStartsClaudeWithWhatItNeeds
     Given the page in the light theme, and the desk not running
     When the desk starts
     Then Claude starts in its repo with the desk's prompt, the server's address and the desk token, and the light theme in its settings: yes

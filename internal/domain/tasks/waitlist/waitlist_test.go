@@ -3,7 +3,7 @@ package waitlist
 import (
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/coordinator"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/coordinator"
 )
 
 func TestTheApprovingAnswersAreTheCoordinators(t *testing.T) {

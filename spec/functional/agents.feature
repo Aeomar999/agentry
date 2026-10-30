@@ -1,8 +1,8 @@
 Feature: The agents' turns
   The engineer, reviewer, tester, deployer and the other teams' agents, each in its own
   worktree and session: what each one's turn does.
-  # Sources: internal/turns, internal/domain/agents, internal/coordinator/brief.go,
-  # internal/coordinator/checks.go, internal/domain/policy/hooks/handler.go and their tests.
+  # Sources: internal/runtime/turns, internal/domain/agents, internal/runtime/coordinator/brief.go,
+  # internal/runtime/coordinator/checks.go, internal/domain/policy/hooks/handler.go and their tests.
 
   # ---- Every agent's turn ----------------------------------------------------
 
@@ -13,45 +13,45 @@ Feature: The agents' turns
     When the agent writes the file and then ticks steps in it
     Then the plan kept on the turn is the same as the file's last content
     And the plan is kept when the turn ends
-    # the plan file name: internal/machines/local.go PlanFile; the brief's wording: internal/coordinator/brief.go plan
+    # the plan file name: internal/runtime/machines/local.go PlanFile; the brief's wording: internal/runtime/coordinator/brief.go plan
 
   @TURN-02 @agent @test
   Scenario: An agent starts fresh with only its brief and the repository
-    # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
+    # internal/runtime/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given the coordinator assigned the engineer with the instructions "Remove every TODO in src/."
     When the engineer's turn starts in a fresh session
     Then its own prompt, "You are the engineer", and those instructions are shown in its brief
-    # not under test, checked by hand: the brief also has the task, where the work is, the shared files and the plan file, and not the coordinator's prompt: internal/coordinator/brief.go
+    # not under test, checked by hand: the brief also has the task, where the work is, the shared files and the plan file, and not the coordinator's prompt: internal/runtime/coordinator/brief.go
 
   @TURN-03 @agent @test
   Scenario: An agent's turn starts from its own prompt and the coordinator's brief
-    # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
+    # internal/runtime/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given the coordinator assigned the engineer with the instructions "Remove every TODO in src/."
     When the engineer's turn starts
     Then its own prompt, "You are the engineer", and those instructions are shown in its brief
-    # not under test, checked by hand: the brief opens with the prompt, and the prompt is the engineer's own, not the coordinator's: internal/coordinator/brief.go workerBrief
+    # not under test, checked by hand: the brief opens with the prompt, and the prompt is the engineer's own, not the coordinator's: internal/runtime/coordinator/brief.go workerBrief
     # each prompt is embedded from defaults/<name>.md, or defaults/<team folder>/<name>.md for the other teams: internal/domain/agents/defaults.go, teams.go Prompted
 
   @TURN-04 @agent @test
   Scenario: An agent's turn ends with a report, and every report goes back to the coordinator
-    # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
+    # internal/runtime/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given the engineer's brief, whose "When you finish" section asks for 1 short report for the coordinator
     When the engineer ends its turn with the report "Removed 3 TODOs and committed."
     Then the next turn is the coordinator's, and no other agent's turn starts first
     And the report is shown in the coordinator's brief as the step "engineer → tech-lead: Removed 3 TODOs and committed."
-    # not under test, checked by hand: the step is shown once, and the brief tells the agent not to stop to ask questions and to put them in the report: internal/coordinator/brief.go line 394
-    # finish: internal/coordinator/brief.go
+    # not under test, checked by hand: the step is shown once, and the brief tells the agent not to stop to ask questions and to put them in the report: internal/runtime/coordinator/brief.go line 394
+    # finish: internal/runtime/coordinator/brief.go
 
   @TURN-05 @agent @test
   Scenario: An agent works only in the task's worktree, on branch agentry/<task>
-    # internal/coordinator/carried_brief_test.go TestABriefFromASiblingsSessionSaysItIsANewTask
-    # the words on repos and folders outside it: internal/coordinator/ideas_test.go TestAVisionariesBriefIsAsItWasBeforeTheHook (testdata/visionaries-brief.md); PORT: internal/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt
+    # internal/runtime/coordinator/carried_brief_test.go TestABriefFromASiblingsSessionSaysItIsANewTask
+    # the words on repos and folders outside it: internal/runtime/coordinator/ideas_test.go TestAVisionariesBriefIsAsItWasBeforeTheHook (testdata/visionaries-brief.md); PORT: internal/runtime/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt
     Given a task task-3 whose worktree is ready on branch agentry/task-3, with port 7903
     When any agent's turn starts on it
     Then the brief's "Where the work is" names that worktree and branch, and says never to create or change repos or folders outside it
     And the worktree's port is in the PORT environment variable of the turn: yes
     # not under test, checked by hand: the port is task-3's own 7903; the turns test checks PORT=7901 for its own worktree
-    # whereText: internal/coordinator/brief.go; PORT: internal/turns/turns.go environment; the branch: internal/platform/worktrees/worktree_test.go TestCreateSetsTheWorktreeUp
+    # whereText: internal/runtime/coordinator/brief.go; PORT: internal/runtime/turns/turns.go environment; the branch: internal/platform/worktrees/worktree_test.go TestCreateSetsTheWorktreeUp
 
   @TURN-06 @agent @test
   Scenario: An agent writes the plan file its brief asks for, and the plan follows the file
@@ -60,7 +60,7 @@ Feature: The agents' turns
     When the agent writes 2 unticked steps, then ticks both before its turn ends
     Then the plan kept on the turn is the same as the file's last content, with both steps ticked
     And an unchanged plan is recorded 0 more times
-    # PlanFile: internal/machines/local.go; the section's words: internal/coordinator/brief.go plan
+    # PlanFile: internal/runtime/machines/local.go; the section's words: internal/runtime/coordinator/brief.go plan
 
   @TURN-07 @agent @test
   Scenario: An agent keeps its notes across tasks in .agentry/knowledge.md
@@ -68,8 +68,8 @@ Feature: The agents' turns
     Given the brief's "What you know from earlier tasks" shows the agent's notes and asks it to update .agentry/knowledge.md before it finishes
     When the engineer's turn ends with "This repo formats with gofmt -s." in that file
     Then the engineer's knowledge is exactly that text, recorded once, by the engineer
-    # not under test, checked by hand: its next brief shows the same notes under "What you know from earlier tasks": internal/coordinator/brief.go knowledge, line 432
-    # KnowledgeFile: internal/machines/local.go; knowledge: internal/coordinator/brief.go
+    # not under test, checked by hand: its next brief shows the same notes under "What you know from earlier tasks": internal/runtime/coordinator/brief.go knowledge, line 432
+    # KnowledgeFile: internal/runtime/machines/local.go; knowledge: internal/runtime/coordinator/brief.go
 
   # ---- The engineer, the reviewer and the tester -----------------------------
 
@@ -97,23 +97,23 @@ Feature: The agents' turns
 
   @TURN-10 @agent @test
   Scenario: The verdict is read from the end of a checker's report
-    # internal/coordinator/checks_test.go TestVerdictOf
+    # internal/runtime/coordinator/checks_test.go TestVerdictOf
     Given a checking agent's report
     When Agentry reads its verdict
     Then "Verdict: approved" and "verdict - approved, with two nits" are approved, and "**Verdict: Changes needed**" and "Verdict: not approved" are changes needed
     And a report such as "I approved of the naming." has no verdict
-    # not under test, checked by hand: a verdict above the last 5 lines is not read (internal/coordinator/checks.go line 40), and the coordinator is told to ask that agent again for one (line 140)
-    # verdictOf: internal/coordinator/checks.go; the message for no verdict: unchecked in the same file
+    # not under test, checked by hand: a verdict above the last 5 lines is not read (internal/runtime/coordinator/checks.go line 40), and the coordinator is told to ask that agent again for one (line 140)
+    # verdictOf: internal/runtime/coordinator/checks.go; the message for no verdict: unchecked in the same file
     # verdictOf also reads "Verdict: rejected" as changes needed (checks.go, the rejected prefix); TestVerdictOf has no such case
 
   @TURN-11 @agent @test
   Scenario: Every checking agent's brief ends with how to give its verdict
-    # internal/coordinator/resumed_brief_test.go TestAResumedReviewerBriefStillEndsWithTheVerdict; fresh: internal/coordinator/handoff_brief_test.go TestAReReviewsHandoffHasItsEarlierFindingsAndWhatChangedSince
+    # internal/runtime/coordinator/resumed_brief_test.go TestAResumedReviewerBriefStillEndsWithTheVerdict; fresh: internal/runtime/coordinator/handoff_brief_test.go TestAReReviewsHandoffHasItsEarlierFindingsAndWhatChangedSince
     Given an agent whose work counts as review, such as the reviewer
     When its brief is written, fresh or for a resumed session
     Then the brief ends with exactly the 2 lines it may use, "Verdict: approved" and "Verdict: changes needed", and says to approve only work it would ship as it is
     # not under test, checked by hand: an agent whose work counts as building gets no verdict section
-    # VerdictFormat: internal/coordinator/checks.go; finish: internal/coordinator/brief.go
+    # VerdictFormat: internal/runtime/coordinator/checks.go; finish: internal/runtime/coordinator/brief.go
 
   @TURN-12 @agent @manual
   Scenario: The tester runs the tests, adds missing ones and tries the change for real
@@ -154,13 +154,13 @@ Feature: The agents' turns
 
   @TURN-15 @agent @test
   Scenario: A ship the user chose needs no earlier review, and counts only once the push went through
-    # internal/coordinator/next_test.go TestYourShipTakesTheWorkAsItIs
+    # internal/runtime/coordinator/next_test.go TestYourShipTakesTheWorkAsItIs
     Given the user moved the task to Shipping and the coordinator handed it to the deployer
     When the deployer's turn starts
     Then its brief adds "The user chose to ship this as it is, so no earlier review or test is needed", and that failing checks after the merge mean no push
     And once an approved push finished in that turn, done is allowed with 0 reviews
     And after a push that was denied, hung, or stopped by failed tests, done is refused with "the work isn't checked yet", and a change after the ship needs checking again
-    # YouChoseToShip: internal/coordinator/brief.go; TestYourShipTellsTheShipperToShipItAsItIs in the same file
+    # YouChoseToShip: internal/runtime/coordinator/brief.go; TestYourShipTellsTheShipperToShipItAsItIs in the same file
 
   # ---- The other teams -------------------------------------------------------
 

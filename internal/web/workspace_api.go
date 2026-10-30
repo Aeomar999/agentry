@@ -6,8 +6,8 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
-	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/workspace"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 )
 
 // A task's Workspace page, as an editor's git view shows it: its

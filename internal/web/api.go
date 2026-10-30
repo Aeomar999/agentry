@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/core/current"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
@@ -21,8 +20,9 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
-	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/coordinator"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 )
 
 // listTasks lists every task's summary, an archived task's too: it is done,

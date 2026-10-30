@@ -8,8 +8,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/turns"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
-	"gitlab.com/dev.chempa/agentry/internal/turns"
 )
 
 // fixRound is a task in its fix round: the engineer worked, the reviewer

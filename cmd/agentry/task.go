@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/desk"
 	"gitlab.com/dev.chempa/agentry/internal/platform/pinned"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/desk"
 )
 
-// `agentry task` is how the desk (internal/desk) hands work to the
+// `agentry task` is how the desk (internal/runtime/desk) hands work to the
 // coordinator: create a task, list them, show one, answer a question. It
 // talks to the server named in AGENTRY_SERVER with the token in
 // AGENTRY_DESK_TOKEN, which the desk's session has. Approving an agent's

@@ -80,12 +80,12 @@ var newPath = map[string]string{
 	"internal/extensions/ideas":     "internal/extensions/ideas",
 	"internal/extensions/schedules": "internal/extensions/schedules",
 
-	"internal/coordinator": "internal/runtime/coordinator",
-	"internal/turns":       "internal/runtime/turns",
-	"internal/watchdog":    "internal/runtime/watchdog",
-	"internal/archive":     "internal/runtime/archive",
-	"internal/machines":    "internal/runtime/machines",
-	"internal/desk":        "internal/runtime/desk",
+	"internal/runtime/coordinator": "internal/runtime/coordinator",
+	"internal/runtime/turns":       "internal/runtime/turns",
+	"internal/runtime/watchdog":    "internal/runtime/watchdog",
+	"internal/runtime/archive":     "internal/runtime/archive",
+	"internal/runtime/machines":    "internal/runtime/machines",
+	"internal/runtime/desk":        "internal/runtime/desk",
 
 	"internal/web": "internal/web",
 	"internal/mcp": "internal/mcp",
@@ -170,7 +170,7 @@ type edge struct{ from, to string }
 // known are the edges that break the rules today; one may be removed, never added.
 // The paths are those of step 2; steps 8 and 9 rewrite them like any other path,
 // to internal/extensions/ideas and internal/runtime/coordinator.
-var known = []edge{{"internal/coordinator", "internal/extensions/ideas"}}
+var known = []edge{{"internal/runtime/coordinator", "internal/extensions/ideas"}}
 
 type pkg struct {
 	path    string

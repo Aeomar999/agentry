@@ -17,9 +17,9 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
-	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/engines"
 	"gitlab.com/dev.chempa/agentry/internal/platform/hookcall"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 )
 
 type Config struct {

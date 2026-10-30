@@ -256,7 +256,7 @@ Feature: Ideas
 
   @IDEA-17 @agent @test
   Scenario: The Visionaries' ideas land in Ideas from the lead's done decision, for the user to decide
-    # internal/extensions/ideas/ideas_test.go TestASuggestionComesFromATask; the done decision: internal/coordinator/ideas_test.go TestAVisionariesDoneKeepsItsIdeas; once: TestADoneNamingOneTitleTwiceKeepsOneIdea in the same file
+    # internal/extensions/ideas/ideas_test.go TestASuggestionComesFromATask; the done decision: internal/runtime/coordinator/ideas_test.go TestAVisionariesDoneKeepsItsIdeas; once: TestADoneNamingOneTitleTwiceKeepsOneIdea in the same file
     Given the visionary-lead's done decision carries "ideas", each with a title, the problem, the proposal and a size of S, M or L
     When the loop applies the decision
     Then each idea is kept once, from that task and about its repo

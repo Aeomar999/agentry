@@ -39,7 +39,7 @@ Feature: Approvals and questions
     Then the agent is told no, with "the command is held for the user's approval. Don't retry it now"
     And the action is held and undecided, the task is in Needs you, and 0 hook calls still wait on it
     And the task's waiting line reads exactly "Waiting for you to approve the push to dev"
-    # the hook's deadline is 1790 seconds, GateTimeoutSeconds 1800 less 10: internal/turns/turns.go environment, internal/platform/engines/engine.go;
+    # the hook's deadline is 1790 seconds, GateTimeoutSeconds 1800 less 10: internal/runtime/turns/turns.go environment, internal/platform/engines/engine.go;
     # the server answers 5 seconds before it: internal/domain/policy/hooks/handler.go replyMargin; the line: internal/domain/tasks/waiting_test.go TestAHeldPushNamesItsBranch
     # the test holds a curl command, which goes through the same hold as any ask
 
@@ -90,9 +90,9 @@ Feature: Approvals and questions
 
   @APPROVE-07 @coordinator @test
   Scenario: An ask decision puts a question to the user, with optional options and a page
-    # internal/coordinator/decision_test.go TestParseDecision; the wait: internal/coordinator/next_test.go TestNext, "wait for your answer" and "your answer goes to the coordinator"
+    # internal/runtime/coordinator/decision_test.go TestParseDecision; the wait: internal/runtime/coordinator/next_test.go TestNext, "wait for your answer" and "your answer goes to the coordinator"
     Given the coordinator's reply ends with {"action": "ask", "question": "Which layout?", "options": ["Tabs", "One page"], "page": "<svg></svg>"}
     When the decision is read
     Then it is an ask with exactly that question, 2 options and the page
     And once applied, the task waits with the question open and no turn starts until the user answers
-    # the wait while a question is open: internal/coordinator/next.go Next
+    # the wait while a question is open: internal/runtime/coordinator/next.go Next

@@ -311,7 +311,7 @@ export interface MachineFacts {
   missing: string[];
 }
 
-// A machine in detail, read from it when asked (internal/machines/about.go).
+// A machine in detail, read from it when asked (internal/runtime/machines/about.go).
 export interface MachineAbout {
   host: string;
   os: string; // "macOS 15.3", "Ubuntu 24.04.1 LTS"
