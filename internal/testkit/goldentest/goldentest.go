@@ -36,7 +36,8 @@ func Check(t testing.TB, path, got string, update bool, rerun string) {
 }
 
 // Diff is the lines of got that want lacks (+) and the lines of want that
-// got lacks (-), each in its own order.
+// got lacks (-), each in its own order. Files with the same lines in
+// another order differ by none, which it says.
 func Diff(want, got string) string {
 	wantLines, gotLines := strings.Split(want, "\n"), strings.Split(got, "\n")
 	var diff strings.Builder
@@ -49,6 +50,9 @@ func Diff(want, got string) string {
 		if !slices.Contains(wantLines, line) {
 			diff.WriteString("+ " + line + "\n")
 		}
+	}
+	if diff.Len() == 0 && want != got {
+		return "(only the order of lines differs)\n"
 	}
 	return diff.String()
 }
