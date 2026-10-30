@@ -77,6 +77,7 @@ The packages under `internal/`, by folder as in docs/design/repo-organization.md
 Outside `internal/`, under `tools/`, the spec's own check:
 
 - `speccheck`: `spec/check`, which checks every scenario under `spec/` against the rules in spec/README.md.
+
 Checked by: the reviewer on every change, who asks of each new file and function whether it has one job and sits in the package of its concern, and whether the dependency points downward; the `internal/` list above matching the last element of each path `go list ./internal/...` prints, leaving out a `<name>test` package beside its `<name>` package (45 packages); `go test ./tools/importrules`, with `TestEveryImportPointsDown`, `TestEveryPackageHasALayer` and `TestTestkitIsOnlyForTests` in `rules_test.go`, which fail when an import points up the layers of docs/design/repo-organization.md section 3 (so `extensions` and `httpapi` never import `store`, `current` or `rules`), when a package has no layer, and when code that isn't a test imports `storetest` or `deeptest`.
 
 ## 2. The append-only event log is the only state

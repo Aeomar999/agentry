@@ -36,9 +36,9 @@ type Result struct {
 
 // Check walks the spec folder and judges every feature file in it, then
 // every file for an em-dash, then checks that a feature file's Sources
-// names every package under specifiedFolders. Cited paths are read from the folder's parent,
-// the repo root. The error is for a folder that cannot be read, not for a
-// spec that fails: that is in the problems.
+// names every package under specifiedFolders. Cited paths are read from the
+// folder's parent, the repo root. The error is for a folder that cannot be
+// read, not for a spec that fails: that is in the problems.
 func Check(folder string) (Result, error) {
 	result := Result{Tags: map[string]int{}, ProposalTags: map[string]int{}}
 	seen := map[string]string{} // ID -> where it was first used

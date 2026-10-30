@@ -748,7 +748,8 @@ func TestEveryDomainAndExtensionPackageIsNamedBySources(t *testing.T) {
 	}{
 		"every package named or listed": {all, list, "", nil},
 		"no README, so no list": {all, "", "", []string{
-			"README.md:1: internal/extensions/schedules is named by no feature file's # Sources: line; name it in the Sources of the feature file that specifies it"}},
+			"README.md:1: internal/extensions/schedules is named by no feature file's # Sources: line; name it in the Sources of the feature file that specifies it",
+			"README.md:1: internal/extensions/schedules is in noSpecYet but not on Code with no spec yet"}},
 		"a folder doesn't name its subpackages": {"internal/web, internal/domain/tasks, internal/extensions", list, "", []string{
 			"README.md:3: internal/domain/tasks/waitlist is named by no feature file's # Sources: line"}},
 		"a file doesn't name its package": {"internal/web, internal/domain/tasks/resume.go, internal/domain/tasks/waitlist, internal/extensions", list, "", []string{
@@ -759,6 +760,8 @@ func TestEveryDomainAndExtensionPackageIsNamedBySources(t *testing.T) {
 			"spec/functional/tasks-and-board.feature's Sources names it; take it off the list"}},
 		"an entry added to the list": {all, list + "- `internal/domain/tasks`\n", "", []string{
 			"README.md:8: internal/domain/tasks is on Code with no spec yet, which may only shrink; name it in the Sources of the feature file that specifies it"}},
+		"an entry taken off the list but kept in noSpecYet": {all + ", internal/extensions/schedules", "# The spec\n\n## Code with no spec yet\n\nWhat no Sources names.\n", "", []string{
+			"README.md:3: internal/extensions/schedules is in noSpecYet but not on Code with no spec yet; drop it from noSpecYet in tools/speccheck/specified.go too"}},
 		"an entry under a later heading is no entry": {all, list + "\n## Later\n\n- `internal/domain/gone`\n", "", nil},
 	} {
 		t.Run(name, func(t *testing.T) {

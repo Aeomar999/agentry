@@ -43,7 +43,8 @@ func (c *citer) nameSources(path, text string) {
 // and not internal/extensions/ideas. A package on the folder's README.md
 // list "Code with no spec yet" is let off. The list may only shrink: an
 // entry fails when noSpecYet doesn't hold it, when a Sources names it, or
-// when it is not such a package.
+// when it is not such a package. noSpecYet shrinks with it: a package it
+// holds fails when the list doesn't, so an entry taken off can't come back.
 func (c *citer) unspecifiedProblems(folder string) ([]Problem, error) {
 	readme := filepath.Join(folder, "README.md")
 	listed, heading, err := noSpecYetList(readme)
@@ -73,6 +74,12 @@ func (c *citer) unspecifiedProblems(folder string) ([]Problem, error) {
 		}
 		if message != "" {
 			problems = append(problems, Problem{readme, e.line, message})
+		}
+	}
+	for _, pkg := range noSpecYet {
+		if slices.Contains(packages, pkg) && !slices.ContainsFunc(listed, func(e listEntry) bool { return e.path == pkg }) {
+			problems = append(problems, Problem{readme, heading, fmt.Sprintf(
+				"%s is in noSpecYet but not on Code with no spec yet; drop it from noSpecYet in tools/speccheck/specified.go too", pkg)})
 		}
 	}
 	return problems, nil

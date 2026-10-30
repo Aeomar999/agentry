@@ -30,7 +30,7 @@ const (
 	runtime          // internal/runtime/*
 	surface          // internal/domain/<area>/<sub> and internal/extensions/<name>
 	top              // internal/web, internal/mcp
-	command          // cmd/*, tools/*
+	command          // cmd/**, tools/**: a program and the packages beneath it
 	testkit          // internal/testkit/*
 )
 
@@ -41,7 +41,7 @@ const (
 func layerOf(path string) (layer, string) {
 	parts := strings.Split(path, "/")
 	switch {
-	case (parts[0] == "cmd" || parts[0] == "tools") && len(parts) == 2:
+	case (parts[0] == "cmd" || parts[0] == "tools") && len(parts) >= 2:
 		return command, ""
 	case parts[0] != "internal" || len(parts) < 2:
 		return unplaced, ""
