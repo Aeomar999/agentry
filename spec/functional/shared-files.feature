@@ -2,7 +2,7 @@ Feature: Shared files
   Files that are not in git, shared with a task in .agentry/files, that follow it from machine to machine.
   # Sources: internal/domain/sharedfiles, internal/domain/sharedfiles/sharedfilesapi,
   # internal/domain/tasks/files.go, internal/runtime/coordinator/files.go,
-  # ui/src/components/organisms/SharedFiles.tsx
+  # ui/src/domains/sharedfiles/SharedFiles.tsx
   # and their tests.
 
   # ---- Adding and downloading ------------------------------------------------
@@ -24,7 +24,7 @@ Feature: Shared files
 
   @FILES-02 @user @manual
   Scenario: The Files tab drops files in, up to 2 GB each, and a story also has its epic's files
-    # ui/src/components/organisms/SharedFiles.tsx lines 105 to 147
+    # ui/src/domains/sharedfiles/SharedFiles.tsx lines 105 to 147
     # 2 GB: internal/domain/sharedfiles/blobs.go lines 22 and 25
     # a story's epic's files, in epic/: internal/domain/sharedfiles/folder.go line 28, internal/runtime/coordinator/files.go line 138
     Given task-5's Files tab is open with no files

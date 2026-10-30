@@ -33,7 +33,7 @@ import { HandoffPath } from "@/components/molecules/HandoffPath";
 import { terminalURL } from "@/api/client";
 import { StoryTable } from "@/domains/tasks/StoryTable";
 import { EpicPicker } from "@/domains/tasks/EpicPicker";
-import { SharedFiles } from "@/components/organisms/SharedFiles";
+import { SharedFiles } from "@/domains/sharedfiles/SharedFiles";
 import { EraseTask } from "@/domains/tasks/EraseTask";
 import { ErasedTask } from "@/domains/tasks/ErasedTask";
 import { RedactText } from "@/components/organisms/RedactText";
