@@ -497,7 +497,7 @@ Feature: Operations
 
   @OPS-26 @test
   Scenario: A redaction that cannot leave the rest of a row as it was is refused
-    # internal/core/store/redact.go: the refusals, each with its reason, before anything is written
+    # internal/core/store/redact_refusals.go: the refusals, each with its reason, before anything is written
     Given a row that holds the text in a key
     When a redaction of the text is asked for
     Then it is refused and 0 rows are written
