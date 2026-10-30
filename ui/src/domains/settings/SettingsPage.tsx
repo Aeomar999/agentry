@@ -5,7 +5,7 @@ import { useBreadcrumb } from "@/lib/breadcrumb";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { Panel } from "@/components/molecules/Panel";
 import { Banner } from "@/components/molecules/Banner";
-import { RedactLog } from "@/components/organisms/RedactLog";
+import { RedactLog } from "@/domains/settings/RedactLog";
 import { type ExtensionUI, EXTENSIONS, hiddenExtensions, unknownLine, useExtensions } from "@/extensions";
 
 // Settings lists the extensions this build has that are off, so one that

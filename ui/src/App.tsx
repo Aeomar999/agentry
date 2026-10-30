@@ -11,7 +11,7 @@ import { AgentsPage } from "@/domains/agents/AgentsPage";
 import { AgentPage } from "@/domains/agents/AgentPage";
 import { AgentEditPage } from "@/domains/agents/AgentEditPage";
 import { PolicyPage } from "@/domains/policy/PolicyPage";
-import { SettingsPage } from "@/pages/SettingsPage";
+import { SettingsPage } from "@/domains/settings/SettingsPage";
 import { WorkersPage } from "@/domains/workers/WorkersPage";
 import { NotFoundPage } from "@/shell/NotFoundPage";
 import { ErrorPage } from "@/shell/ErrorPage";

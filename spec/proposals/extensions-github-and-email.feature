@@ -17,7 +17,7 @@ Feature: Shipping through GitHub, and email
   @PROP-30 @user @test @to-settings
   Scenario: While git is off, the Settings page says how to turn it on, and never takes the token
     # docs/design/t-019-shipping.md sections 7 and 9; builds on @SET-01 (internal/extensions/extensions.go Manifest) and features.toml (internal/extensions/settings.go Settings)
-    # test: ui/src/pages/SettingsPage.test.tsx and internal/githost/feature_test.go (to write)
+    # test: ui/src/domains/settings/SettingsPage.test.tsx and internal/githost/feature_test.go (to write)
     Given a features.toml with no git table
     When the Settings page is shown
     Then Git is listed among the features that are off, with its why "add a token to features.toml to open pull requests": yes
@@ -260,7 +260,7 @@ Feature: Shipping through GitHub, and email
   @PROP-50 @user @test @to-settings
   Scenario: Email is off until features.toml names the user's address and the mail server
     # docs/design/extensions.md section 3, Notifications; features.toml keeps secrets in a table under the feature's (internal/extensions/settings.go Secret), @SET-01
-    # test: internal/email/feature_test.go and ui/src/pages/SettingsPage.test.tsx (to write)
+    # test: internal/email/feature_test.go and ui/src/domains/settings/SettingsPage.test.tsx (to write)
     Given a features.toml with no email table
     When the Settings page is shown
     Then Email is listed among the features that are off, with its way to turn it on: the email table with to, server and from, and the password under its secrets table: yes

@@ -5,16 +5,16 @@ Feature: Settings
   # internal/core/store/redact_strings.go, internal/core/store/redact_commit.go,
   # internal/core/rules/redact_rules.go,
   # internal/domain/settings/settingsfile, internal/domain/settings/settingsapi,
-  # ui/src/pages/SettingsPage.tsx, ui/src/components/organisms/RedactText.tsx,
-  # ui/src/components/organisms/RedactLog.tsx and their tests.
+  # ui/src/domains/settings/SettingsPage.tsx, ui/src/components/organisms/RedactText.tsx,
+  # ui/src/domains/settings/RedactLog.tsx and their tests.
 
   # ---- Features that are off -------------------------------------------------
 
   @SET-01 @user @test
   Scenario: The Settings page lists the features that are off, with the way to turn each on, and what the log holds that this build skipped
-    # ui/src/pages/SettingsPage.test.tsx "on a fresh install, lists Ideas with its why and Ask the visionaries", "doesn't list a visible feature, and says nothing is off", "says nothing until the manifest is read", "shows one tally line per prefix and per type", "ignores a feature only the server knows" and "shows a feature with no button by its label and why alone"
-    # the page header and the Privacy panel: ui/src/pages/SettingsPage.tsx lines 33 and 53 to 67; the heading "Features that are off" is not asserted
-    # the why is the server's sentence, internal/extensions/ideas/extension.go line 66; the page test's fixture carries a shorter one, ui/src/pages/SettingsPage.test.tsx lines 37 and 52
+    # ui/src/domains/settings/SettingsPage.test.tsx "on a fresh install, lists Ideas with its why and Ask the visionaries", "doesn't list a visible feature, and says nothing is off", "says nothing until the manifest is read", "shows one tally line per prefix and per type", "ignores a feature only the server knows" and "shows a feature with no button by its label and why alone"
+    # the page header and the Privacy panel: ui/src/domains/settings/SettingsPage.tsx lines 33 and 53 to 67; the heading "Features that are off" is not asserted
+    # the why is the server's sentence, internal/extensions/ideas/extension.go line 66; the page test's fixture carries a shorter one, ui/src/domains/settings/SettingsPage.test.tsx lines 37 and 52
     Given a fresh install, with no Visionaries team
     When the Settings page is shown
     Then Ideas is shown among the features that are off, with the server's why and the button "Ask the visionaries"
@@ -58,7 +58,7 @@ Feature: Settings
 
   @SET-04 @user @manual
   Scenario: Redact a text everywhere, from the Settings page
-    # ui/src/pages/SettingsPage.tsx lines 53 to 69; ui/src/components/organisms/RedactLog.tsx lines 39 and 44
+    # ui/src/domains/settings/SettingsPage.tsx lines 53 to 69; ui/src/domains/settings/RedactLog.tsx lines 39 and 44
     # README.md, Archiving, erasing and redacting
     Given the Settings page
     When the user clicks "Redact a text everywhere" in the Privacy panel
