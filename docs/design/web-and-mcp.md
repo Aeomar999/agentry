@@ -9,7 +9,7 @@ tools go") and section 7, step 12.
 
 Step 12 moved every domain's page routes and tools out of `internal/web`
 and `internal/mcp` (tasks 267 to 274). The target is that `web` and `mcp`
-only mount routes and tools. Measured on `49144b69`:
+only mount routes and tools. Measured on `b17cff80`:
 
 - `internal/mcp` is close to the target already. Its 11 files are the
   protocol, the notices, the waiting list `mcp` words, and the list of tools.
@@ -45,7 +45,7 @@ story adds a package. The layers below are section 3's, as
 | `internal/domain/sharedfiles/sharedfilesapi` | 7, folder `domain/sharedfiles` | → `domain/sharedfiles`: yes |
 | `internal/domain/tasks/tasksapi` | 7, folder `domain/tasks` | → `domain/workers/workerlink`: **no** |
 | `internal/platform/client` | 1 | imports nothing of Agentry's for `Raw` |
-| `internal/extensions` (the framework) | 4 | → `domain/workers` (the root, for `extensions.WorkerOf`): yes |
+| `internal/extensions` (the framework) | 4 | → `domain/workers` (the root, for `extensions.WorkerOf`, which story 4 adds): yes |
 | `internal/web/install` (a web subfolder) | **none**: `layerOf` gives it no layer, so `TestEveryPackageHasALayer` fails, and `web` → `web/install` is refused | – |
 
 Two results change what earlier stories found:
@@ -60,7 +60,7 @@ Two results change what earlier stories found:
 ## Every file
 
 Every path `git ls-tree --name-only origin/dev internal/web/ internal/mcp/`
-lists on `49144b69`: 11 in `mcp`, 42 files and `static/` in `web`, 54 rows.
+lists on `b17cff80`: 11 in `mcp`, 42 files and `static/` in `web`, 54 rows.
 "Story" is the story below that moves or splits the file; "–" means the
 file stays as it is. Rows marked Q1 move only if the answer to question 1
 is yes; with a no, those files stay in `web`.
@@ -87,7 +87,7 @@ is yes; with a no, those files stay in `web`.
 |---|---|---|---|
 | `addresses.go` | the addresses other machines reach the server at, the install commands for each, and the trust page for the server's own CA | stays: what `web` hands out about itself; gains `publicURL` | 1 |
 | `addresses_test.go` | the commands come for every address, behind a proxy too | stays | – |
-| `api.go` | `/api/config`, `/api/theme` and `/api/changes`; each domain's `API` as `web` builds it | stays, split: `config_api.go` (the three routes) and `domains.go` (the builders and the reads they take: `task`, `roster`, `workers`, `version`) | 1 |
+| `api.go` | `/api/config`, `/api/theme` and `/api/changes`; each domain's `API` as `web` builds it | stays, split: `config_api.go` (the three routes, with `missingProfilesInUse` and `workerChoices`, which only `showConfig` calls); `domains.go` (the builders and what they take: `task`, `roster`, `workers`, `version`, `filesShown`, `effectiveOf`); `Config.defaults` to `server.go`, beside `Config`, as `tasksAPI` and `coreOf` both call it. The file goes. | 1 |
 | `api_test.go` | web's test server and helpers; the token checks, the position header, the page, the desk token, the config | stays | – |
 | `archived_bench_test.go` | Target 7: an archived task opens in time | stays: it clears web's archives cache, and shares helpers with the other benchmarks | – |
 | `archives_test.go` | an archived task reads as before, with a counting blob store swapped into web's cache | stays: it sets `Server.archives`, which only package `web` reaches | – |
@@ -97,12 +97,12 @@ is yes; with a no, those files stay in `web`.
 | `claude_api_test.go` | Claude's token sends only that message | stays | – |
 | `erase_test.go` | erasing a task drops what web's archives cache keeps of it | stays: `web` holds the one cache that `tasksapi` and `settingsapi` share | – |
 | `events_bench_test.go` | measures a task's events route on a copy of a real log | stays, with the other benchmarks | – |
-| `extensions_api.go` | `GET /api/features`; mounting every route behind the wrapper its `Auth` names | stays, split: `mount`, `wrapperOf`, `mountRoute` and `coreOf` go to `mount.go` | 1 |
+| `extensions_api.go` | `GET /api/features`; building an extension's routes; mounting every route behind the wrapper its `Auth` names | stays, split: `mount`, `wrapperOf` and `mountRoute` go to `mount.go`; `routesOf` and `coreOf`, which build an extension's routes and the `Core` they use, stay here beside `listFeatures` | 1 |
 | `extensions_api_test.go` | an extension's routes: their `Auth`, their proposer, a clash, a signed route | stays | – |
 | `held_approval_test.go` | a held approval end to end (the hook, the questions, approving); the hook token doesn't open the API | stays: only `web` mounts the hook handler and `tasksapi`'s routes together | – |
 | `install.ps1` | the PowerShell script that joins a machine as a worker | Q1: `workersapi`, embedded there | 6 |
 | `install.sh` | the same, for sh | Q1: `workersapi`, embedded there | 6 |
-| `install_https_test.go` | the install commands pin the server's own CA and run in sh and PowerShell, for workers and Claude Code alike | stays: it tests `addresses.go` and `scripts.go` | – |
+| `install_https_test.go` | the install commands pin the server's own CA and run in sh and PowerShell, for workers and Claude Code alike | stays: it tests `addresses.go` and `scripts.go`. Its check that a script carries no CA calls `installTemplate`; story 6 makes it fetch `GET /worker/install.sh` through the mux instead | 6 |
 | `integrations_api.go` | the connect flow with a one-time code (scripts, binary, connect), and `carriesConnection` | Q1: the connect flow to `connectionsapi`; `carriesConnection` and `connections` to `server.go`, beside `requireUI`, which calls them | 7 |
 | `loggrowth_bench_test.go` | measures replay, snapshots and archive sizes on a copy of a real log | stays: it uses the read-model benchmark's helpers (see "Seen on the way") | – |
 | `main_test.go` | keeps the tests off your Claude Code config; fails a run that leaves a session running | stays | – |
@@ -135,11 +135,11 @@ With question 1 answered yes, and stories 1 to 7 done:
 
 ```
 internal/web/
-  server.go          Config, Server, Handler: every mount; the token wrappers; the position header
-  mount.go           mount, wrapperOf (UI, Desk, Signed, Worker, Open), mountRoute, coreOf
+  server.go          Config and its defaults, Server, Handler: every mount; the token wrappers; the position header
+  mount.go           mount, wrapperOf (UI, Desk, Signed, Worker, Open), mountRoute
   domains.go         each domain's API as web builds it, and the reads it hands them
-  extensions_api.go  GET /api/features
-  config_api.go      GET /api/config, POST /api/theme, GET /api/changes
+  extensions_api.go  GET /api/features; routesOf and coreOf, an extension's routes
+  config_api.go      GET /api/config (with the missing profiles and the worker choices), POST /api/theme, GET /api/changes
   waiting_api.go     GET /api/waiting
   claude_api.go      the Workspace Claude's message and its token
   signin.go          issuing a code, signing in and out
@@ -169,18 +169,22 @@ joining, `requireWorker` and the worker's routes.
 Each story changes no behaviour, passes `make test` and `spec/check`, and
 moves the spec's citations and `# Sources:` lines with the code.
 
-**Part one: fits today's rules.** Stories 1, 2 and 3 touch different files
-and can run at once.
+**Part one: fits today's rules.** Stories 1, 2 and 3 touch different Go
+files and can run at once. They may edit the same spec `.feature` files
+when they renumber citations, so the second and third to land rebase and
+renumber those citations again.
 
 1. **Split web's files by job.** `api.go` into `config_api.go` and
-   `domains.go`; `mount`, `wrapperOf`, `mountRoute` and `coreOf` from
-   `extensions_api.go` into `mount.go`; the codes and the limit from
+   `domains.go`, with `Config.defaults` to `server.go`, each func where the
+   table names; `mount`, `wrapperOf` and `mountRoute` from
+   `extensions_api.go` into `mount.go`, with `routesOf` and `coreOf` left
+   beside `listFeatures`; the codes and the limit from
    `signin.go` into `signin_codes.go`; from `workers_api.go`, the helpers
    that stay (`workersAPI`, `workers`, `publicURL`, `serveBinary`,
    `binaryFor`, `shellQuoted`) into the files the table names. A pure
    split, proved as task-291 proved `redact.go`'s. Touches `api.go`,
-   `extensions_api.go`, `signin.go`, `workers_api.go`, `addresses.go`,
-   `scripts.go`.
+   `extensions_api.go`, `signin.go`, `workers_api.go`, `server.go`,
+   `addresses.go`, `scripts.go`.
 2. **`client.Client.Raw`, and mcp's tool list only lists.** `raw` moves
    from `mcp/tools.go` into `platform/client`; `sharedfilesapi.Client`
    takes the `client.Client`, as `tasksapi.Client` does, in place of its
@@ -195,29 +199,67 @@ mount lines, so they chain: 4, 5, 6, 7, each after the one before.
 Story 4 needs story 1 (`mount.go`). Each new kind lands with the first
 routes that use it, so no kind is ever unused.
 
+Two rules hold for all four stories:
+
+- **No workers hub, no worker routes.** Today `Handler` mounts the
+  worker's routes, the shared-file routes a worker calls, joining and the
+  install scripts only when `Config.Workers` is set (`server.go`, the
+  `if s.config.Workers != nil` block). A domain's `Routes()` is mounted
+  always, so the domain leaves those routes out itself when `web` gave it
+  no hub, and they stay unmounted (404) as today. Without that, a server
+  with no hub would serve `connectWorker`, which calls `Connect` on a nil
+  hub and panics.
+- **Only a domain may mount `Worker` or `Open`.** `mount` gets only an
+  owner string, so it can't tell a domain from an extension. `routesOf`
+  can: every extension's routes, and only theirs, come through it. So
+  `routesOf` panics, naming the extension, on a route whose `Auth` is
+  `Worker` or `Open`, as a clash does. `mount`'s signature does not
+  change.
+
 4. **`extensions.Auth` gains `Worker`, and the worker's own routes move to
    `workersapi`.** `Worker` is behind `requireWorker`, which puts the
-   worker in the request's context for `extensions.WorkerOf(r)`. `mount`
-   refuses it from an extension, with a panic naming the extension, as a
-   clash does. Then connect, stream, leave, the binary update
-   (`ServeBinary` as a func field) and `worker_git.go` go to `workersapi`.
-   Touches `extensions/extensions.go`, `mount.go`, `server.go`,
-   `workers_api.go`, `worker_git.go`, `domains.go`, `workersapi`.
+   worker in the request's context. The story adds
+   `extensions.WorkerOf(r)`, which reads the worker back out. `routesOf`
+   refuses `Worker` from an extension. Then connect, stream, leave, the
+   binary update (`ServeBinary` as a func field) and `worker_git.go` go to
+   `workersapi`. `workersapi.API` gains `Connect` and `Stream`, the hub's
+   funcs, which `workersAPI` sets only when `Config.Workers` is set, as it
+   sets `Disconnect` today; `Routes()` leaves the worker's routes out when
+   `Connect` is nil. Touches `extensions/extensions.go`, `mount.go`,
+   `extensions_api.go`, `server.go`, `workers_api.go`, `worker_git.go`,
+   `domains.go`, `workersapi`.
 5. **The workers' shared-file routes move to `sharedfilesapi`.**
-   `blobFor` and `blobFrom`, with `Auth` `Worker`. Touches `server.go`,
-   `shared_api.go`, `sharedfilesapi`.
+   `blobFor` and `blobFrom`, with `Auth` `Worker`. `sharedfilesapi.API`
+   gains `WorkersConnect`, a bool `web` sets when `Config.Workers` is set;
+   `Routes()` leaves the blob routes out when it is false. Touches
+   `server.go`, `shared_api.go`, `sharedfilesapi`.
 6. **`extensions.Auth` gains `Open`, and joining moves to
    `workersapi`.** An `Open` route has no wrapper: its handler checks its
-   own code, as these handlers already do. `mount` refuses it from an
-   extension, as it refuses `Worker`. Then `join`, the names it picks,
+   own code, as these handlers already do. `routesOf` refuses `Open` from
+   an extension, as it refuses `Worker`. Then `join`, the names it picks,
    `codeWorks`, the install scripts with `install.sh` and `install.ps1`
    embedded there, and the binary download move, all `Open`, with
-   `ServeScript` as a func field. `workers_api.go` goes. Touches
-   `extensions/extensions.go`, `mount.go`, `server.go`, `workers_api.go`,
-   `domains.go`, `workersapi`.
+   `ServeScript` as a func field. Like the worker's routes in story 4,
+   these are left out when `Connect` is nil. `workers_api.go` goes.
+
+   `install_https_test.go` stays in `web`, but its check that a script
+   carries no CA can no longer call `installTemplate`, which leaves with
+   `install.sh`. The check fetches `GET /worker/install.sh` with a join
+   code through web's mux instead, on a server with a hub and no CA, and
+   one with a public URL. That keeps it testing what the table says, how
+   `scripts.go` fills the script `web` serves. Moving the check to
+   `workersapi` with the template would test nothing: there
+   `ServeScript` is a func field, and the filling stays in `web`.
+   Touches `extensions/extensions.go`, `mount.go`, `extensions_api.go`,
+   `server.go`, `workers_api.go`, `domains.go`, `install_https_test.go`,
+   `workersapi`.
 7. **Connecting Claude Code moves to `connectionsapi`.** The two scripts,
-   the binary and `connect`, all `Open`. `carriesConnection` and
-   `connections` go to `server.go`. `integrations_api.go` goes. Touches
+   the binary and `connect`, all `Open`. `connectionsapi.API` gains three
+   func fields from `web`: `ServeScript` for the scripts, `ServeBinary`
+   for the binary, and `PublicURL`, the address `connect` replies with as
+   `page`. `carriesConnection` and `connections` go to `server.go`.
+   `integrations_api.go` goes. These routes are mounted today with or
+   without a hub, so `connectionsapi` mounts them always. Touches
    `server.go`, `integrations_api.go`, `domains.go`, `connectionsapi`.
 
 When the stories are done, section 2's "What stays in `web`" paragraph is
@@ -232,7 +274,7 @@ brought in line with the tree above.
      by file.
    - (b) No, but put them in a web subfolder, `internal/web/install` (see
      question 3).
-   - (c) Yes, both, for domains only: `mount` refuses them from an
+   - (c) Yes, both, for domains only: `routesOf` refuses them from an
      extension, which keeps `Signed` for a webhook.
    - **Recommended: (c).** It is the only option that reaches the target,
      web and mcp only mounting, and it adds no second way of mounting: the
@@ -262,10 +304,6 @@ brought in line with the tree above.
 
 Not in this note's scope; for the epic to decide whether to file them.
 
-- `noTask` has three copies, in `tasksapi`, `sharedfilesapi` and
-  `settingsapi` (none is in `web` any more). `core/httpapi` could hold
-  one, taking the erasure lookup as a func: `httpapi` may import domain
-  roots, and every api package already imports `httpapi`.
 - `loggrowth_bench_test.go` measures the store and the read model and
   uses nothing of `web`'s. It could move to `core/store` with the helpers
   it borrows from `readmodel_bench_test.go`, but
