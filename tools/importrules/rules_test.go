@@ -34,105 +34,38 @@ const (
 	testkit          // internal/testkit/*
 )
 
-// newPath is section 4's table: each package's path today, and where its
-// move puts it. A package's layer comes from its new path. Step 11, when
-// every package is where it belongs, drops this table and reads the path.
-var newPath = map[string]string{
-	"internal/platform/client":                "internal/platform/client",
-	"internal/platform/engines":               "internal/platform/engines",
-	"internal/platform/exactgob":              "internal/platform/exactgob",
-	"internal/platform/hookcall":              "internal/platform/hookcall",
-	"internal/platform/hostaddrs":             "internal/platform/hostaddrs",
-	"internal/platform/launch":                "internal/platform/launch",
-	"internal/platform/pinned":                "internal/platform/pinned",
-	"internal/platform/procs":                 "internal/platform/procs",
-	"internal/platform/schema":                "internal/platform/schema",
-	"internal/platform/sessions":              "internal/platform/sessions",
-	"internal/platform/sessions/sessionstest": "internal/platform/sessions/sessionstest",
-	"internal/platform/terminal":              "internal/platform/terminal",
-	"internal/platform/tlsca":                 "internal/platform/tlsca",
-	"internal/platform/workspace":             "internal/platform/workspace",
-	"internal/platform/worktrees":             "internal/platform/worktrees",
-
-	"internal/core/events":  "internal/core/events",
-	"internal/core/store":   "internal/core/store",
-	"internal/core/current": "internal/core/current",
-	"internal/core/rules":   "internal/core/rules",
-	"internal/core/httpapi": "internal/core/httpapi",
-
-	"internal/domain/agents":      "internal/domain/agents",
-	"internal/domain/tasks":       "internal/domain/tasks",
-	"internal/domain/workers":     "internal/domain/workers",
-	"internal/domain/connections": "internal/domain/connections",
-	"internal/domain/policy":      "internal/domain/policy",
-	"internal/domain/settings":    "internal/domain/settings",
-	"internal/domain/sharedfiles": "internal/domain/sharedfiles",
-
-	"internal/domain/tasks/taskstest":       "internal/domain/tasks/taskstest",
-	"internal/domain/tasks/waitlist":        "internal/domain/tasks/waitlist",
-	"internal/domain/workers/workerlink":    "internal/domain/workers/workerlink",
-	"internal/domain/workers/workerservice": "internal/domain/workers/workerservice",
-	"internal/domain/policy/hooks":          "internal/domain/policy/hooks",
-	"internal/domain/settings/settingsfile": "internal/domain/settings/settingsfile",
-	"internal/domain/notifications/webpush": "internal/domain/notifications/webpush",
-
-	"internal/extensions":           "internal/extensions",
-	"internal/extensions/ideas":     "internal/extensions/ideas",
-	"internal/extensions/schedules": "internal/extensions/schedules",
-
-	"internal/runtime/coordinator": "internal/runtime/coordinator",
-	"internal/runtime/turns":       "internal/runtime/turns",
-	"internal/runtime/watchdog":    "internal/runtime/watchdog",
-	"internal/runtime/archive":     "internal/runtime/archive",
-	"internal/runtime/machines":    "internal/runtime/machines",
-	"internal/runtime/desk":        "internal/runtime/desk",
-
-	"internal/web": "internal/web",
-	"internal/mcp": "internal/mcp",
-
-	"internal/testkit/storetest": "internal/testkit/storetest",
-	"internal/testkit/deeptest":  "internal/testkit/deeptest",
-
-	"tools/speccheck":   "tools/speccheck",
-	"tools/packaging":   "tools/packaging",
-	"tools/importrules": "tools/importrules",
-	"tools/relayout":    "tools/relayout",
-	"cmd/agentry":       "cmd/agentry",
-}
-
-// layerOf gives a package's layer, and for a surface the folder whose other
-// subpackages it may import: "internal/domain/workers/workerlink" is a surface in
-// "internal/domain/workers".
+// layerOf gives a package's layer, read off its path as section 2 lays it
+// out, and for a surface the folder whose other subpackages it may import:
+// "internal/domain/workers/workerlink" is a surface in "internal/domain/workers".
+// A path section 2 has no place for is unplaced.
 func layerOf(path string) (layer, string) {
-	moved, ok := newPath[path]
-	if !ok {
-		return unplaced, ""
-	}
-	parts := strings.Split(moved, "/")
+	parts := strings.Split(path, "/")
 	switch {
-	case parts[0] == "cmd" || parts[0] == "tools":
+	case (parts[0] == "cmd" || parts[0] == "tools") && len(parts) == 2:
 		return command, ""
-	case moved == "internal/web" || moved == "internal/mcp":
+	case parts[0] != "internal" || len(parts) < 2:
+		return unplaced, ""
+	case path == "internal/web" || path == "internal/mcp":
 		return top, ""
-	case parts[1] == "platform":
+	case parts[1] == "platform" && (len(parts) == 3 || len(parts) == 4):
 		return platform, ""
-	case moved == "internal/core/events":
+	case path == "internal/core/events":
 		return events, ""
-	case moved == "internal/core/httpapi":
+	case path == "internal/core/httpapi":
 		return httpapi, ""
-	case parts[1] == "core":
+	case slices.Contains([]string{"internal/core/store", "internal/core/current", "internal/core/rules"}, path):
 		return coreState, ""
-	case parts[1] == "runtime":
+	case parts[1] == "runtime" && len(parts) == 3:
 		return runtime, ""
-	case parts[1] == "testkit":
+	case parts[1] == "testkit" && len(parts) == 3:
 		return testkit, ""
-	case moved == "internal/extensions":
+	case path == "internal/extensions":
 		return framework, ""
-	case parts[1] == "extensions":
-		return surface, strings.Join(parts[:3], "/")
+	case parts[1] == "extensions" && len(parts) == 3:
+		return surface, path
 	case parts[1] == "domain" && len(parts) == 3:
 		return domainRoot, ""
-	case parts[1] == "domain":
+	case parts[1] == "domain" && len(parts) == 4:
 		return surface, strings.Join(parts[:3], "/")
 	}
 	return unplaced, ""
@@ -168,8 +101,6 @@ func allowed(from, to string) bool {
 type edge struct{ from, to string }
 
 // known are the edges that break the rules today; one may be removed, never added.
-// The paths are those of step 2; steps 8 and 9 rewrite them like any other path,
-// to internal/extensions/ideas and internal/runtime/coordinator.
 var known = []edge{{"internal/runtime/coordinator", "internal/extensions/ideas"}}
 
 type pkg struct {
@@ -231,7 +162,7 @@ func TestEveryImportPointsDown(t *testing.T) {
 func TestEveryPackageHasALayer(t *testing.T) {
 	for _, p := range ourPackages(t) {
 		if l, _ := layerOf(p.path); l == unplaced {
-			t.Errorf("%s has no layer: put it under platform, core, domain, extensions, runtime or testkit, and add it to newPath", p.path)
+			t.Errorf("%s has no layer: put it under platform, core, domain, extensions, runtime or testkit, where section 2 of docs/design/repo-organization.md puts it", p.path)
 		}
 	}
 }
