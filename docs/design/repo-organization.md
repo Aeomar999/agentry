@@ -165,7 +165,8 @@ testkit/    storetest  deeptest
 Depth is at most four below the module: `internal/domain/workers/workerlink`.
 Package names don't change, so `workers.Roster` and `workerlink.Server` read
 as today; only import paths do. The one exception is the framework, whose
-package `features` becomes `extensions` (section 7, step 8).
+package `features` becomes `extensions` in its own step before any move
+(section 7, step 1a).
 
 ### Where routes and tools go
 
@@ -228,7 +229,7 @@ may only shrink.
 ## 4. Every package, old path to new path
 
 All Go packages of the module, both binaries and the tools. "Step" is the
-migration step in section 7 that moves it.
+migration step in section 7 that moves or renames it.
 
 | Old path | New path | Its job | Step |
 |---|---|---|---|
@@ -266,7 +267,7 @@ migration step in section 7 that moves it.
 | `internal/settingsfile` | `internal/domain/settings/settingsfile` | features.toml: extensions' settings and secrets | 7 |
 | `internal/sharedfiles` | `internal/domain/sharedfiles` | a task's shared files | 7 |
 | `internal/webpush` | `internal/domain/notifications/webpush` | Web Push keys and subscriptions | 7 |
-| `internal/features` | `internal/extensions` | the extension framework, renamed with its package | 8 |
+| `internal/features` | `internal/extensions` | the extension framework, renamed in place | 1a |
 | `internal/ideas` | `internal/extensions/ideas` | the Ideas extension | 8 |
 | `internal/schedules` | `internal/extensions/schedules` | the Schedules extension | 8 |
 | `internal/coordinator` | `internal/runtime/coordinator` | the loop | 9 |
@@ -354,7 +355,7 @@ a page about something that isn't a domain goes where its Go code goes.
 | `lib/*.ts` about one domain (`teams.ts`, `templates.ts`, `epics.ts`, `plan.ts`, `push.ts`, `shared.ts`, `profiles.ts`, ...) | that domain's folder |
 | `lib/*.ts` with no domain (`cn`, `time`, `rows`, `stored`, `drag`, `theme`, `monaco`, ...) | stay |
 | `api/`, `live/` | stay |
-| `features/` | `extensions/`: the registry and each extension |
+| `features/` | `extensions/`: the registry and each extension, renamed in place in step 1a |
 
 The UI's spec areas go in `domains/`, and its extensions in `extensions/`,
 as Go has `internal/domain` and `internal/extensions`. `ui/src/extensions`
@@ -439,8 +440,10 @@ accepted.
 ## 6. How the rules are enforced
 
 **An import test,** `tools/importrules/rules_test.go`, run by
-`go test ./...`. It replaces `internal/features/imports_test.go` and
-`internal/httpapi/imports_test.go`, so there is one check, not three. It
+`go test ./...`. It replaces the framework's `imports_test.go`
+(`internal/features/imports_test.go` today, `internal/extensions/` after
+step 1a) and `internal/httpapi/imports_test.go`, so there is one check, not
+three. It
 keeps the point of their limits, that the extension framework and `httpapi`
 never import
 `store`, `current` or `rules`, though not their exact lists: today each may
@@ -457,7 +460,9 @@ func layerOf(path string) layer // "internal/domain/workers" -> domainRoot
 func allowed(from, to string) bool
 
 // known are the edges that break the rules today; one may be removed, never added.
-var known = []edge{{"internal/runtime/coordinator", "internal/extensions/ideas"}}
+// The paths are those of step 2; steps 8 and 9 rewrite them like any other path,
+// to internal/extensions/ideas and internal/runtime/coordinator.
+var known = []edge{{"internal/coordinator", "internal/ideas"}}
 
 func TestEveryImportPointsDown(t *testing.T) {
 	// go list -json ./... ; for each package, its Imports (not TestImports):
@@ -475,8 +480,10 @@ func TestTestkitIsOnlyForTests(t *testing.T) {
 }
 ```
 
-Until the moves are done, `layerOf` reads a table of today's flat names
-(section 4's "New path" column); step 11 replaces the table with the path
+Until the moves are done, `layerOf` reads a table of the flat names at that
+point (`internal/extensions` after step 1a, `internal/ideas`,
+`internal/schedules`), each with its layer from section 4's "New path"
+column; step 11 replaces the table with the path
 prefixes. The test lands first (step 2), so it is worth having
 even if the moves wait.
 
@@ -513,13 +520,14 @@ Every step but step 10 changes no behaviour, builds, passes `make test` and
 | Step | What | Kind |
 |---|---|---|
 | 1 | This document | doc |
-| 2 | The import test, with today's flat names in its table; drop the two old `imports_test.go`; rewrite `spec/constraints.md` line 77 | test only |
+| 1a | Rename the framework in place: `internal/features` → `internal/extensions`, `ui/src/features` → `ui/src/extensions`, and the Go names with `gopls rename`; its paths in `spec/` rewritten as a move's are; `features.toml`, `/api/features` and its JSON keep their names | rename, no behaviour change |
+| 2 | The import test, with the flat names after step 1a in its table; drop the two old `imports_test.go`; rewrite `spec/constraints.md` line 77 | test only |
 | 3 | `# Sources:` lines in the 12 feature files without one; `spec/check` fails on a Sources path that doesn't exist | spec and check |
 | 4 | `testkit` and `tools`: `storetest`, `deeptest`, `speccheck`, `packaging` | move |
 | 5 | `platform` (15 packages, and the desktop app's four imports) | move |
 | 6 | `core` | move |
 | 7 | `domain`, one area per commit: agents, tasks, workers, connections, policy, settings, sharedfiles, notifications | move |
-| 8 | `extensions`, renamed from `features`; `extensions/ideas`, `extensions/schedules` | move, and the framework's rename |
+| 8 | `extensions/ideas`, `extensions/schedules` (from `internal/ideas`, `internal/schedules`) | move |
 | 9 | `runtime` | move |
 | 10 | The root: stop committing the built page (history kept), with a "not built" page in its place; CI, Docker and `make test` build the UI; the Mac build copies the page in, with the built-from check (section 5); `brag-output/` ignored; `docker-stack.dev.yml` to `deploy/` | **behaviour change**, agreed by the user; needs a scenario |
 | 11 | The import test reads layers from paths; `spec/check` fails on a `domain/` or `extensions/` package no Sources names; `spec/constraints.md` section 1 grouped by folder | test and spec |
@@ -576,14 +584,17 @@ section 4. For each package in the step it:
    The allow-list names files, not lines, so an edit to one of them doesn't
    stop the script; a new file with a hit does.
 
-Step 8 also renames the framework's package, which a path rewrite can't do
-alone. In the same commit, `gopls rename` turns `features.Feature` into
-`extensions.Extension`, `installedFeatures()` in `cmd/agentry` into
-`installedExtensions()`, and the other names that say feature for the
-framework; `features.Route`, `features.Tool`, `features.Core` and
-`features.Coordinator` need only the new qualifier, `extensions.`. It leaves
+Step 1a renames the framework's package in place, before the import test
+lands, so no move has to change a package name. `gopls rename` turns
+`features.Feature` into `extensions.Extension`, `installedFeatures()` in
+`cmd/agentry` into `installedExtensions()`, and the other names that say
+feature for the framework; `features.Route`, `features.Tool`,
+`features.Core` and `features.Coordinator` need only the new qualifier,
+`extensions.`. The folders `internal/features` and `ui/src/features` become
+`internal/extensions` and `ui/src/extensions`, and `internal/ideas` and
+`internal/schedules` stay where they are until step 8. It leaves
 `features.toml`, `/api/features` and its JSON as they are (section 4), so
-the step still changes no behaviour.
+the step changes no behaviour.
 
 Old design docs under `docs/design/` keep the paths they were written with;
 they record what was true then.
