@@ -31,7 +31,8 @@ export interface EventList {
 
 // A redaction appends event.redacted to the task's stream. Every list asks
 // for it, to know when to read again, but shows it only when its types
-// would: the chat and the Activity tab don't list it.
+// would: the chat doesn't list it; the Activity and Events tabs, which take
+// every type, do.
 const redacted = "event.redacted";
 
 export const noEvents: EventList = { events: [], loading: true, earlier: false, loadingEarlier: false, error: "" };
@@ -51,7 +52,7 @@ interface List {
   shown: EventList;
   position: number; // the log position it holds every event up to; -1 before the first read
   started: boolean; // its first page has come
-  firstReadAt: number; // the log position its first page was read at: a redaction after it may rewrite events it holds
+  firstReadAt: number; // where its first page was read, or the redaction it was read again for when later: a redaction after it may rewrite events it holds
   ahead: boolean; // the last page read forwards said more lie after it
   earlierAsked: boolean;
   reading: boolean;
@@ -143,15 +144,18 @@ export class EventPages {
   // log's position: the events it holds may not be in the new log.
   private reset(position: number) {
     this.live = position;
-    this.lists.forEach((list, key) => this.readAgain(key, list, position));
+    this.lists.forEach((list, key) => this.readAgain(key, list, position, 0));
   }
 
   // readAgain reads a list again from its first page, as of position. It
   // keeps showing the events it holds until the new ones are read, so the
   // view doesn't flash empty. A newest page starts at position, not the
   // old bound. An earlier page asked for may hold what the new read
-  // replaces, so the ask is dropped.
-  private readAgain(key: string, list: List, position: number) {
+  // replaces, so the ask is dropped. The first page is read after the
+  // redaction it reads again for, if any, even when the server doesn't say
+  // where it read: so that redaction doesn't read it again.
+  private readAgain(key: string, list: List, position: number, redaction: number) {
+    list.firstReadAt = redaction;
     if (list.wanted.newestBefore !== undefined) list.wanted = { ...list.wanted, newestBefore: position + 1 };
     list.position = -1;
     list.started = false;
@@ -213,7 +217,7 @@ export class EventPages {
         // event.redacted is then before the first page's read: once only.
         // A redaction of the whole log reads every open list of each task it
         // changed again from the start, which is fine for so rare an act.
-        if (redaction > list.firstReadAt) this.readAgain(key, list, readAt);
+        if (redaction > list.firstReadAt) this.readAgain(key, list, readAt, redaction);
       }
     } catch (failure) {
       if (!this.log.stale(sent)) this.showFailure(list, due, asked, failure as Error);
@@ -235,7 +239,7 @@ export class EventPages {
 
   private first(list: List, page: Page, readAt: number) {
     list.started = true;
-    list.firstReadAt = readAt;
+    list.firstReadAt = Math.max(readAt, list.firstReadAt);
     const { newestBefore } = list.wanted;
     if (newestBefore === undefined) {
       this.append(list, page, readAt);

@@ -542,6 +542,29 @@ describe("a redaction", () => {
     expect(positions(pages, newest)).toEqual([6, 7, 8, 9]);
   });
 
+  test("reads again once when the server doesn't say where it read, and the redaction came after the last move", async () => {
+    const server = fakeServer([1, 2, 3, 4, 5, 6, 7]);
+    const pages = new EventPages((path) => server.fetch(path).then(({ data }) => ({ data }))); // no position
+    pages.watch(chat, ignore);
+    pages.moved(7);
+    await server.answer(7);
+    await server.answer(7);
+
+    server.add(8);
+    pages.moved(8);
+    server.redact(3, 9); // committed before the read is answered, after the poll said 8
+    await server.answer(9);
+    await server.answer(9);
+    await server.answer(9);
+    expect(server.reads.slice(2)).toEqual([
+      "/api/tasks/task-8/events?type=task.labeled&type=event.redacted&after=7",
+      "/api/tasks/task-8/events?type=task.labeled&type=event.redacted&after=0",
+      "/api/tasks/task-8/events?type=task.labeled&type=event.redacted&after=5",
+    ]);
+    expect(server.pending).toHaveLength(0);
+    expect(texts(pages, chat)).toEqual([1, "[redacted]", 5, 7]);
+  });
+
   test("an earlier page asked for before the redaction is dropped: it may hold the old text", async () => {
     const server = fakeServer([1, 2, 3, 4, 5, 6, 7]);
     const pages = new EventPages(server.fetch);

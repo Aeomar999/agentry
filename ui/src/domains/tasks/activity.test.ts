@@ -153,6 +153,23 @@ describe("activityOf's authors", () => {
   });
 });
 
+describe("activityOf on a redaction", () => {
+  const task = { coordinator: "coordinator", turnList: [], actions: [] } as unknown as TaskDetail;
+  const redacted = (position: number, positions: number[]): LogEvent => ({
+    position,
+    at: "2026-10-19T06:00:00Z",
+    type: "event.redacted",
+    actor: "system:redactor",
+    data: { positions, fields: [], removed: 14, who: "human:you", why: "pasted a key" },
+  });
+
+  test("says how many rows it redacted, and why", () => {
+    const [one, three] = activityOf(task, [redacted(5, [2]), redacted(9, [2, 3, 4])]);
+    expect(one).toMatchObject({ kind: "note", title: "Redacted 1 row", body: "pasted a key" });
+    expect(three).toMatchObject({ kind: "note", title: "Redacted 3 rows", body: "pasted a key" });
+  });
+});
+
 describe("activityOf, on a page that starts in the middle of a turn", () => {
   const turn = (id: string, agent: string, more: Partial<Turn> = {}) =>
     ({

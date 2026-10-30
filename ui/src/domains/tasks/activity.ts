@@ -346,6 +346,10 @@ function rowOf(
       return { ...base, kind: "note", title: `Worktree ready on ${text(e, "worker") || "local"}: ${text(e, "branch")}` };
     case "worktree.moved":
       return { ...base, kind: "note", title: `Work moved to ${text(e, "worker")}` };
+    case "event.redacted": {
+      const rows = Array.isArray(e.data?.positions) ? e.data.positions.length : 0;
+      return { ...base, kind: "note", title: `Redacted ${rows} ${rows === 1 ? "row" : "rows"}`, body: text(e, "why") };
+    }
     default:
       return { ...base, kind: "note", title: e.type };
   }
