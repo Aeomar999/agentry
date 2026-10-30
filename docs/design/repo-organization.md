@@ -45,7 +45,7 @@ places, all because of what the import graph really is:
 
 Four questions are the user's to answer (see the end): whether to rewrite
 history to drop the committed UI, whether a fresh clone may need Node to
-build, what to do with `Agentry/` and `brag-output/`, and when the board is
+build (and how the Mac app then stays buildable with only Go), what to do with `Agentry/` and `brag-output/`, and when the board is
 quiet enough to run the moves.
 
 ![The layers and what each may import](repo-organization/layers.svg)
@@ -371,10 +371,11 @@ And `//go:embed all:dist` doesn't compile when `dist` is missing. So:
 - `page.go` embeds `all:static`, which always matches, because
   `notbuilt.html` is there with or without `dist`. It serves `static/dist`
   when `static/dist/index.html` exists, and `notbuilt.html` for every page
-  path when it doesn't. The API is not affected.
+  path when it doesn't. The API is not affected. This replaces `page.go`'s
+  answer today when `index.html` is missing, a 500 with "the UI isn't
+  built: run `make ui`": the same advice, as a page with status 200.
 - CI's check job and the Dockerfile build the UI in a Node stage first, so
-  every image and every CI run serves the real page. `make package` and
-  `make desktop` already run `make ui` first.
+  every image and every CI run serves the real page.
 
 This is the one step that changes behaviour: a binary built from a clone
 without `make ui` serves the "not built" page, where today it serves the
@@ -382,16 +383,51 @@ committed UI. So the step adds a scenario to
 `spec/non-functional/operations.feature` (a server built without the UI says
 how to build it), with a test in `internal/web` that serves from an embedded
 tree with no `dist` and checks both the page and that `/api/` still answers.
-A fresh clone then needs Node 24 to build a working page, which is why the
-step waits for the user's yes.
+
+**What relies on the committed page today.** Step 10 changes each of these:
+
+| Where | What it relies on | After step 10 |
+|---|---|---|
+| `make desktop` (Makefile, its comment, README lines 376 and 398) | it has no `ui` prerequisite, by design: the Mac app is built on a Mac with only Go, from the committed page (the user's choice in task-249) | see "The Mac build" below |
+| `make package` | runs `make ui` first | unchanged |
+| `internal/web/api_test.go:285-300` | a real `index.html` that names bundles, so `go test ./...` fails on a clone without `make ui` | `make test` gets `ui` as a prerequisite (it already needs Node, for `npm run lint`); the test skips, saying "the UI isn't built: run `make ui`", when `static/dist/index.html` is missing, so a bare `go test ./...` on a fresh clone passes. CI builds the UI first, so CI never skips it. |
+| `packaging/main.go:97` (`checkRoot`) | checks `internal/web/dist/index.html` | checks `internal/web/static/dist/index.html`, with the same message |
+| `.gitlab-ci.yml:3` and `:29` | the header says the pipeline needs no Node; the check job fails when `dist` isn't committed | the check job builds the UI in a Node stage; both lines go |
+| Makefile lines 2-3 | "the built UI is committed, so `go build` and `go install` work without it" | says `go build` without `make ui` serves the "not built" page |
+| README lines 108 and 380 | "built into the binary, so this needs no Node"; "`internal/web/dist`, which is committed" | 108 still holds for a release binary; 380 names `static/dist` and says it is built, not committed |
+| `page.go` | answers 500 when `index.html` is missing | serves `notbuilt.html` (above) |
+
+**The Mac build.** Step 10 would end Node-free Mac builds unless it keeps
+them on purpose. The options, for question 2:
+
+- **A. Copy the built page to the Mac** (recommended). The release steps
+  already copy the Mac zip back to the publishing machine; this copies
+  `internal/web/static/dist` the other way first. `make ui` writes the commit
+  it built from into `static/dist/built-from`, and `make desktop` (through
+  `checkRoot`) refuses a page built from another commit, so a stale copy
+  can't ship. The Mac still needs only Go.
+- **B. Commit `dist` only on release tags.** The tag's commit holds the page,
+  so a clean checkout of the tag builds anywhere without Node. But that
+  commit is on no branch, or `dev` carries `dist` again, and history still
+  grows by the page once per release. Two kinds of commit to explain.
+- **C. Install Node on the Mac.** `desktop` gets `ui` as a prerequisite,
+  like `package`. Simplest, but undoes the user's choice in task-249.
+
+A fresh clone needs Node 24 to build a working page, and option A or B is
+needed to keep the Mac build Node-free, which is why the step waits for the
+user's yes.
 
 ## 6. How the rules are enforced
 
 **An import test,** `tools/importrules/rules_test.go`, run by
 `go test ./...`. It replaces `internal/features/imports_test.go` and
 `internal/httpapi/imports_test.go`, so there is one check, not three. It
-keeps both of their limits: `features` and `httpapi` import only domain
-roots, `core/events` and `platform` (and `httpapi` also `features`).
+keeps the point of their limits, that `features` and `httpapi` never import
+`store`, `current` or `rules`, though not their exact lists: today each may
+import only agents, tasks, workers, connections, settings, client and
+events, and the new rows allow every domain root (so also `policy` and
+`sharedfiles`), `core/events` and `platform` (and `httpapi` also `features`).
+Nothing they may reach imports the store, so no cycle can come back.
 
 ```go
 // Each of Agentry's packages, with the layer its path puts it on.
@@ -440,8 +476,11 @@ and empties when someone writes `schedules.feature`.
 - Step 2 rewrites line 77. It names the two `imports_test.go` files that
   step deletes, so it names the new import test instead. Its "the list above
   matching `ls internal`" becomes "matching the last element of each path
-  `go list ./internal/...` prints". Package names don't change in a move, so
-  that check still holds after the folders change.
+  `go list ./internal/...` prints, leaving out a `<name>test` package beside
+  its `<name>` package". That leaves out `sessionstest` and `taskstest`, which
+  `ls internal` never showed. The same step adds `launch` to the list, which
+  is missing today, so the check passes on its first run. Package names
+  don't change in a move, so the check still holds after the folders change.
 - Each move step's script rewrites the paths in `spec/constraints.md`, such
   as `go test ./internal/store`, as it does in the rest of `spec/`.
 - Step 11 regroups the list by folder, to match the tree.
@@ -462,7 +501,7 @@ Every step but step 10 changes no behaviour, builds, passes `make test` and
 | 7 | `domain`, one area per commit: agents, tasks, workers, connections, policy, settings, sharedfiles, notifications | move |
 | 8 | `features/ideas`, `features/schedules` | move |
 | 9 | `runtime` | move |
-| 10 | The root: stop committing the built page, with a "not built" page in its place; CI and Docker build the UI; `brag-output/` ignored; `docker-stack.dev.yml` to `deploy/` | **behaviour change**: needs the user's yes and a scenario |
+| 10 | The root: stop committing the built page, with a "not built" page in its place; CI, Docker and `make test` build the UI; the Mac build as the user chose (section 5); `brag-output/` ignored; `docker-stack.dev.yml` to `deploy/` | **behaviour change**: needs the user's yes and a scenario |
 | 11 | The import test reads layers from paths; `spec/check` fails on a `domain/` or `features/` package no Sources names; `spec/constraints.md` section 1 grouped by folder | test and spec |
 | 12 | One task per domain: its routes out of `web` and its tools out of `mcp` into `domain/<area>/<area>api`, mounted as features' are | refactor |
 | 13 | `coordinator` stops naming `ideas` (`features.Coordinator`), and the import test's known list is empty | refactor |
@@ -501,8 +540,21 @@ section 4. For each package in the step it:
    In each moved package the script also runs
    `grep -nE '"\.\./|"\.\."|Chdir\(' --include=*.go`, which finds a path
    string, a `filepath.Join("..", ...)` and a `Chdir`, and stops on any hit
-   that isn't in the list, so a person decides it. `make test` would catch
-   a miss too, but the plan doesn't rely on that.
+   that is in neither list, so a person decides it. `make test` would catch
+   a miss too, but the plan doesn't rely on that. The second list, the
+   script's allow-list, holds the files whose hits are not paths to fix:
+   comments about `..` and tests that a path can't escape its folder.
+
+   | File | Why it is not a path to fix |
+   |---|---|
+   | `internal/policy/decide.go`, `reach.go`, `shell.go` | comments on how `..` is cleaned, and splitting a shell range on `..` |
+   | `internal/sharedfiles/folder.go`, `blobs_test.go`, `sharedfiles_test.go` | refusing names that escape the folder, and their tests |
+   | `internal/worktrees/repo_test.go` | a test that a file can't be made outside the worktree |
+   | `internal/workspace/workspace_test.go` | a test that a path can't leave the workspace |
+   | `internal/coordinator/handoff_brief_test.go` | a brief's text that names a commit range |
+
+   The allow-list names files, not lines, so an edit to one of them doesn't
+   stop the script; a new file with a hit does.
 
 Old design docs under `docs/design/` keep the paths they were written with;
 they record what was true then.
@@ -548,7 +600,7 @@ task that edits a moved package or adds an import of one.
 | `sessions` as a domain | It knows no Agentry concept, only engines and processes: `platform`. Its spec area points there. |
 | A `signin` domain | Sign-in is how `web` checks who calls it, with no events of its own. It stays in `web`. |
 | `workerservice` in `platform` | It imports only `procs`, so it could. It is only about running a worker, so it sits with workers, where a worker change looks. |
-| Move the built page to `ui/dist` behind a Go package in `ui/` | `go list ./...` would walk `ui/node_modules`, and an npm package that ships `.go` files would break `go vet ./...`. `internal/web/dist`, ignored, avoids that. |
+| Move the built page to `ui/dist` behind a Go package in `ui/` | `go list ./...` would walk `ui/node_modules`, and an npm package that ships `.go` files would break `go vet ./...`. `internal/web/static/dist`, ignored, avoids that. |
 | `git mv` alone in one commit, the rewrites in the next | The first commit wouldn't build. One commit per move, made by a script, is as easy to review. |
 
 ## 9. Disagreements and how they were settled
@@ -582,6 +634,7 @@ The reviewer's challenges:
 | R1 | Putting `httpapi` in one row with `store`, `current` and `rules` lets it import the store, which `internal/httpapi/imports_test.go` forbids today, so the new test would be weaker than the one it replaces. | Agreed: a slip of grouping, not a choice. | `core/httpapi` has its own row in section 3, with today's limit, and the import test keeps it. The diagram shows it as its own row. |
 | R2 | `ui/src/domains/workspace` and `domains/signin` look like domains, but Go has neither, and section 8 rejects a signin domain. | Agreed: the UI should follow where the Go code is, not add domains. | A UI domain folder exists only where Go has one. The Workspace page goes to `domains/tasks/workspace` (its routes are a task's and move to `tasksapi`); sign-in goes to `shell/signin` (part of `web` in Go). |
 | R3 | `desk` imports only `sessions`, so by the reasoning that puts `sessions` and `terminal` in `platform` it would be `platform` too. Agrees with `runtime`, but wants the reason stated. | `runtime`: it is an Agentry role, not an OS capability. | Kept in `runtime`, with the rule stated: imports set the lowest folder a package can go in, and its job picks among those left (In short, item 4; section 8). |
+| R4 | Step 10 said `make desktop` already runs `make ui`. It doesn't, by design: the Mac app is built with only Go from the committed page. Dropping the committed page quietly ends that, and breaks `api_test.go`, `checkRoot` and CI's check. | Not committing `dist` is still right for history, but the Mac build has to be kept on purpose, not by accident. | Section 5 lists everything that relies on the committed page and what each becomes. The Mac build is the user's call (question 2), with option A recommended: copy the page built on the publishing machine, checked against the commit. |
 
 ## 10. Questions only the user can answer
 
@@ -592,7 +645,10 @@ The reviewer's challenges:
 2. **May a fresh clone need Node to build the page?** Ignoring `dist` (step 10)
    means `go build` and `go install` from a clone serve a "UI not built" page
    until `make ui` runs. If not, `dist` stays committed and history keeps
-   growing by about 0.5 MB per UI change.
+   growing by about 0.5 MB per UI change. If yes, how does the Mac app stay
+   buildable with only Go (section 5, "The Mac build")? Recommended: A, copy
+   the page built on the publishing machine, checked against the commit. Or
+   B, commit `dist` only on release tags, or C, install Node on the Mac.
 3. **`Agentry/` and `brag-output/`:** delete, move out of the repo folder, or
    ignore? This design suggests moving `Agentry/` out and ignoring
    `brag-output/`.

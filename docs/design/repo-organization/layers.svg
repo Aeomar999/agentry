@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="860" height="716" viewBox="0 0 860 716" font-family="Helvetica, Arial, sans-serif">
-<rect width="860" height="716" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="728" viewBox="0 0 860 728" font-family="Helvetica, Arial, sans-serif">
+<rect width="860" height="728" fill="#ffffff"/>
 <text x="24" y="32" font-size="18" font-weight="bold" fill="#111">Layers: each package imports only what is below it</text>
 <text x="836" y="32" font-size="13" fill="#555" text-anchor="end">may import</text>
 <rect x="24" y="56" width="812" height="52" fill="#eef2f7" stroke="#8a96a8" stroke-width="1"/>
@@ -42,5 +42,6 @@
 <text x="40" y="636" font-size="15" font-weight="bold" fill="#111">platform/*</text>
 <text x="40" y="655" font-size="13" fill="#333">OS, git, engines, TLS, encodings</text>
 <text x="820" y="646" font-size="13" fill="#333" text-anchor="end">platform only</text>
-<text x="24" y="690" font-size="12" fill="#555">Green rows are core: events sits below the domain models, the rest above them; httpapi and store, current, rules never import each other. testkit/* is for tests only.</text>
+<text x="24" y="690" font-size="12" fill="#555">Green rows are core: events sits below the domain models, the rest above them;</text>
+<text x="24" y="706" font-size="12" fill="#555">httpapi and store, current, rules never import each other. The testkit packages are for tests only.</text>
 </svg>
