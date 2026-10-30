@@ -111,8 +111,8 @@ func TestClaudeCodeConnectsFromTheIntegrationsPage(t *testing.T) {
 	}
 }
 
-// Without the UI token none of the connections' routes answers, and nothing
-// is invited or revoked.
+// Without the UI token none of the connections' routes answers: each is
+// refused with 401, and the list of connections stays empty.
 func TestTheConnectionsRoutesNeedTheToken(t *testing.T) {
 	server := newTestServer(t)
 	for _, route := range []struct{ method, path string }{

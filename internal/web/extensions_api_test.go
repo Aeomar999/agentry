@@ -204,9 +204,10 @@ func TestAnExtensionRouteWithNoLogWritesNothing(t *testing.T) {
 	}
 }
 
-// An extension's route whose pattern a core route or another extension's has
-// already fails to mount, naming the extension and the pattern, whether the
-// core route is one of the first or the last the server registers.
+// An extension's route whose pattern a core or domain route, or another
+// extension's, has already fails to mount, naming the extension and the
+// pattern, whether that route is one of the first the server registers or
+// the last before the extensions.
 func TestAnExtensionRouteThatClashesNamesItsExtension(t *testing.T) {
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	one := func(name, pattern string) extensions.Extension {
