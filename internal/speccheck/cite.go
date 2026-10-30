@@ -185,7 +185,7 @@ func (c *citer) check(cite citation) string {
 	}
 	if cite.test == "" {
 		c.paths++
-		if _, err := os.Stat(filepath.Join(c.root, filepath.FromSlash(cite.path))); err != nil {
+		if !existsExactly(c.root, cite.path) {
 			return fmt.Sprintf("cited path %s does not exist", cite.path)
 		}
 		return ""
@@ -234,12 +234,15 @@ func ignoredFolders(root string) []string {
 	return folders
 }
 
-// read gives a cited test file's text, reading the file the first time.
+// read gives a cited test file's text, reading the file the first time. A
+// path in the wrong case isn't read through, as the Mac's filesystem would.
 func (c *citer) read(path string) (text string, readable bool) {
 	file, read := c.files[path]
 	if !read {
-		bytes, err := os.ReadFile(filepath.Join(c.root, filepath.FromSlash(path)))
-		file = testFile{text: string(bytes), readable: err == nil}
+		if existsExactly(c.root, path) {
+			bytes, err := os.ReadFile(filepath.Join(c.root, filepath.FromSlash(path)))
+			file = testFile{text: string(bytes), readable: err == nil}
+		}
 		c.files[path] = file
 	}
 	return file.text, file.readable

@@ -314,6 +314,28 @@ func TestATestScenarioCitesPathsAndTestsThatExist(t *testing.T) {
 	}
 }
 
+// The case tests prove something only on a case-insensitive filesystem, such
+// as the Mac's, where os.Stat and os.ReadFile find internal/web for
+// internal/WEB. On Linux they pass either way.
+func TestATestCitationInTheWrongCaseFails(t *testing.T) {
+	for name, c := range map[string]struct{ comment, want string }{
+		"a folder in the wrong case": {
+			"# internal/WEB/api_test.go TestCreate",
+			"tasks-and-board.feature:10: cited path internal/WEB/api_test.go does not exist"},
+		"a Go test file in the wrong case": {
+			"# internal/web/Api_test.go TestCreate",
+			"tasks-and-board.feature:10: cited path internal/web/Api_test.go does not exist"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := problemsOf(t, map[string]string{
+				"../" + goodTestFile:                 "package web\n\nfunc TestCreate(t *testing.T) {}\n",
+				"functional/tasks-and-board.feature": strings.Replace(goodScenario, "# internal/web/api_test.go", c.comment, 1),
+			})
+			expectProblems(t, got, c.want)
+		})
+	}
+}
+
 func TestTheCitationsCheckedAreCounted(t *testing.T) {
 	dir := writeSpec(t, map[string]string{
 		"../" + goodTestFile:                 "package web\n\nfunc TestCreate(t *testing.T) {}\n",
@@ -642,6 +664,29 @@ func TestEveryPathAFeaturesSourcesNamesExists(t *testing.T) {
 		"a path from ./": {
 			"  # Sources: ./internal/tasks and their tests.\n",
 			"tasks-and-board.feature:3: Sources names ./internal/tasks; name the path from the repo root, without ./"},
+		"a folder below the top in the wrong case": {
+			"  # Sources: internal/Tasks and their tests.\n",
+			"tasks-and-board.feature:3: Sources names internal/Tasks, which doesn't exist"},
+		"a folder with a slash at the end": {
+			"  # Sources: internal/tasks/ and their tests.\n", ""},
+		"only a slash": {
+			"  # Sources: internal/tasks, / and their tests.\n",
+			"tasks-and-board.feature:3: Sources names /, which isn't a path into the repo; name it from the repo root, with no empty, . or .. part"},
+		"a leading slash": {
+			"  # Sources: /internal/tasks and their tests.\n",
+			"tasks-and-board.feature:3: Sources names /internal/tasks, which isn't a path into the repo"},
+		"an empty part": {
+			"  # Sources: internal//tasks and their tests.\n",
+			"tasks-and-board.feature:3: Sources names internal//tasks, which isn't a path into the repo"},
+		"a . part": {
+			"  # Sources: internal/./tasks and their tests.\n",
+			"tasks-and-board.feature:3: Sources names internal/./tasks, which isn't a path into the repo"},
+		"a .. part": {
+			"  # Sources: internal/tasks/../tasks and their tests.\n",
+			"tasks-and-board.feature:3: Sources names internal/tasks/../tasks, which isn't a path into the repo"},
+		"a .. part out of an unlisted top folder": {
+			"  # Sources: scripts/../internal/tasks and their tests.\n",
+			"tasks-and-board.feature:3: Sources names scripts/../internal/tasks, which isn't a path into the repo"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			files := maps.Clone(repo)

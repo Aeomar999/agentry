@@ -66,6 +66,9 @@ func (c *citer) sourceProblem(token string) string {
 	if strings.HasPrefix(token, "./") {
 		return fmt.Sprintf("Sources names %s; name the path from the repo root, without ./", token)
 	}
+	if !inRepo(token) {
+		return fmt.Sprintf("Sources names %s, which isn't a path into the repo; name it from the repo root, with no empty, . or .. part", token)
+	}
 	if folder, ok := unlistedFolder(token); ok && !isPath(token) && c.isRepoFolder(folder) {
 		return c.check(citation{path: token, folder: folder})
 	}
@@ -85,11 +88,11 @@ func (c *citer) sourceProblem(token string) string {
 // each part's case as written. os.Stat alone would let Internal/x pass on a
 // case-insensitive filesystem, such as the Mac's.
 func existsExactly(root, path string) bool {
+	if !inRepo(path) {
+		return false
+	}
 	dir := root
-	for _, part := range strings.Split(path, "/") {
-		if part == "" {
-			continue
-		}
+	for _, part := range repoParts(path) {
 		entries, err := os.ReadDir(dir)
 		if err != nil || !slices.ContainsFunc(entries, func(e os.DirEntry) bool { return e.Name() == part }) {
 			return false
@@ -97,4 +100,19 @@ func existsExactly(root, path string) bool {
 		dir = filepath.Join(dir, part)
 	}
 	return true
+}
+
+// inRepo is true when a path with slashes names something under the repo
+// root: it has no leading slash and no empty, . or .. part, so / and
+// internal/../x are refused. One slash at the end, a folder's, is allowed.
+func inRepo(path string) bool {
+	return !slices.ContainsFunc(repoParts(path), func(part string) bool {
+		return part == "" || part == "." || part == ".."
+	})
+}
+
+// repoParts splits a path with slashes into its parts, leaving out the
+// slash at the end of a folder's.
+func repoParts(path string) []string {
+	return strings.Split(strings.TrimSuffix(path, "/"), "/")
 }
