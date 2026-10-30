@@ -134,3 +134,9 @@ func otherCA(server string) string {
 func powerShellQuoted(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
+
+// shellQuoted quotes a value for the install script. Codes and addresses
+// have no quotes in them, but a Host header could.
+func shellQuoted(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+}

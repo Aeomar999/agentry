@@ -192,3 +192,12 @@ func (s *Server) caFingerprint() string {
 	}
 	return tlsca.FingerprintOf(block.Bytes)
 }
+
+// publicURL is the server's address as people and workers reach it: the
+// one it was started with, or the one this request came to.
+func (s *Server) publicURL(r *http.Request) string {
+	if s.config.PublicURL != "" {
+		return strings.TrimSuffix(s.config.PublicURL, "/")
+	}
+	return requestURL(r)
+}

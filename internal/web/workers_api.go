@@ -1,16 +1,9 @@
 package web
 
 import (
-	"context"
-	"crypto/sha256"
 	_ "embed"
-	"encoding/hex"
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -18,33 +11,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
-	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workersapi"
-	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 )
-
-// workersAPI is the Workers page's routes as web mounts them.
-func (s *Server) workersAPI() workersapi.API {
-	api := workersapi.API{Log: s.store, Events: s.store, State: s.state, Workers: s.workers, Roster: s.roster,
-		Local: s.config.Local, InstallCommands: s.installCommands}
-	if s.config.Fleet != nil {
-		api.About = func(ctx context.Context, name string) (machines.About, error) {
-			return s.config.Fleet.Of(name).About(ctx)
-		}
-	}
-	if s.config.Workers != nil {
-		api.Disconnect = s.config.Workers.Disconnect
-	}
-	return api
-}
-
-// publicURL is the server's address as people and workers reach it: the
-// one it was started with, or the one this request came to.
-func (s *Server) publicURL(r *http.Request) string {
-	if s.config.PublicURL != "" {
-		return strings.TrimSuffix(s.config.PublicURL, "/")
-	}
-	return requestURL(r)
-}
 
 // joinRequest is what `agentry worker join` sends with its code.
 type joinRequest struct {
@@ -169,62 +136,9 @@ func (s *Server) updateBinary(w http.ResponseWriter, r *http.Request, _ workers.
 	s.serveBinary(w, r)
 }
 
-// serveBinary sends agentry for ?os= and ?arch=: a build for it next to this
-// binary (agentry-<os>-<arch>, as `make workers` makes them), or this binary
-// itself if it is that kind. Its ETag is its SHA-256.
-func (s *Server) serveBinary(w http.ResponseWriter, r *http.Request) {
-	goos, goarch := r.URL.Query().Get("os"), r.URL.Query().Get("arch")
-	path := s.binaryFor(goos, goarch)
-	if path == "" {
-		http.Error(w, "this server has no agentry for "+goos+"/"+goarch, http.StatusNotFound)
-		return
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		httpapi.Failed(w, err)
-		return
-	}
-	defer file.Close()
-	sum := sha256.New()
-	if _, err := io.Copy(sum, file); err != nil {
-		httpapi.Failed(w, err)
-		return
-	}
-	file.Seek(0, io.SeekStart)
-	w.Header().Set("ETag", `"`+hex.EncodeToString(sum.Sum(nil))+`"`)
-	w.Header().Set("Content-Type", "application/octet-stream")
-	http.ServeContent(w, r, "agentry", time.Time{}, file) // answers If-None-Match with 304
-}
-
-var platform = regexp.MustCompile(`^[a-z0-9]+$`)
-
-func (s *Server) binaryFor(goos, goarch string) string {
-	if s.config.Binary == "" || !platform.MatchString(goos) || !platform.MatchString(goarch) {
-		return ""
-	}
-	build := filepath.Join(filepath.Dir(s.config.Binary), "agentry-"+goos+"-"+goarch)
-	if _, err := os.Stat(build); err == nil {
-		return build
-	}
-	if goos == runtime.GOOS && goarch == runtime.GOARCH {
-		return s.config.Binary
-	}
-	return ""
-}
-
 func (s *Server) codeWorks(code string) bool {
 	roster, err := s.workers()
 	return err == nil && code != "" && roster.CanJoin(workers.Hash(code), time.Now())
-}
-
-func (s *Server) workers() (workers.Roster, error) {
-	return s.state.Workers(), s.state.Broken(events.WorkersStream)
-}
-
-// shellQuoted quotes a value for the install script. Codes and addresses
-// have no quotes in them, but a Host header could.
-func shellQuoted(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
 func firstError(err error, rejection *events.Rejection) error {

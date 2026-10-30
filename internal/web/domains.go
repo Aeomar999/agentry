@@ -1,6 +1,8 @@
 package web
 
 import (
+	"context"
+
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents/agentsapi"
@@ -10,6 +12,9 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles/sharedfilesapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks/tasksapi"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workersapi"
+	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 )
 
 func (s *Server) task(id string) (*tasks.Task, error) { return s.state.Task(id) }
@@ -62,4 +67,23 @@ func (s *Server) version() string {
 		return "(unknown version)"
 	}
 	return s.config.Local.Version
+}
+
+// workersAPI is the Workers page's routes as web mounts them.
+func (s *Server) workersAPI() workersapi.API {
+	api := workersapi.API{Log: s.store, Events: s.store, State: s.state, Workers: s.workers, Roster: s.roster,
+		Local: s.config.Local, InstallCommands: s.installCommands}
+	if s.config.Fleet != nil {
+		api.About = func(ctx context.Context, name string) (machines.About, error) {
+			return s.config.Fleet.Of(name).About(ctx)
+		}
+	}
+	if s.config.Workers != nil {
+		api.Disconnect = s.config.Workers.Disconnect
+	}
+	return api
+}
+
+func (s *Server) workers() (workers.Roster, error) {
+	return s.state.Workers(), s.state.Broken(events.WorkersStream)
 }
