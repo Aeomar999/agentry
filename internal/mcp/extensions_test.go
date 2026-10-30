@@ -90,13 +90,13 @@ func TestAnExtensionBringsItsToolsWhenItShows(t *testing.T) {
 		t.Errorf("initialize should declare tools.listChanged: %s", c.hello)
 	}
 	if strings.Contains(hello.Instructions, "Votes:") || !strings.HasSuffix(hello.Instructions, "\n- Every reply ends with what is waiting for the user. When something is, tell them in a line and offer to deal with it.") {
-		t.Errorf("a hidden feature's instructions:\n%s", hello.Instructions)
+		t.Errorf("a hidden extension's instructions:\n%s", hello.Instructions)
 	}
 	if names := toolNames(c); slices.Contains(names, "cast_vote") || !slices.Contains(names, "status") {
 		t.Errorf("hidden, tools: %v", names)
 	}
 	if text := c.tool("cast_vote", map[string]any{}); text != "error: no tool cast_vote" {
-		t.Errorf("a hidden feature's tool: %s", text)
+		t.Errorf("a hidden extension's tool: %s", text)
 	}
 
 	show()
@@ -105,7 +105,7 @@ func TestAnExtensionBringsItsToolsWhenItShows(t *testing.T) {
 		t.Errorf("shown, tools: %v", names)
 	}
 	if text := c.tool("cast_vote", map[string]any{}); !strings.HasPrefix(text, "voted in /repo") {
-		t.Errorf("a shown feature's tool: %s", text)
+		t.Errorf("a shown extension's tool: %s", text)
 	}
 	if len(c.notified) != 1 {
 		t.Errorf("notified %v, want one list_changed", c.notified)
@@ -113,7 +113,7 @@ func TestAnExtensionBringsItsToolsWhenItShows(t *testing.T) {
 
 	again := startWith(t, agentry, []extensions.Extension{votes()}, false, nil)
 	if err := json.Unmarshal(again.hello, &hello); err != nil || !strings.Contains(hello.Instructions, "Votes: cast them with cast_vote.\n- Every reply ends") {
-		t.Errorf("a shown feature's instructions:\n%s", hello.Instructions)
+		t.Errorf("a shown extension's instructions:\n%s", hello.Instructions)
 	}
 }
 

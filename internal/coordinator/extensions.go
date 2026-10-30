@@ -136,7 +136,7 @@ func (l *Loop) settingsOf(f extensions.Extension) extensions.Settings {
 func guarded(f extensions.Extension, hook string, run func()) (failed string) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("coordinator loop: a feature's hook panicked", "feature", f.Name, "hook", hook, "panic", r,
+			slog.Error("coordinator loop: an extension's hook panicked", "extension", f.Name, "hook", hook, "panic", r,
 				"stack", string(debug.Stack()))
 			failed = fmt.Sprintf("the %s feature's %s failed: %v", f.Name, hook, r)
 		}

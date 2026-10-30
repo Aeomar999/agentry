@@ -223,7 +223,7 @@ func ownerOf(installed []extensions.Extension, stream string) (extensions.Extens
 func byExtension(f extensions.Extension, rule extensions.Rule, p events.Proposal, state State) (rejection *events.Rejection) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			slog.Warn("rules: a feature's rule panicked", "feature", f.Name, "type", p.Type, "stream", p.Stream, "panic", recovered)
+			slog.Warn("rules: an extension's rule panicked", "extension", f.Name, "type", p.Type, "stream", p.Stream, "panic", recovered)
 			rejection = refuse("the " + f.Name + " feature's rules failed on this " + string(p.Type) + ", so it is refused")
 		}
 	}()

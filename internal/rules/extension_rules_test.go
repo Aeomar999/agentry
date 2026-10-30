@@ -131,7 +131,7 @@ func TestWithoutIdeasAgentryMakesNoTaskFromAnIdea(t *testing.T) {
 			s := openChecked(t, catalogue, installed...)
 			if _, rejection, err := s.Propose(fromAnIdea); err != nil || rejection == nil ||
 				rejection.Reason != "Agentry makes a task only about an epic you closed, or from an idea the Visionaries agreed on" {
-				t.Errorf("%s, %d features: %v %v", name, len(installed), rejection, err)
+				t.Errorf("%s, %d extensions: %v %v", name, len(installed), rejection, err)
 			}
 		}
 	}
@@ -157,9 +157,9 @@ func TestAPanickingStreamsCheckRefusesOnlyItsProposal(t *testing.T) {
 	if err != nil || rejection == nil || rejection.Reason != "the fragile feature's rules failed on this fragile.noted, so it is refused" {
 		t.Errorf("the panicking check: %v %v", rejection, err)
 	}
-	if lines := strings.Count(said.String(), "a feature's rule panicked"); lines != 1 || !strings.Contains(said.String(), "feature=fragile") ||
+	if lines := strings.Count(said.String(), "an extension's rule panicked"); lines != 1 || !strings.Contains(said.String(), "extension=fragile") ||
 		!strings.Contains(said.String(), `panic="the check broke"`) {
-		t.Errorf("want one line naming the feature and the panic, got %d:\n%s", lines, said)
+		t.Errorf("want one line naming the extension and the panic, got %d:\n%s", lines, said)
 	}
 	for _, p := range []events.Proposal{note("fragile-2", "fine"), note("fragile-1", "fine"), newTask("task-1", you, nil)} {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
@@ -192,7 +192,7 @@ func TestAPanickingGuardRefusesOnlyItsProposal(t *testing.T) {
 	if err != nil || rejection == nil || rejection.Reason != "the fragile feature's rules failed on this task.renamed, so it is refused" {
 		t.Errorf("the panicking guard: %v %v", rejection, err)
 	}
-	if lines := strings.Count(said.String(), "a feature's rule panicked"); lines != 1 || !strings.Contains(said.String(), `panic="the guard broke"`) {
+	if lines := strings.Count(said.String(), "an extension's rule panicked"); lines != 1 || !strings.Contains(said.String(), `panic="the guard broke"`) {
 		t.Errorf("want one line naming the panic, got %d:\n%s", lines, said)
 	}
 	for _, p := range []events.Proposal{renamed("task-2", "fine"), renamed("task-1", "fine"),

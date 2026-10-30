@@ -163,7 +163,7 @@ func TestAnExtensionRouteIsBehindItsAuth(t *testing.T) {
 		}
 	}
 	if got, want := positionOf(t, server, "GET", "/api/votes"), itoa(s.LastPosition()); got != want {
-		t.Errorf("a feature's read says position %q, want %s", got, want)
+		t.Errorf("an extension's read says position %q, want %s", got, want)
 	}
 }
 
@@ -218,9 +218,9 @@ func TestAnExtensionRouteThatClashesNamesItsExtension(t *testing.T) {
 		list []extensions.Extension
 		want string
 	}{
-		{[]extensions.Extension{one("votes", "GET /api/tasks")}, `the votes feature's route "GET /api/tasks" can't be mounted`},
-		{[]extensions.Extension{one("votes", "DELETE /api/integrations/connections/{id}")}, `the votes feature's route "DELETE /api/integrations/connections/{id}" can't be mounted`},
-		{[]extensions.Extension{one("votes", "GET /api/votes"), one("polls", "GET /api/votes")}, `the polls feature's route "GET /api/votes" can't be mounted`},
+		{[]extensions.Extension{one("votes", "GET /api/tasks")}, `the votes extension's route "GET /api/tasks" can't be mounted`},
+		{[]extensions.Extension{one("votes", "DELETE /api/integrations/connections/{id}")}, `the votes extension's route "DELETE /api/integrations/connections/{id}" can't be mounted`},
+		{[]extensions.Extension{one("votes", "GET /api/votes"), one("polls", "GET /api/votes")}, `the polls extension's route "GET /api/votes" can't be mounted`},
 	} {
 		got := func() (clash any) {
 			defer func() { clash = recover() }()

@@ -98,7 +98,7 @@ func New(catalogue *events.Catalogue, owned ...*extensions.Streams) *State {
 	owners := map[string]*extensions.Streams{}
 	for _, streams := range owned {
 		if owners[streams.Prefix] != nil {
-			panic("current: two features own the streams " + streams.Prefix)
+			panic("current: two extensions own the streams " + streams.Prefix)
 		}
 		owners[streams.Prefix] = streams
 	}

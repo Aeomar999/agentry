@@ -51,7 +51,7 @@ func (s *Server) wrapperOf(auth extensions.Auth) func(http.HandlerFunc) http.Han
 func mountRoute(extension string, route extensions.Route, register func(pattern string, handler http.HandlerFunc)) {
 	defer func() {
 		if clash := recover(); clash != nil {
-			panic(fmt.Sprintf("the %s feature's route %q can't be mounted: %v", extension, route.Pattern, clash))
+			panic(fmt.Sprintf("the %s extension's route %q can't be mounted: %v", extension, route.Pattern, clash))
 		}
 	}()
 	register(route.Pattern, route.Handler)

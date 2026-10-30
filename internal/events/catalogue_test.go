@@ -206,11 +206,11 @@ func TestNewCatalogueRefusesExtensionsStreamsThatWouldCollide(t *testing.T) {
 	}
 	note := events.Proposal{Stream: "note-1", Actor: events.Actor{Kind: events.System, ID: "agentry"}, Type: "note.written"}
 	if rejection := catalogue.CheckShape(note); rejection != nil {
-		t.Errorf("a feature's own type in its stream: %v", rejection)
+		t.Errorf("an extension's own type in its stream: %v", rejection)
 	}
 	note.Actor = events.Actor{Kind: events.Human, ID: "you"}
 	if rejection := catalogue.CheckWriter(note); rejection == nil {
-		t.Error("a writer the feature's spec doesn't list was let through")
+		t.Error("a writer the extension's spec doesn't list was let through")
 	}
 }
 

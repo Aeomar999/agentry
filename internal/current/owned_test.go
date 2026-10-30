@@ -253,7 +253,7 @@ func TestWhatNoExtensionHereOwnsHoldsNothing(t *testing.T) {
 	log := notesLog()
 	for name, s := range map[string]*State{"applied": applyInto(New(withNotes, ideas.Streams()), log), "loaded": loadInto(New(withNotes, ideas.Streams()), log)} {
 		if order := s.OwnedIDs(notes.Prefix); len(order) != 0 {
-			t.Errorf("%s: with no notes feature the notes are %v, want none", name, order)
+			t.Errorf("%s: with no notes extension the notes are %v, want none", name, order)
 		}
 		if order := s.OwnedIDs("nope-"); len(order) != 0 {
 			t.Errorf("%s: an unknown prefix lists %v, want none", name, order)
