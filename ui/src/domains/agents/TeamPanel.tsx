@@ -32,10 +32,10 @@ import {
   templateToCopy,
   unsaved,
   whyNotCreated,
-} from "@/lib/custom-team";
+} from "@/domains/agents/custom-team";
 import { useCloseGuard } from "@/lib/close-guard";
 import { missingProfilesOf } from "@/lib/teams";
-import { templateGroups } from "@/lib/templates";
+import { templateGroups } from "@/domains/agents/templates";
 import {
   DiscardQuestion,
   ErrorSummary,
@@ -51,7 +51,7 @@ import {
 // The New team panel (docs/design/custom-teams.md): a side sheet at
 // /agents?team=new where you name a team, start it blank or from a copy of
 // a template, shape its agents and create it in one request. The rules and
-// their words are lib/custom-team's; this is the form around them.
+// their words are domains/agents/custom-team's; this is the form around them.
 
 interface TeamPanelProps {
   template?: string; // the id of the template to start from a copy of; none starts blank

@@ -9,7 +9,7 @@ import { KeyValueList } from "@/components/molecules/KeyValueList";
 import { RoleBadge } from "@/components/molecules/StatusBadges";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { Mono } from "@/components/molecules/Mono";
-import { KnowledgeEditor } from "@/components/organisms/KnowledgeEditor";
+import { KnowledgeEditor } from "@/domains/agents/KnowledgeEditor";
 import { RedactText } from "@/components/organisms/RedactText";
 import { AgentName } from "@/components/molecules/AgentName";
 import { runsOn } from "@/lib/machines";
@@ -17,7 +17,7 @@ import type { Agent } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { profileInForce } from "@/lib/profiles";
 import { useMarkedText } from "@/lib/marked-text";
-import { startsEachTurn } from "@/lib/resume";
+import { startsEachTurn } from "@/domains/agents/resume";
 
 export function AgentPage() {
   const { name = "" } = useParams();

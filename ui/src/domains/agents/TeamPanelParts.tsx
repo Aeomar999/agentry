@@ -25,7 +25,7 @@ import {
   shownName,
   type TeamDraft,
   whyNotLoaded,
-} from "@/lib/custom-team";
+} from "@/domains/agents/custom-team";
 import { useResource } from "@/live/use-resource";
 import { cn } from "@/lib/cn";
 import { AgentRow, fieldId, toggleId } from "./AgentRow";

@@ -182,7 +182,7 @@ Feature: Usability
     When the user presses Esc or clicks outside it
     Then the dialog stays open while the request runs, and once it ends Esc and a click outside each close it
     And once an add has succeeded and closed it, the dialog opened again is closed by Esc and by a click outside, not held
-    # README.md, Use it, Teams; ui/src/pages/AgentsPage.test.tsx "while ${request} runs, Esc and a click outside leave it open; once it ends, both close it" (an add, a delete, an import) and "once an add succeeds and closes it, Esc and a click outside close it when it opens again"
+    # README.md, Use it, Teams; ui/src/domains/agents/AgentsPage.test.tsx "while ${request} runs, Esc and a click outside leave it open; once it ends, both close it" (an add, a delete, an import) and "once an add succeeds and closes it, Esc and a click outside close it when it opens again"
 
   @USE-19 @test
   Scenario: Closing a team panel with changes asks first and gives focus back
@@ -190,7 +190,7 @@ Feature: Usability
     When the user presses Esc, or presses Close, or presses Cancel
     Then the panel asks first: yes; on Esc and on Cancel focus moves to its "Keep editing" button, and on Esc the "Create team" button is hidden while it asks
     And Esc again, or Keep editing, puts focus back exactly where it was: the name field, the Close button or the Cancel button
-    # README.md, Use it, Teams; ui/src/components/organisms/TeamPanel.test.tsx "Esc, Close and Cancel with changes ask first; Esc again or Keep editing puts focus back" and "Cancel with changes asks to discard them, counting them; Keep editing stays, Discard closes"
+    # README.md, Use it, Teams; ui/src/domains/agents/TeamPanel.test.tsx "Esc, Close and Cancel with changes ask first; Esc again or Keep editing puts focus back" and "Cancel with changes asks to discard them, counting them; Keep editing stays, Discard closes"
 
   @USE-20 @manual
   Scenario: Focus moved by the keyboard shows one 2 px line, a click shows none

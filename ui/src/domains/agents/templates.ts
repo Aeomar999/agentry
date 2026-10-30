@@ -1,7 +1,7 @@
 import { api, ApiError, send } from "@/api/client";
 import type { Agent, TeamTemplate } from "@/api/types";
 import { sameName, whyNotCreated } from "./custom-team";
-import { teamsOf } from "./teams";
+import { teamsOf } from "@/lib/teams";
 
 // Your templates (docs/design/custom-teams.md, decision 5): a team saved as
 // it was last saved, to add again from Add a team. Saving, deleting,

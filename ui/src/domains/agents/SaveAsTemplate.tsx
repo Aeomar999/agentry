@@ -16,7 +16,7 @@ import {
   whyTeamNotLinked,
   whyTemplateNotSaved,
   whyTemplateNotUpdated,
-} from "@/lib/templates";
+} from "@/domains/agents/templates";
 import type { Place } from "./RemoveTeam";
 
 // Save as a template in the Edit team panel (docs/design/custom-teams.md,

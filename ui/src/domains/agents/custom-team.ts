@@ -1,9 +1,9 @@
 import { api, ApiError } from "@/api/client";
 import type { Agent, Policy, TeamTemplate, TemplateAgent } from "@/api/types";
 import { AGENT_COLORS } from "@/live/agent-colors";
-import { shippedProfiles } from "./profiles";
+import { shippedProfiles } from "@/lib/profiles";
 import { RESUMES, RESUME_TITLES } from "./resume";
-import { missingProfilesOf, teamOf, teamsOf } from "./teams";
+import { missingProfilesOf, teamOf, teamsOf } from "@/lib/teams";
 
 // A team you build yourself on the Agents page (docs/design/custom-teams.md):
 // the form's draft, how it starts (Blank, a copy of a template, or a team

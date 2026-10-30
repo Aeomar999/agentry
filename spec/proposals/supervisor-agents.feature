@@ -13,8 +13,8 @@ Feature: Supervisor agents
 
   @PROP-53 @user @test @to-teams-and-templates
   Scenario: An agent is allowed to assign from its form or the team panel, and is off until the user turns it on
-    # the old build plan, "an ordinary agent with permission to propose ticket.assigned"; the agent form's fields: @TEAM-13 (ui/src/components/organisms/AgentForm.tsx); the team panel: @TEAM-05 (ui/src/components/organisms/TeamPanel.tsx)
-    # test: ui/src/components/organisms/AgentForm.test.tsx, ui/src/components/organisms/TeamPanel.test.tsx and internal/web/api_test.go (to write)
+    # the old build plan, "an ordinary agent with permission to propose ticket.assigned"; the agent form's fields: @TEAM-13 (ui/src/domains/agents/AgentForm.tsx); the team panel: @TEAM-05 (ui/src/domains/agents/TeamPanel.tsx)
+    # test: ui/src/domains/agents/AgentForm.test.tsx, ui/src/domains/agents/TeamPanel.test.tsx and internal/web/api_test.go (to write)
     Given the Software team, with no agent allowed to assign
     When the user edits the reviewer and turns on "May assign the task"
     Then exactly 1 request is sent, saving the reviewer with assigns true, and its other fields the same: yes

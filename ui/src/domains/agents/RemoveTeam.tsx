@@ -4,7 +4,7 @@ import type { Agent } from "@/api/types";
 import { api } from "@/api/client";
 import { Button } from "@/components/atoms/Button";
 import { useToast } from "@/shell/Toasts";
-import { onlyTeamReason, removeTeamDetail, removeTeamQuestion, tasksNeeding } from "@/lib/custom-team";
+import { onlyTeamReason, removeTeamDetail, removeTeamQuestion, tasksNeeding } from "@/domains/agents/custom-team";
 import { cn } from "@/lib/cn";
 
 // Remove team in the Edit team panel (docs/design/custom-teams.md, "2. Edit

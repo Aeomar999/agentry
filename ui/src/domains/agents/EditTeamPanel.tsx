@@ -30,10 +30,10 @@ import {
   unsaved,
   whyNotCreated,
   whyNotSaved,
-} from "@/lib/custom-team";
+} from "@/domains/agents/custom-team";
 import { useCloseGuard } from "@/lib/close-guard";
 import { teamsOf } from "@/lib/teams";
-import { builtInTemplateOf, isBuiltInTeam, teamLink, yourLinkedTemplate } from "@/lib/templates";
+import { builtInTemplateOf, isBuiltInTeam, teamLink, yourLinkedTemplate } from "@/domains/agents/templates";
 import { RemoveTeamButton, RemoveTeamQuestion, useRemoveTeam } from "./RemoveTeam";
 import {
   LinkTeamOffer,

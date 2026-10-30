@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { api, ApiError } from "@/api/client";
 import type { Agent, Policy, TeamTemplate, TemplateAgent } from "@/api/types";
-import { AgentsPage } from "@/pages/AgentsPage";
+import { AgentsPage } from "@/domains/agents/AgentsPage";
 
 // The New team panel on the Agents page, with the API answered here: the
 // reads from a little store the page's reloads can change, the team's

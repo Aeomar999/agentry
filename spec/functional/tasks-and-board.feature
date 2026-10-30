@@ -418,7 +418,7 @@ Feature: Tasks and the board
   Scenario: The keys: the palette and the terminal from anywhere, g chords, j, k and Enter, and nothing while typing
     # modKey K and modKey J are caught before a field or the terminal sees them: ui/src/shell/AdminShell.tsx lines 97 to 113; the other keys: lines 116 to 123
     # keys do nothing while typing, a field, a textarea, a select or the terminal: ui/src/lib/shortcuts.ts lines 33 to 37 and 49; Enter only with nothing focused: line 50; a chord's second key within 1200 ms: line 59
-    # the palette's keys, groups and "Nothing matches": ui/src/shell/CommandPalette.tsx lines 59 to 65 and 90; j, k and Enter on the Tasks and Agents lists: ui/src/domains/tasks/TasksPage.tsx line 242, ui/src/pages/AgentsPage.tsx line 99
+    # the palette's keys, groups and "Nothing matches": ui/src/shell/CommandPalette.tsx lines 59 to 65 and 90; j, k and Enter on the Tasks and Agents lists: ui/src/domains/tasks/TasksPage.tsx line 242, ui/src/domains/agents/AgentsPage.tsx line 99
     Given any page
     When the user presses modKey K, even while typing in a field or the terminal
     Then the palette opens, the focus in "Search tasks, agents and commands", and the same keys close it

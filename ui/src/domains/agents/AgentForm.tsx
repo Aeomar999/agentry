@@ -17,7 +17,7 @@ import { useResource } from "@/live/use-resource";
 import { useToast } from "@/shell/Toasts";
 import { effectiveProfile } from "@/lib/profiles";
 import { LOCAL, machineName } from "@/lib/machines";
-import { byItsWork, RESUME_TITLES } from "@/lib/resume";
+import { byItsWork, RESUME_TITLES } from "@/domains/agents/resume";
 
 // Add an agent, or change one. A new name renames it: it keeps its prompt,
 // settings and knowledge, and the tasks that name it go on with the new

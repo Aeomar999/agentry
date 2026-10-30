@@ -52,7 +52,7 @@ Feature: Policy
   @POLICY-04 @user @test
   Scenario: use_for_everyone: the notice on the Policy and Agents pages, and turning it off
     # internal/domain/policy/policyapi/policyapi_test.go TestTurningOffUseForEveryoneGivesEachAgentItsOwnProfile and TestThePolicyShowsItsDefaultsUsersAndWhatIsInForce
-    # ui/src/components/organisms/UseForEveryoneNotice.tsx lines 21 to 47; shown on the Agents page too: ui/src/pages/AgentsPage.tsx lines 139 to 143
+    # ui/src/components/organisms/UseForEveryoneNotice.tsx lines 21 to 47; shown on the Agents page too: ui/src/domains/agents/AgentsPage.tsx lines 139 to 143
     # README.md, The policy, "Allow everything, as shipped"
     Given the policy as shipped, use_for_everyone set to allow-everything
     When the policy is read
@@ -102,7 +102,7 @@ Feature: Policy
   @POLICY-07 @user @manual
   Scenario: The Policy page's panels and banners: each profile, the override, the file, a mistake in it and the reload within 2 seconds
     # ui/src/pages/PolicyPage.tsx lines 47 to 60, the path and the hash; lines 63 to 73, the banners; lines 89 to 93, the file; lines 99 to 161, a profile's panel
-    # the notice: ui/src/components/organisms/UseForEveryoneNotice.tsx lines 21 to 47, on the Agents page too: ui/src/pages/AgentsPage.tsx lines 139 to 143
+    # the notice: ui/src/components/organisms/UseForEveryoneNotice.tsx lines 21 to 47, on the Agents page too: ui/src/domains/agents/AgentsPage.tsx lines 139 to 143
     # the file is watched every 2 seconds: cmd/agentry/serve.go line 280; "Profiles agents need": ui/src/components/organisms/MissingProfiles.tsx lines 26 to 48
     # README.md, The policy
     Given the Policy page

@@ -9,7 +9,7 @@ import { Select } from "@/components/atoms/Select";
 import { CodeViewer } from "@/components/molecules/CodeViewer";
 import { ColorSwatches } from "@/components/molecules/ColorSwatches";
 import { errorId, Field } from "@/components/molecules/Field";
-import { MODELS } from "@/components/organisms/AgentForm";
+import { MODELS } from "@/domains/agents/AgentForm";
 import { COLUMN_TITLES, columnOfAgent } from "@/lib/columns";
 import {
   type AgentField,
@@ -19,9 +19,9 @@ import {
   type Problem,
   problemCount,
   shownName,
-} from "@/lib/custom-team";
+} from "@/domains/agents/custom-team";
 import { shippedProfiles } from "@/lib/profiles";
-import { byItsWork, RESUME_TITLES } from "@/lib/resume";
+import { byItsWork, RESUME_TITLES } from "@/domains/agents/resume";
 import { cn } from "@/lib/cn";
 
 // One agent of the team panel (docs/design/custom-teams.md): a header that

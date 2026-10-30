@@ -1,18 +1,18 @@
 Feature: Teams and templates
   The teams on the Agents page, teams of the user's own, templates and each agent's page.
   # Sources: internal/domain/agents, internal/domain/agents/agentsapi,
-  # ui/src/pages/AgentsPage.tsx,
-  # ui/src/pages/AgentPage.tsx, ui/src/pages/AgentEditPage.tsx,
-  # ui/src/components/organisms/TeamPanel.tsx,
-  # ui/src/components/organisms/AgentForm.tsx, ui/src/lib/teams.ts,
-  # ui/src/lib/templates.ts and their tests.
+  # ui/src/domains/agents/AgentsPage.tsx,
+  # ui/src/domains/agents/AgentPage.tsx, ui/src/domains/agents/AgentEditPage.tsx,
+  # ui/src/domains/agents/TeamPanel.tsx,
+  # ui/src/domains/agents/AgentForm.tsx, ui/src/lib/teams.ts,
+  # ui/src/domains/agents/templates.ts and their tests.
 
   # ---- The Agents page and its teams -----------------------------------------
 
   @TEAM-01 @user @manual
   Scenario: The Agents page: the teams as cards, an org chart or a list, each team with its 3 actions
-    # ui/src/pages/AgentsPage.tsx lines 126 to 157, the header and the views; lines 276 to 298, a team's heading; line 96, Remove team only with more than 1 team
-    # the list's 7 columns: ui/src/pages/AgentsPage.tsx lines 45 to 69; a card: lines 304 to 340; the org chart: lines 343 to 401
+    # ui/src/domains/agents/AgentsPage.tsx lines 126 to 157, the header and the views; lines 276 to 298, a team's heading; line 96, Remove team only with more than 1 team
+    # the list's 7 columns: ui/src/domains/agents/AgentsPage.tsx lines 45 to 69; a card: lines 304 to 340; the org chart: lines 343 to 401
     # README.md, Use it, "Teams"
     Given the Software and Writing teams, 9 agents in all
     When the Agents page is shown
@@ -29,9 +29,9 @@ Feature: Teams and templates
 
   @TEAM-02 @user @test
   Scenario: Add a team from a template: Build your own, then your templates newest first, then the built-in ones
-    # ui/src/components/organisms/AddTeam.test.tsx "yours come between Build your own and Built in, newest first, each saying when and where it was saved", "only yours can be deleted or exported", "every card's actions are named with it, and its coordinator chip uses the brand ink" and "is added by its id"
-    # ui/src/pages/AgentsPage.test.tsx "while ${request} runs, Esc and a click outside leave it open; once it ends, both close it", run for an add, a delete and an import
-    # a built-in template is added by its team name, yours by its id: ui/src/components/organisms/AddTeam.tsx lines 75 to 81
+    # ui/src/domains/agents/AddTeam.test.tsx "yours come between Build your own and Built in, newest first, each saying when and where it was saved", "only yours can be deleted or exported", "every card's actions are named with it, and its coordinator chip uses the brand ink" and "is added by its id"
+    # ui/src/domains/agents/AgentsPage.test.tsx "while ${request} runs, Esc and a click outside leave it open; once it ends, both close it", run for an add, a delete and an import
+    # a built-in template is added by its team name, yours by its id: ui/src/domains/agents/AddTeam.tsx lines 75 to 81
     Given 3 built-in templates and 3 templates of yours, Orders, Papers and Desk, saved on 3 dates
     When the user clicks "Add a team"
     Then the dialog "Add a team" shows exactly 3 headings in order: "Build your own", "Your templates", "Built in"
@@ -46,7 +46,7 @@ Feature: Teams and templates
   @TEAM-03 @user @test
   Scenario: A team whose profile the policy lacks is refused, then added with the profile in one click
     # internal/domain/agents/agentsapi/agentsapi_test.go TestATeamNeedsItsProfilesInThePolicy
-    # ui/src/components/organisms/AddTeam.test.tsx "refused for its profiles, offers them in its own card and adds it with them"
+    # ui/src/domains/agents/AddTeam.test.tsx "refused for its profiles, offers them in its own card and adds it with them"
     # the offer's words, "The Visionaries team needs the read-mostly profile, which your policy file doesn't have": ui/src/components/molecules/MissingProfilesOffer.tsx lines 20 to 29; the test asserts the card's alert and button, not the words
     Given a policy file without the read-mostly profile
     When the user adds the Visionaries team
@@ -75,9 +75,9 @@ Feature: Teams and templates
 
   @TEAM-05 @user @test
   Scenario: Build a team of your own: the New team panel, blank or from a copy of a template
-    # ui/src/components/organisms/TeamPanel.test.tsx "Build a team in Add a team opens the panel with one coordinator" and "creates the team as typed, the coordinator on the default prompt"
+    # ui/src/domains/agents/TeamPanel.test.tsx "Build a team in Add a team opens the panel with one coordinator" and "creates the team as typed, the coordinator on the default prompt"
     # internal/domain/agents/custom_test.go TestACustomTeamGetsDefaultPrompts
-    # the panel "New team" at ?team=new: ui/src/pages/AgentsPage.tsx lines 114 to 117; "Team name", "Start from" with Blank and "Copy a template", "Create team": ui/src/components/organisms/TeamPanel.tsx lines 63, 174, 202 and 289 to 297
+    # the panel "New team" at ?team=new: ui/src/domains/agents/AgentsPage.tsx lines 114 to 117; "Team name", "Start from" with Blank and "Copy a template", "Create team": ui/src/domains/agents/TeamPanel.tsx lines 63, 174, 202 and 289 to 297
     Given the Add a team dialog
     When the user clicks "Build a team"
     Then the dialog closes and the panel "New team" opens with the focus in "Team name", empty
@@ -91,8 +91,8 @@ Feature: Teams and templates
   @TEAM-06 @user @test
   Scenario: What a team of your own is refused for, every problem at once
     # internal/domain/agents/custom_test.go TestACustomTeamIsRefused
-    # ui/src/components/organisms/TeamPanel.test.tsx "an empty team name is in the summary, which takes focus, and under the field" and "every problem at once: team, agents and each row's fields"
-    # an agent's name: lowercase letters, digits and dashes, starting with a letter, at most 31 long: internal/domain/agents/agent.go lines 18 to 22; the page's limit: ui/src/lib/custom-team.ts line 54
+    # ui/src/domains/agents/TeamPanel.test.tsx "an empty team name is in the summary, which takes focus, and under the field" and "every problem at once: team, agents and each row's fields"
+    # an agent's name: lowercase letters, digits and dashes, starting with a letter, at most 31 long: internal/domain/agents/agent.go lines 18 to 22; the page's limit: ui/src/domains/agents/custom-team.ts line 54
     Given the New team panel
     When the user clicks "Create team" with no name
     Then nothing is sent, the summary reads "Couldn't create the team: 1 thing to fix" and takes the focus, and "Give the team a name." is shown under the field
@@ -108,7 +108,7 @@ Feature: Teams and templates
   @TEAM-07 @user @test
   Scenario: Edit a team: saved whole in one request, its tasks following, with the profiles it needs
     # internal/domain/agents/agentsapi/team_edit_api_test.go TestATeamIsSavedWholeInOneRequest and TestATeamEditNeedsItsProfilesInThePolicy
-    # the panel "Edit the <team> team" at ?team=<name>: ui/src/lib/custom-team.ts line 478; "No changes to save.": line 492; "Save changes": ui/src/components/organisms/EditTeamPanel.tsx line 268
+    # the panel "Edit the <team> team" at ?team=<name>: ui/src/domains/agents/custom-team.ts line 478; "No changes to save.": line 492; "Save changes": ui/src/domains/agents/EditTeamPanel.tsx line 268
     Given the Data team with its lead, analyst and charter, the analyst having learned "Know."
     When the user saves the team as " Numbers ", the analyst renamed statistician on codex, charter removed and plotter added
     Then exactly 1 team.edited event is written and the reply names the team Numbers with its new version
@@ -124,8 +124,8 @@ Feature: Teams and templates
   @TEAM-08 @user @test
   Scenario: Rename a team, and remove a team or an agent once no unfinished task needs it
     # internal/domain/agents/agentsapi/agentsapi_test.go TestATeamIsRenamedWithItsTasks, TestATeamIsRemovedWithItsAgents and TestAgentsAreEditedFromThePage
-    # ui/src/components/organisms/TeamPanel.test.tsx "Remove team asks in the footer, focus on Keep; Keep puts the footer back and focus on Remove team" and "Remove removes the team, closes the panel going back over its entry, says so and shows the page without it"
-    # the refusals: internal/domain/agents/agentsapi/agents_api.go line 70; internal/domain/agents/agentsapi/teams_api.go lines 60 and 72; the page's dialog "Remove the <team> team?": ui/src/pages/AgentsPage.tsx lines 431 to 437
+    # ui/src/domains/agents/TeamPanel.test.tsx "Remove team asks in the footer, focus on Keep; Keep puts the footer back and focus on Remove team" and "Remove removes the team, closes the panel going back over its entry, says so and shows the page without it"
+    # the refusals: internal/domain/agents/agentsapi/agents_api.go line 70; internal/domain/agents/agentsapi/teams_api.go lines 60 and 72; the page's dialog "Remove the <team> team?": ui/src/domains/agents/AgentsPage.tsx lines 431 to 437
     Given the Data team with task-1 open
     When the user renames it " Analytics "
     Then the reply is exactly team Data, to Analytics; its coordinator and 2 agents are in Analytics and no team is called Data
@@ -145,10 +145,10 @@ Feature: Teams and templates
 
   @TEAM-09 @user @test
   Scenario: What a team does: its coordinator's description, read by other coordinators or taken from its template
-    # ui/src/components/organisms/TeamPanel.test.tsx "it shows the coordinator's description and the line other coordinators read, following the team's name", "a team made from a built-in template is read by the template's description, even with a new coordinator" and "on a team with no template, the coordinator's Description says other coordinators read it"
+    # ui/src/domains/agents/TeamPanel.test.tsx "it shows the coordinator's description and the line other coordinators read, following the team's name", "a team made from a built-in template is read by the template's description, even with a new coordinator" and "on a team with no template, the coordinator's Description says other coordinators read it"
     # internal/domain/agents/agentsapi/templates_api_test.go TestYourTemplatesDescriptionDescribesItsCoordinator; internal/domain/agents/user_templates_test.go TestAUserTemplatesDescriptionFillsAnEmptyCoordinators
-    # the field "What this team does" and its hint: ui/src/components/organisms/TeamPanelParts.tsx lines 169 to 176
-    # not under test, checked by hand: the hint "One line. Other coordinators read it to choose what to send this team.", and the Agents page heading's "· <description>" only for a team whose template has one: ui/src/pages/AgentsPage.tsx lines 169 and 285
+    # the field "What this team does" and its hint: ui/src/domains/agents/TeamPanelParts.tsx lines 169 to 176
+    # not under test, checked by hand: the hint "One line. Other coordinators read it to choose what to send this team.", and the Agents page heading's "· <description>" only for a team whose template has one: ui/src/domains/agents/AgentsPage.tsx lines 169 and 285
     Given the Edit team panel of a team with no template
     When "What this team does" is shown
     Then it holds exactly the coordinator's description
@@ -163,8 +163,8 @@ Feature: Teams and templates
   @TEAM-10 @user @test
   Scenario: Save a team as a template, never over a name a template has
     # internal/domain/agents/agentsapi/templates_api_test.go TestATemplateIsSavedUnderItsName and TestATemplateNameOrIDTakenIsRefused
-    # ui/src/components/organisms/TeamPanel.test.tsx "the footer becomes a form, named, with the team's name and its coordinator's description, focus on Template name" and "saved, the form closes, says so and focus goes back to Save as a template" and "with unsaved changes it is off and says why beside it, as on a phone"
-    # "Save your changes first." while the panel has unsaved changes: ui/src/components/organisms/SaveAsTemplate.tsx lines 134 to 145
+    # ui/src/domains/agents/TeamPanel.test.tsx "the footer becomes a form, named, with the team's name and its coordinator's description, focus on Template name" and "saved, the form closes, says so and focus goes back to Save as a template" and "with unsaved changes it is off and says why beside it, as on a phone"
+    # "Save your changes first." while the panel has unsaved changes: ui/src/domains/agents/SaveAsTemplate.tsx lines 134 to 145
     Given the Edit team panel of the Planning team, with no unsaved changes
     When the user clicks "Save as a template"
     Then a form "Save as a template" is shown in the footer's place, "Template name" preset to Planning and "What it's for" to the coordinator's description, the focus in the name
@@ -183,7 +183,7 @@ Feature: Teams and templates
   @TEAM-11 @user @test
   Scenario: A team from your template comes with its prompts, a second copy is numbered, and Update my template saves it back
     # internal/domain/agents/user_templates_test.go TestATeamIsAddedFromAUserTemplateWithItsPrompts, TestAUserTemplatesDescriptionFillsAnEmptyCoordinators and TestAUserTemplateAddedAgainGetsNumbers
-    # internal/domain/agents/agentsapi/templates_api_test.go TestATemplateIsUpdatedFromItsTeam; ui/src/components/organisms/TeamPanel.test.tsx "it updates the template with the team as last saved, and says so" and "with unsaved changes it is off and says why beside it, as on a phone"
+    # internal/domain/agents/agentsapi/templates_api_test.go TestATemplateIsUpdatedFromItsTeam; ui/src/domains/agents/TeamPanel.test.tsx "it updates the template with the team as last saved, and says so" and "with unsaved changes it is off and says why beside it, as on a phone"
     Given your template Papers, described "Reads papers.", with lead and reader
     When the user adds a team from it
     Then lead coordinates Papers with the prompt "Hand out the reading." and reader is in Papers with "Read the papers.", each linked to the template papers
@@ -201,7 +201,7 @@ Feature: Teams and templates
   @TEAM-12 @user @test
   Scenario: Export, import and delete one of your templates; a built-in one is neither exported nor removed
     # internal/domain/agents/agentsapi/templates_api_test.go TestAnExportedTemplateImportsAsItWas and TestATemplateIsRemoved
-    # ui/src/components/organisms/AddTeam.test.tsx "Import a template opens a picker for .json files", "an import is sent as it is, said in a toast, and the list read again", "a refused import says why under the button, a name you have in the server's words" and "Delete deletes it, reads the list again and moves focus to the next card's Add this team"
+    # ui/src/domains/agents/AddTeam.test.tsx "Import a template opens a picker for .json files", "an import is sent as it is, said in a toast, and the list read again", "a refused import says why under the button, a name you have in the server's words" and "Delete deletes it, reads the list again and moves focus to the next card's Add this team"
     # a built-in template: internal/domain/agents/agentsapi/templates_api.go lines 188 and 264
     Given your template my-planning
     When the user clicks Export on its card
@@ -222,10 +222,10 @@ Feature: Teams and templates
 
   @TEAM-13 @user @manual
   Scenario: An agent's page and its edit page: the prompt, what it knows, its engine, model, profile and where it runs
-    # ui/src/pages/AgentPage.tsx lines 42 and 43, the buttons; line 49, Prompt; line 52, Knowledge; lines 56 to 67, Settings; line 33, no such agent
-    # ui/src/pages/AgentEditPage.tsx lines 25 and 26; ui/src/components/organisms/AgentForm.tsx lines 118 to 199, the Agent panel; lines 201 to 246, Engine; lines 248 to 277, Runs on; line 280, the button
-    # the "Starts each turn" row of an agent with no resume setting of its own, not a reviewer: ui/src/lib/resume.ts line 32
-    # the model names claude knows: ui/src/components/organisms/AgentForm.tsx line 28; the knowledge history shows at most 8 changes: ui/src/components/organisms/KnowledgeEditor.tsx line 63
+    # ui/src/domains/agents/AgentPage.tsx lines 42 and 43, the buttons; line 49, Prompt; line 52, Knowledge; lines 56 to 67, Settings; line 33, no such agent
+    # ui/src/domains/agents/AgentEditPage.tsx lines 25 and 26; ui/src/domains/agents/AgentForm.tsx lines 118 to 199, the Agent panel; lines 201 to 246, Engine; lines 248 to 277, Runs on; line 280, the button
+    # the "Starts each turn" row of an agent with no resume setting of its own, not a reviewer: ui/src/domains/agents/resume.ts line 32
+    # the model names claude knows: ui/src/domains/agents/AgentForm.tsx line 28; the knowledge history shows at most 8 changes: ui/src/domains/agents/KnowledgeEditor.tsx line 63
     Given the engineer, on claude with no model, under the developer profile
     When its page is shown
     Then the header shows its name, role badge and description, with exactly 2 buttons, "Redact a text" and Edit
@@ -244,7 +244,7 @@ Feature: Teams and templates
   @TEAM-14 @user @test
   Scenario: An agent is added, changed, renamed and removed from the page, and what it knows can be edited
     # internal/domain/agents/agentsapi/agentsapi_test.go TestAgentsAreEditedFromThePage, TestRenamingAnAgentKeepsItsTasksGoing, TestYouEditWhatAnAgentKnows and TestTheKnowledgeHistoryIsTheSameFromPatches
-    # the toasts "Added <name>" and "Saved <name>" with "The coordinator sees it from its next turn.": ui/src/components/organisms/AgentForm.tsx line 83; "Saved what <name> knows": ui/src/components/organisms/KnowledgeEditor.tsx line 39
+    # the toasts "Added <name>" and "Saved <name>" with "The coordinator sees it from its next turn.": ui/src/domains/agents/AgentForm.tsx line 83; "Saved what <name> knows": ui/src/domains/agents/KnowledgeEditor.tsx line 39
     # the fixture starts with the Software team's 5 agents; the test asserts 5 again once designer is removed, not the count in between
     Given the Software team's 5 agents
     When the user adds designer and changes the engineer to codex with the model gpt-5

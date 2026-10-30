@@ -14,7 +14,7 @@ import {
   templateGroups,
   whyTemplateNotDeleted,
   whyTemplateNotImported,
-} from "@/lib/templates";
+} from "@/domains/agents/templates";
 import { cn } from "@/lib/cn";
 
 // The Add a team dialog's list (docs/design/custom-teams.md, "3. The Add a

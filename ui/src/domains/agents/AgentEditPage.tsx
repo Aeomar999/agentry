@@ -3,7 +3,7 @@ import { Bot } from "lucide-react";
 import { useBreadcrumb } from "@/lib/breadcrumb";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { EmptyState } from "@/components/molecules/EmptyState";
-import { AgentForm } from "@/components/organisms/AgentForm";
+import { AgentForm } from "@/domains/agents/AgentForm";
 import type { Agent } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 
