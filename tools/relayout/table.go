@@ -103,6 +103,7 @@ var allowed = map[string]string{
 	"internal/worktrees/repo_test.go":            "tests that a file can't be made outside the worktree",
 	"internal/workspace/workspace_test.go":       "tests that a path can't leave the workspace",
 	"internal/coordinator/handoff_brief_test.go": "a brief's text that names a commit range",
+	"internal/speccheck/sources.go":              "compares a path's parts with \"..\" to refuse paths out of the repo",
 	"internal/speccheck/check_test.go":           "its ../ paths are fixtures' and its Chdirs go into temp folders; tools/speccheck is as deep as internal/speccheck",
 	"packaging/check_test.go":                    "Chdirs into a temp repo",
 }
