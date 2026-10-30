@@ -59,6 +59,15 @@ func TestCheckRootRefusesAPageBuiltFromAnotherCommit(t *testing.T) {
 	}
 }
 
+func TestCheckRootRefusesAPageBuiltWithUIChangesThatWerentCommitted(t *testing.T) {
+	head := newRoot(t)
+	write(t, filepath.Join(page, "built-from"), head+"-dirty\n")
+	want := "the page was built from " + head + " with ui/ changes that weren't committed, so it isn't HEAD's (" + head + "): commit them, then run `make ui`, or copy in a page built from this commit"
+	if err := checkRoot(); err == nil || err.Error() != want {
+		t.Fatalf("checkRoot: %v\nwant: %s", err, want)
+	}
+}
+
 func TestCheckRootRefusesAPageThatDoesntSayItsCommit(t *testing.T) {
 	head := newRoot(t)
 	os.Remove(filepath.Join(page, "built-from"))

@@ -515,7 +515,7 @@ Feature: Operations
 
   @OPS-27 @manual
   Scenario: The Makefile's targets build the UI, the binary, the worker builds, run the checks and package the zips
-    # Makefile: all = ui build workers; ui = cd ui && npm ci && npm run build, then git rev-parse HEAD into internal/web/static/dist/built-from; build = go build -o bin/agentry ./cmd/agentry
+    # Makefile: all = ui build workers; ui = cd ui && npm ci && npm run build, then git rev-parse HEAD into internal/web/static/dist/built-from, with -dirty after it when git status --porcelain -- ui isn't empty, and no built-from outside git; build = go build -o bin/agentry ./cmd/agentry
     # Makefile: WORKER_PLATFORMS = darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64, built with CGO_ENABLED=0 to bin/agentry-<os>-<arch>
     # Makefile: test = internal/web/static/dist/index.html (make ui, only when it is missing), spec/check, go vet ./... && go test ./... then cd ui && npm run lint; package = ui, then go run ./tools/packaging; desktop = go run ./tools/packaging desktop, with no ui, so it packages the page already in internal/web/static/dist, built here or copied in
     # Steps:
@@ -605,10 +605,12 @@ Feature: Operations
   @OPS-47 @test
   Scenario: Packaging refuses a page that isn't HEAD's, so a stale page can't ship
     # tools/packaging/main.go checkRoot, checkPageCommit and checkUICommitted run before make package and make desktop build anything; make ui writes the page's built-from file beside its index.html
-    # tools/packaging/root_test.go TestCheckRootRefusesAPageBuiltFromAnotherCommit, TestCheckRootRefusesAPageThatDoesntSayItsCommit, TestCheckRootRefusesUIChangesThatArentCommitted, TestCheckRootLeavesChangesOutsideUIAlone and TestCheckRootTakesAPageBuiltFromACleanHEAD
+    # tools/packaging/root_test.go TestCheckRootRefusesAPageBuiltFromAnotherCommit, TestCheckRootRefusesAPageBuiltWithUIChangesThatWerentCommitted, TestCheckRootRefusesAPageThatDoesntSayItsCommit, TestCheckRootRefusesUIChangesThatArentCommitted, TestCheckRootLeavesChangesOutsideUIAlone and TestCheckRootTakesAPageBuiltFromACleanHEAD
     Given a git checkout whose page in internal/web/static/dist names in built-from the commit it was built from
     When the page was built from another commit than HEAD, and go run ./tools/packaging or its desktop mode runs
     Then it is refused with "the page was built from <commit>, not from HEAD (<commit>): run `make ui`, or copy in a page built from this commit": yes
+    When built-from names HEAD with -dirty, as make ui writes it when ui/ had changes that weren't committed
+    Then it is refused, saying the page was built with ui/ changes that weren't committed: commit them, then run `make ui`: yes
     When built-from is missing
     Then it is refused, naming HEAD and the missing built-from, with the same advice: yes
     When a file under ui/ is changed or added and not committed

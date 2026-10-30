@@ -112,13 +112,18 @@ func checkRoot() error {
 const page = "internal/web/static/dist"
 
 // checkPageCommit refuses a page built from another commit than head, such
-// as one left from before a pull, or copied in from another checkout.
+// as one left from before a pull, or copied in from another checkout, and
+// one make ui built with ui/ changes that weren't committed.
 func checkPageCommit(head string) error {
 	builtFrom, err := os.ReadFile(page + "/built-from")
 	if err != nil {
 		return fmt.Errorf("the page doesn't say which commit it was built from (no %s/built-from), so it may not be HEAD (%s): run `make ui`, or copy in a page built from this commit", page, head)
 	}
-	if commit := strings.TrimSpace(string(builtFrom)); commit != head {
+	commit := strings.TrimSpace(string(builtFrom))
+	if built, dirty := strings.CutSuffix(commit, "-dirty"); dirty {
+		return fmt.Errorf("the page was built from %s with ui/ changes that weren't committed, so it isn't HEAD's (%s): commit them, then run `make ui`, or copy in a page built from this commit", built, head)
+	}
+	if commit != head {
 		return fmt.Errorf("the page was built from %s, not from HEAD (%s): run `make ui`, or copy in a page built from this commit", commit, head)
 	}
 	return nil

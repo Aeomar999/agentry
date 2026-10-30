@@ -7,10 +7,14 @@
 
 all: ui build workers
 
-# built-from names the commit the page was built from.
+# built-from names the commit the page was built from, with -dirty when ui/
+# had changes that weren't committed. Outside git there is no built-from.
 ui:
 	cd ui && npm ci && npm run build
-	git rev-parse HEAD > internal/web/static/dist/built-from
+	if commit=$$(git rev-parse HEAD 2>/dev/null); then \
+		[ -z "$$(git status --porcelain -- ui)" ] || commit=$$commit-dirty; \
+		echo $$commit > internal/web/static/dist/built-from; \
+	else rm -f internal/web/static/dist/built-from; fi
 
 # The page, built only when it is missing; `make ui` refreshes it.
 internal/web/static/dist/index.html:
