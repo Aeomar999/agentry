@@ -282,9 +282,10 @@ func (r run) rewritePaths() ([]string, error) {
 	return changed, nil
 }
 
-// buildFiles are the files outside spec/ and the Go code that name
-// packages by path.
-var buildFiles = []string{"Makefile", ".gitlab-ci.yml", "README.md", "ui/vite.config.ts"}
+// buildFiles are the files outside spec/, the Go code and the UI's sources
+// that name packages by path: the build files, and the service worker,
+// whose comment names the package that sends its pushes.
+var buildFiles = []string{"Makefile", ".gitlab-ci.yml", "README.md", "ui/vite.config.ts", "ui/public/sw.js"}
 
 // namesPaths says whether the rewrite reads a file: Go files, everything
 // in spec/, the build files, and the UI's sources, whose comments name Go

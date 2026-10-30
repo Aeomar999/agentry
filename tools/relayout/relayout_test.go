@@ -28,6 +28,7 @@ var fixture = map[string]string{
 	"tools/relayout/table.go":     "package main\n\nvar old = \"internal/store\"\n",
 	"ui/src/lib/chat.test.ts":     "import types from \"../../../internal/store/store.go?raw\";\n",
 	"ui/src/components/Logo.svg":  "<svg><!-- internal/store --></svg>\n",
+	"ui/public/sw.js":             "// It shows the pushes (internal/store).\n",
 	"internal/store/testdata/a.x": "internal/store\n",
 }
 
@@ -61,6 +62,7 @@ func TestAStepMovesTheFolderAndRewritesItsPaths(t *testing.T) {
 		"spec/functional/a.feature":  "Feature: a\n  # Sources: internal/core/store and its tests.\n",
 		"Makefile":                   "test:\n\tgo test ./internal/core/store/... ./internal/storetest\n",
 		"ui/src/lib/chat.test.ts":    "import types from \"../../../internal/core/store/store.go?raw\";\n",
+		"ui/public/sw.js":            "// It shows the pushes (internal/core/store).\n",
 		"docs/design/old.md":         fixture["docs/design/old.md"],
 		"docs/design/old.go":         fixture["docs/design/old.go"],
 		"tools/relayout/table.go":    fixture["tools/relayout/table.go"],
@@ -181,7 +183,7 @@ func TestADryRunChangesNothingAndSaysWhat(t *testing.T) {
 	}
 	want := "would git mv internal/store internal/core/store\n" +
 		"would edit internal/store/fixtures_test.go: const module = \"../..\" -> const module = \"../../..\"\n" +
-		"would rewrite old paths in 5 files\n"
+		"would rewrite old paths in 6 files\n"
 	if said := r.out.(*bytes.Buffer).String(); said != want {
 		t.Errorf("said:\n%s\nwant:\n%s", said, want)
 	}
