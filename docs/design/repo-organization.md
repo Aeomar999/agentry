@@ -7,14 +7,16 @@ build file changes with this document. The moves it plans are later work.
 
 `internal/` becomes eight folders in place of 46 packages side by side:
 `platform`, `core`, `domain`, `features`, `runtime`, `web`, `mcp` and
-`testkit`. Each folder sits on one layer, and a package imports only from
-the layers below it. A test checks that on every `go test ./...`.
+`testkit`. Each package sits on one layer, and imports only from the layers
+below it. A folder can span two: `core`, `domain` and `features` each hold a
+low root and higher packages. A test checks that on every `go test ./...`.
 
 The user's proposal is mostly kept. It departs from the proposal in five
 places, all because of what the import graph really is:
 
-1. **A domain is a folder, not one package.** `current`, `rules` and `store`
-   import `tasks`, `agents`, `workers`, `connections` and `settings`. So a
+1. **A domain is a folder, not one package.** Between them, `current`,
+   `rules` and `store` import `tasks`, `agents`, `workers`, `connections`
+   and `settings` (`store` only `agents`). So a
    domain package that also held its HTTP routes (which need `current` and
    `store`) would make an import cycle. The domain's model stays the folder's
    root package, low in the graph. Its routes, tools and background work go in
@@ -33,7 +35,8 @@ places, all because of what the import graph really is:
 4. **Some packages change group.** `machines` goes to `runtime`, not
    `platform`, because it imports `agents`, `workers` and `worktrees`.
    `sessions` and `terminal` go to `platform`, not `domain` or `runtime`,
-   because they know no domain. Sign-in stays in `web`: it is how the web
+   because they know no domain. `desk` imports only `sessions` too, but it
+   stays in `runtime`: its whole job is an Agentry role, the desk session. Sign-in stays in `web`: it is how the web
    checks who you are.
 5. **Moves and refactors are separate steps.** Moving a package is a
    script-made commit that changes only paths. Taking handlers out of `web`
@@ -87,10 +90,12 @@ Measured on `fc373495` (lines are Go, without tests / tests):
 - `tasks`, `current` and `coordinator` are tightly bound, but as a chain, not
   a cycle: `coordinator` imports `current`, `current` imports `tasks`. Each
   sits on its own layer, so they can live in different folders.
-- `spec/functional/*.feature` names 16 areas, and each file already has a
-  `# Sources:` comment naming its packages. Nothing checks those lines.
-- `spec/constraints.md` section 1 lists every package by concern and is
-  checked against `ls internal`. `internal/features/imports_test.go` and
+- `spec/functional/*.feature` names 16 areas. Only 4 of the 16 files have a
+  `# Sources:` comment naming their code (workers, claude-code-tools,
+  worktrees-and-branches, shared-files), and nothing checks those lines.
+  `schedules` has no feature file at all.
+- `spec/constraints.md` section 1 lists every package by concern, and its
+  line 77 has the reviewer check it against `ls internal`. `internal/features/imports_test.go` and
   `internal/httpapi/imports_test.go` check that those two stay leaves.
 - About 1,600 paths in `spec/` (`@test` citations and `# Sources:` lines) name code, `internal/web`
   (247), `internal/policy` (169) and `cmd/agentry` (165) most. Every move
@@ -181,7 +186,8 @@ table says so, and anything in a lower layer.
 | 2 | `core/events` | `platform` | anything else of Agentry's |
 | 3 | `domain/<area>` (the root: the model) | `core/events`, `platform`, other domains' roots | the rest of `core`, any subpackage, `features` |
 | 4 | `features` (the framework) | domain roots, `core/events`, `platform` | the rest of `core`, any feature |
-| 5 | `core/{store,current,rules,httpapi}` | each other, `features`, domain roots | runtime, subpackages, features' folders |
+| 5 | `core/httpapi` | `features`, domain roots, `core/events`, `platform` | `store`, `current`, `rules`, and everything above |
+| 5 | `core/{store,current,rules}` | each other, `features`, domain roots | `httpapi`, runtime, subpackages, features' folders |
 | 6 | `runtime/*` | each other, `core`, `features`, domain roots | subpackages, features' folders |
 | 7 | `domain/<area>/<sub>` and `features/<name>` | everything below, and their own folder's other subpackages | another domain's subpackages, another feature |
 | 8 | `web`, `mcp` | everything below | each other |
@@ -194,6 +200,9 @@ In words:
   read model.
 - The log and the read model know every model, so that they can build state,
   but no feature by name and nothing that runs.
+- `httpapi`, how every handler answers, stays the leaf it is today: it never
+  imports the store or the read model, so `web` and every feature's routes
+  can use it without a cycle.
 - What runs reads the state and writes through the store. It never reaches
   into a domain's routes or a feature.
 - Surfaces sit on top. A domain's surface may use the loop, the fleet and the
@@ -214,58 +223,58 @@ migration step in section 7 that moves it.
 
 | Old path | New path | Its job | Step |
 |---|---|---|---|
-| `internal/client` | `internal/platform/client` | calls a running server's API, for the commands beside it | 4 |
-| `internal/engines` | `internal/platform/engines` | everything Agentry needs from an agent CLI | 4 |
-| `internal/exactgob` | `internal/platform/exactgob` | gob that reads back nil and empty apart | 4 |
-| `internal/hookcall` | `internal/platform/hookcall` | the contract between `agentry hook` and the server | 4 |
-| `internal/hostaddrs` | `internal/platform/hostaddrs` | the addresses other machines reach this one on | 4 |
-| `internal/launch` | `internal/platform/launch` | finds or starts the server, for `agentry open` and the desktop app | 4 |
-| `internal/pinned` | `internal/platform/pinned` | clients that trust only Agentry's CA | 4 |
-| `internal/procs` | `internal/platform/procs` | processes, Unix and Windows | 4 |
-| `internal/schema` | `internal/platform/schema` | JSON Schemas of tools' arguments | 4 |
-| `internal/sessions` | `internal/platform/sessions` | each agent in a session kept by a host process | 4 |
-| `internal/sessions/sessionstest` | `internal/platform/sessions/sessionstest` | keeps a test run's sessions to that run | 4 |
-| `internal/terminal` | `internal/platform/terminal` | a session live in the browser | 4 |
-| `internal/tlsca` | `internal/platform/tlsca` | Agentry's own certificate authority | 4 |
-| `internal/workspace` | `internal/platform/workspace` | reads a worktree for the Workspace page | 4 |
-| `internal/worktrees` | `internal/platform/worktrees` | each task's worktree, branch and port | 4 |
-| `internal/events` | `internal/core/events` | what the log holds | 5 |
-| `internal/store` | `internal/core/store` | the append-only log, in SQLite | 5 |
-| `internal/current` | `internal/core/current` | the state of every stream in memory | 5 |
-| `internal/rules` | `internal/core/rules` | check 3 of every proposal | 5 |
-| `internal/httpapi` | `internal/core/httpapi` | how every handler answers | 5 |
-| `internal/agents` | `internal/domain/agents` | who can be handed work; teams and templates | 6 |
-| `internal/tasks` | `internal/domain/tasks` | a task's state from its events | 6 |
-| `internal/tasks/taskstest` | `internal/domain/tasks/taskstest` | logs for tests of tasks | 6 |
-| `internal/waitlist` | `internal/domain/tasks/waitlist` | the core's part of what waits for you | 6 |
-| `internal/workers` | `internal/domain/workers` | the machines that joined | 6 |
-| `internal/workerlink` | `internal/domain/workers/workerlink` | a worker's one websocket to the server | 6 |
-| `internal/workerservice` | `internal/domain/workers/workerservice` | keeps `agentry worker run` running | 6 |
-| `internal/connections` | `internal/domain/connections` | the Claude Codes that have Agentry's tools | 6 |
-| `internal/policy` | `internal/domain/policy` | decides one tool call | 6 |
-| `internal/hooks` | `internal/domain/policy/hooks` | the server side of `agentry hook`, the gate | 6 |
-| `internal/settings` | `internal/domain/settings` | your settings from the settings stream | 6 |
-| `internal/settingsfile` | `internal/domain/settings/settingsfile` | features.toml: features' settings and secrets | 6 |
-| `internal/sharedfiles` | `internal/domain/sharedfiles` | a task's shared files | 6 |
-| `internal/webpush` | `internal/domain/notifications/webpush` | Web Push keys and subscriptions | 6 |
+| `internal/client` | `internal/platform/client` | calls a running server's API, for the commands beside it | 5 |
+| `internal/engines` | `internal/platform/engines` | everything Agentry needs from an agent CLI | 5 |
+| `internal/exactgob` | `internal/platform/exactgob` | gob that reads back nil and empty apart | 5 |
+| `internal/hookcall` | `internal/platform/hookcall` | the contract between `agentry hook` and the server | 5 |
+| `internal/hostaddrs` | `internal/platform/hostaddrs` | the addresses other machines reach this one on | 5 |
+| `internal/launch` | `internal/platform/launch` | finds or starts the server, for `agentry open` and the desktop app | 5 |
+| `internal/pinned` | `internal/platform/pinned` | clients that trust only Agentry's CA | 5 |
+| `internal/procs` | `internal/platform/procs` | processes, Unix and Windows | 5 |
+| `internal/schema` | `internal/platform/schema` | JSON Schemas of tools' arguments | 5 |
+| `internal/sessions` | `internal/platform/sessions` | each agent in a session kept by a host process | 5 |
+| `internal/sessions/sessionstest` | `internal/platform/sessions/sessionstest` | keeps a test run's sessions to that run | 5 |
+| `internal/terminal` | `internal/platform/terminal` | a session live in the browser | 5 |
+| `internal/tlsca` | `internal/platform/tlsca` | Agentry's own certificate authority | 5 |
+| `internal/workspace` | `internal/platform/workspace` | reads a worktree for the Workspace page | 5 |
+| `internal/worktrees` | `internal/platform/worktrees` | each task's worktree, branch and port | 5 |
+| `internal/events` | `internal/core/events` | what the log holds | 6 |
+| `internal/store` | `internal/core/store` | the append-only log, in SQLite | 6 |
+| `internal/current` | `internal/core/current` | the state of every stream in memory | 6 |
+| `internal/rules` | `internal/core/rules` | check 3 of every proposal | 6 |
+| `internal/httpapi` | `internal/core/httpapi` | how every handler answers | 6 |
+| `internal/agents` | `internal/domain/agents` | who can be handed work; teams and templates | 7 |
+| `internal/tasks` | `internal/domain/tasks` | a task's state from its events | 7 |
+| `internal/tasks/taskstest` | `internal/domain/tasks/taskstest` | logs for tests of tasks | 7 |
+| `internal/waitlist` | `internal/domain/tasks/waitlist` | the core's part of what waits for you | 7 |
+| `internal/workers` | `internal/domain/workers` | the machines that joined | 7 |
+| `internal/workerlink` | `internal/domain/workers/workerlink` | a worker's one websocket to the server | 7 |
+| `internal/workerservice` | `internal/domain/workers/workerservice` | keeps `agentry worker run` running | 7 |
+| `internal/connections` | `internal/domain/connections` | the Claude Codes that have Agentry's tools | 7 |
+| `internal/policy` | `internal/domain/policy` | decides one tool call | 7 |
+| `internal/hooks` | `internal/domain/policy/hooks` | the server side of `agentry hook`, the gate | 7 |
+| `internal/settings` | `internal/domain/settings` | your settings from the settings stream | 7 |
+| `internal/settingsfile` | `internal/domain/settings/settingsfile` | features.toml: features' settings and secrets | 7 |
+| `internal/sharedfiles` | `internal/domain/sharedfiles` | a task's shared files | 7 |
+| `internal/webpush` | `internal/domain/notifications/webpush` | Web Push keys and subscriptions | 7 |
 | `internal/features` | `internal/features` (stays) | the feature framework | – |
-| `internal/ideas` | `internal/features/ideas` | the Ideas feature | 7 |
-| `internal/schedules` | `internal/features/schedules` | the Schedules feature | 7 |
-| `internal/coordinator` | `internal/runtime/coordinator` | the loop | 8 |
-| `internal/turns` | `internal/runtime/turns` | starts and stops turns | 8 |
-| `internal/watchdog` | `internal/runtime/watchdog` | catches agents that go quiet | 8 |
-| `internal/archive` | `internal/runtime/archive` | moves done tasks out of the live log | 8 |
-| `internal/machines` | `internal/runtime/machines` | where agents work, local or a worker | 8 |
-| `internal/desk` | `internal/runtime/desk` | the Claude session in the dock | 8 |
+| `internal/ideas` | `internal/features/ideas` | the Ideas feature | 8 |
+| `internal/schedules` | `internal/features/schedules` | the Schedules feature | 8 |
+| `internal/coordinator` | `internal/runtime/coordinator` | the loop | 9 |
+| `internal/turns` | `internal/runtime/turns` | starts and stops turns | 9 |
+| `internal/watchdog` | `internal/runtime/watchdog` | catches agents that go quiet | 9 |
+| `internal/archive` | `internal/runtime/archive` | moves done tasks out of the live log | 9 |
+| `internal/machines` | `internal/runtime/machines` | where agents work, local or a worker | 9 |
+| `internal/desk` | `internal/runtime/desk` | the Claude session in the dock | 9 |
 | `internal/web` | `internal/web` (stays) | `agentry serve`'s HTTP side | – |
 | `internal/mcp` | `internal/mcp` (stays) | `agentry mcp` | – |
-| `internal/storetest` | `internal/testkit/storetest` | opens stores for tests as serve does | 3 |
-| `internal/deeptest` | `internal/testkit/deeptest` | checks copies of state by reflection | 3 |
-| `internal/speccheck` | `tools/speccheck` | `spec/check` | 3 |
-| `packaging` | `tools/packaging` | `make package`, `make desktop`, `make release-check` | 3 |
+| `internal/storetest` | `internal/testkit/storetest` | opens stores for tests as serve does | 4 |
+| `internal/deeptest` | `internal/testkit/deeptest` | checks copies of state by reflection | 4 |
+| `internal/speccheck` | `tools/speccheck` | `spec/check` | 4 |
+| `packaging` | `tools/packaging` | `make package`, `make desktop`, `make release-check` | 4 |
 | `tools/measure` (shell) | `tools/measure` (stays) | the measuring scripts | – |
 | `cmd/agentry` | `cmd/agentry` (stays) | the binary | – |
-| `cmd/agentry-desktop` | `cmd/agentry-desktop` (stays) | the desktop app; its imports of `client`, `engines`, `launch` and `procs` change in step 4 | – |
+| `cmd/agentry-desktop` | `cmd/agentry-desktop` (stays) | the desktop app; its imports of `client`, `engines`, `launch` and `procs` change in step 5 | – |
 
 Packages the proposals in `spec/proposals/` will add: `githost` and
 `email` are features (each has a `feature_test.go`), so
@@ -279,7 +288,8 @@ the server would share, it moves to the package it is about.
 
 ### The spec areas and their code
 
-The `# Sources:` line of each feature file names these.
+Step 3 writes this table into the feature files as `# Sources:` lines, in
+today's paths; the moves then rewrite them like any other path.
 
 | Spec file | Where its code is |
 |---|---|
@@ -301,13 +311,16 @@ The `# Sources:` line of each feature file names these.
 
 A spec area doesn't have to be a domain: sessions and worktrees know no
 domain, so their code is platform. The map goes from spec areas to code,
-not the other way.
+not the other way. `features/schedules` has no spec area yet; section 6
+says how the check treats it.
 
 ### The UI
 
 `ui/src` is 31k lines in atomic tiers (`components/atoms` to `templates`),
 `pages/`, `lib/`, `api/`, `live/` and `features/ideas`. The UI mirrors the
-Go domains in folder names only; it does not copy Go's layers.
+Go domains in folder names only; it does not copy Go's layers. A
+`ui/src/domains/<area>` folder exists only where Go has `domain/<area>`;
+a page about something that isn't a domain goes where its Go code goes.
 
 | Today | Target |
 |---|---|
@@ -320,8 +333,8 @@ Go domains in folder names only; it does not copy Go's layers.
 | `pages/PolicyPage` | `domains/policy/` |
 | `pages/SettingsPage` | `domains/settings/` |
 | `pages/IntegrationsPage` | `domains/connections/` |
-| `pages/WorkspacePage` with `WorkspaceDock`, `SourceControl` | `domains/workspace/` |
-| `pages/SignInPage` with `SignInDeviceDialog`, `lib/signin.ts`, `lib/trust.ts` | `domains/signin/` |
+| `pages/WorkspacePage` with `WorkspaceDock`, `SourceControl` | `domains/tasks/workspace/`: a task's Workspace, served from `/api/tasks/{task}/files`, which moves to `tasksapi` |
+| `pages/SignInPage` with `SignInDeviceDialog`, `lib/signin.ts`, `lib/trust.ts` | `shell/signin/`: how you get into the shell, as sign-in is part of `web` in Go |
 | `pages/ErrorPage`, `NotFoundPage` | `shell/` |
 | `lib/*.ts` about one domain (`teams.ts`, `templates.ts`, `epics.ts`, `plan.ts`, `push.ts`, `shared.ts`, `profiles.ts`, ...) | that domain's folder |
 | `lib/*.ts` with no domain (`cn`, `time`, `rows`, `stored`, `drag`, `theme`, `monaco`, ...) | stay |
@@ -337,7 +350,7 @@ setting turns on. One rule is checked, by ESLint's `no-restricted-imports`:
 
 | What | Today | Target |
 |---|---|---|
-| `internal/web/dist` | built by `make ui`, committed so `go build`, CI and the Dockerfile need no Node | git-ignored. A committed `internal/web/dist/README` keeps `//go:embed all:dist` compiling, and the page then says "The UI is not built: run make ui". CI's check job and the Dockerfile build the UI in a Node stage; `make package` and `make desktop` already run `make ui` first. |
+| `internal/web/dist` | built by `make ui`, committed so `go build`, CI and the Dockerfile need no Node | `internal/web/static/dist`, git-ignored, beside a committed `internal/web/static/notbuilt.html` (below) |
 | history | 94 MB packed; `dist` is 81% of blob bytes | slimming it is the user's call: `git filter-repo --path internal/web/dist --invert-paths`, a force-push of every branch, and every clone and worktree cloned again. Only when no task is open. |
 | `bin/`, `release/`, `/agentry` | build output, already ignored | unchanged |
 | `Agentry/` | an unpacked release, untracked, 138 MB | the user's: move it out of the repo folder or delete it |
@@ -345,15 +358,40 @@ setting turns on. One rule is checked, by ESLint's `no-restricted-imports`:
 | `packaging/` | a root folder | `tools/packaging` |
 | `docker-stack.dev.yml` | at the root | `deploy/`, beside `entrypoint.sh` (the `Dockerfile` stays at the root, where Docker looks) |
 
-Ignoring `dist` changes how Agentry is built, not what it does, but it is
-the one step a user would notice: a fresh clone needs Node 24 to build a
-working page. That is why it is a question for the user.
+### The built page, no longer committed (step 10)
+
+A placeholder inside `dist` wouldn't survive: Vite builds with
+`emptyOutDir: true`, so `make ui` would delete it and leave the tree dirty.
+And `//go:embed all:dist` doesn't compile when `dist` is missing. So:
+
+- Vite writes to `internal/web/static/dist` (its `outDir` changes), which
+  `.gitignore` lists. Vite empties only that folder.
+- `internal/web/static/notbuilt.html` is committed. It says the page isn't
+  built, and to run `make ui`.
+- `page.go` embeds `all:static`, which always matches, because
+  `notbuilt.html` is there with or without `dist`. It serves `static/dist`
+  when `static/dist/index.html` exists, and `notbuilt.html` for every page
+  path when it doesn't. The API is not affected.
+- CI's check job and the Dockerfile build the UI in a Node stage first, so
+  every image and every CI run serves the real page. `make package` and
+  `make desktop` already run `make ui` first.
+
+This is the one step that changes behaviour: a binary built from a clone
+without `make ui` serves the "not built" page, where today it serves the
+committed UI. So the step adds a scenario to
+`spec/non-functional/operations.feature` (a server built without the UI says
+how to build it), with a test in `internal/web` that serves from an embedded
+tree with no `dist` and checks both the page and that `/api/` still answers.
+A fresh clone then needs Node 24 to build a working page, which is why the
+step waits for the user's yes.
 
 ## 6. How the rules are enforced
 
 **An import test,** `tools/importrules/rules_test.go`, run by
 `go test ./...`. It replaces `internal/features/imports_test.go` and
-`internal/httpapi/imports_test.go`, so there is one check, not three.
+`internal/httpapi/imports_test.go`, so there is one check, not three. It
+keeps both of their limits: `features` and `httpapi` import only domain
+roots, `core/events` and `platform` (and `httpapi` also `features`).
 
 ```go
 // Each of Agentry's packages, with the layer its path puts it on.
@@ -382,55 +420,89 @@ func TestTestkitIsOnlyForTests(t *testing.T) {
 ```
 
 Until the moves are done, `layerOf` reads a table of today's flat names
-(section 4's "New path" column); the last migration step replaces the table
-with the path prefixes. The test lands first (step 2), so it is worth having
+(section 4's "New path" column); step 11 replaces the table with the path
+prefixes. The test lands first (step 2), so it is worth having
 even if the moves wait.
 
-**A spec/check rule.** `spec/check` reads each feature file's `# Sources:`
-lines and fails on a path that doesn't exist, so a move that forgets the
-spec is caught. Once the moves are done it also fails when a package under
-`domain/` or `features/` is named by no feature file's Sources: a domain
-nobody specified is either dead or missing its spec.
+**A spec/check rule, in two parts.** Step 3 writes the missing `# Sources:`
+lines, from the table in section 4, so all 16 feature files have one. In the
+same step `spec/check` starts reading them and fails on a path that doesn't
+exist, so a move that forgets the spec is caught. Step 11 adds the second
+part: it fails when a package under `domain/` or `features/` is named by no
+feature file's Sources, since a package nobody specified is either dead or
+missing its spec. A package with no feature file yet goes on a list in
+`spec/README.md`, "Code with no spec yet", which may only shrink, like the
+import test's known edges. It starts with one entry, `features/schedules`,
+and empties when someone writes `schedules.feature`.
 
-**`spec/constraints.md` section 1** is rewritten once, in the last step, to
-list packages by group instead of "the list above matching `ls internal`".
-Its "Checked by" line then names the import test.
+**`spec/constraints.md` section 1** stays right through every move:
+
+- Step 2 rewrites line 77. It names the two `imports_test.go` files that
+  step deletes, so it names the new import test instead. Its "the list above
+  matching `ls internal`" becomes "matching the last element of each path
+  `go list ./internal/...` prints". Package names don't change in a move, so
+  that check still holds after the folders change.
+- Each move step's script rewrites the paths in `spec/constraints.md`, such
+  as `go test ./internal/store`, as it does in the rest of `spec/`.
+- Step 11 regroups the list by folder, to match the tree.
 
 ## 7. The migration, for later
 
-Every step changes no behaviour, builds, passes `make test` and
+Every step but step 10 changes no behaviour, builds, passes `make test` and
 `spec/check`, and is one task through review.
 
 | Step | What | Kind |
 |---|---|---|
 | 1 | This document | doc |
-| 2 | The import test, with today's flat names in its table; drop the two old `imports_test.go` | test only |
-| 3 | `testkit` and `tools`: `storetest`, `deeptest`, `speccheck`, `packaging` | move |
-| 4 | `platform` (15 packages, and the desktop app's four imports) | move |
-| 5 | `core` | move |
-| 6 | `domain`, one area per commit: agents, tasks, workers, connections, policy, settings, sharedfiles, notifications | move |
-| 7 | `features/ideas`, `features/schedules` | move |
-| 8 | `runtime` | move |
-| 9 | The root: ignore `dist`, the placeholder, CI and Docker build the UI, `brag-output/` ignored, `docker-stack.dev.yml` to `deploy/` | build, needs the user's yes |
-| 10 | The import test reads layers from paths; `spec/check` checks `# Sources:`; `spec/constraints.md` section 1 rewritten | test and spec |
-| 11 | One task per domain: its routes out of `web` and its tools out of `mcp` into `domain/<area>/<area>api`, mounted as features' are | refactor |
-| 12 | `coordinator` stops naming `ideas` (`features.Coordinator`), and the import test's known list is empty | refactor |
-| 13 | The UI: `shell/`, then one `domains/<area>/` per task | move |
+| 2 | The import test, with today's flat names in its table; drop the two old `imports_test.go`; rewrite `spec/constraints.md` line 77 | test only |
+| 3 | `# Sources:` lines in the 12 feature files without one; `spec/check` fails on a Sources path that doesn't exist | spec and check |
+| 4 | `testkit` and `tools`: `storetest`, `deeptest`, `speccheck`, `packaging` | move |
+| 5 | `platform` (15 packages, and the desktop app's four imports) | move |
+| 6 | `core` | move |
+| 7 | `domain`, one area per commit: agents, tasks, workers, connections, policy, settings, sharedfiles, notifications | move |
+| 8 | `features/ideas`, `features/schedules` | move |
+| 9 | `runtime` | move |
+| 10 | The root: stop committing the built page, with a "not built" page in its place; CI and Docker build the UI; `brag-output/` ignored; `docker-stack.dev.yml` to `deploy/` | **behaviour change**: needs the user's yes and a scenario |
+| 11 | The import test reads layers from paths; `spec/check` fails on a `domain/` or `features/` package no Sources names; `spec/constraints.md` section 1 grouped by folder | test and spec |
+| 12 | One task per domain: its routes out of `web` and its tools out of `mcp` into `domain/<area>/<area>api`, mounted as features' are | refactor |
+| 13 | `coordinator` stops naming `ideas` (`features.Coordinator`), and the import test's known list is empty | refactor |
+| 14 | The UI: `shell/`, then one `domains/<area>/` per task | move |
 
-Steps 3 to 8 are made by one script, `tools/relayout`, from the table in
+Steps 4 to 9 are made by one script, `tools/relayout`, from the table in
 section 4. For each package in the step it:
 
 1. `git mv`s the folder;
-2. rewrites import paths in every `.go` file (the package name stays, so no
-   other line changes), then `gofmt -w` to re-sort the import blocks;
-3. rewrites the old path in `spec/` (`@test` citations and `# Sources:`),
-   `Makefile`, `.gitlab-ci.yml`, `spec/check`, `ui/vite.config.ts` and
-   `README.md`;
-4. fixes the relative paths that tests and builds use, found today in
-   `web/policy_api_test.go` (`../policy/shipped`),
-   `cmd/agentry/tokens_test.go` (`../../internal/engines/testdata`) and
-   `speccheck/check_test.go`; a grep for `"../` in each moved package
-   finds new ones.
+2. rewrites the old path wherever it appears: import paths and any other
+   string in `.go` files (such as the hint in `internal/speccheck/cite.go`
+   that names its own path), `spec/` (`@test` citations and `# Sources:`),
+   `spec/constraints.md`, `Makefile`, `.gitlab-ci.yml`, `spec/check`,
+   `ui/vite.config.ts` and `README.md`; then `gofmt -w` re-sorts the import
+   blocks. The package name stays, so no other line changes;
+3. matches whole path segments only. Several old paths are the start of
+   others: `internal/store` of `internal/storetest`, `internal/web` of
+   `internal/webpush`, `internal/workers` of `internal/workerservice`,
+   `internal/settings` of `internal/settingsfile`. So the script replaces an
+   old path only where the next character is not a letter, digit, `_` or `-`
+   (a `/`, a quote, a space, punctuation or the end of the line), never by a
+   plain text replace. In a Go import that is the full path followed by `"`
+   or `/`;
+4. fixes the relative paths that tests and builds use from a moved
+   package's folder. Found today:
+
+   | File | Path | Step |
+   |---|---|---|
+   | `internal/web/policy_api_test.go:168` | `"../policy/shipped/..."` | 7 (policy moves, web stays) |
+   | `cmd/agentry/tokens_test.go:14` | `"../../internal/engines/testdata/..."` | 5 |
+   | `internal/events/fixtures_test.go:17` | `const module = "../.."` | 6 |
+   | `internal/speccheck/check_test.go:358` | `filepath.Join("..", "..")`, and the `"../..."` fixture paths near lines 37, 269 and 368 | 4 |
+   | `packaging/desktop_test.go:80` | `filepath.Join("..", path)` | 4 |
+   | `packaging/desktop_install_test.go:33` | `t.Chdir("..")` | 4 |
+
+   In each moved package the script also runs
+   `grep -nE '"\.\./|"\.\."|Chdir\(' --include=*.go`, which finds a path
+   string, a `filepath.Join("..", ...)` and a `Chdir`, and stops on any hit
+   that isn't in the list, so a person decides it. `make test` would catch
+   a miss too, but the plan doesn't rely on that.
 
 Old design docs under `docs/design/` keep the paths they were written with;
 they record what was true then.
@@ -467,11 +539,12 @@ task that edits a moved package or adds an import of one.
 | Make `core` truly domain-free: every domain registers its state slice through `features`, as ideas does | The right direction for some domains later (`docs/design/extensions.md`), but it rewrites how the store, the rules and the read model hold tasks and agents. That is a behaviour risk, not a move. This layout doesn't block it. |
 | By layer: `models/`, `services/`, `handlers/` | That is today's problem with folder names on it: one change to workers still touches four folders. |
 | Leave `internal/` flat and only add the import test | Cheapest, and the test is step 2 of the plan anyway. But 46 names in one list don't tell a reader where to look, and the rules would be a table nobody sees in the tree. |
-| Handlers stay in `web`, one file per domain | Already true, and `web` still imports 23 packages and decides how each domain is served. It's where the repo is until step 11, not the target. |
+| Handlers stay in `web`, one file per domain | Already true, and `web` still imports 23 packages and decides how each domain is served. It's where the repo is until step 12, not the target. |
 | `core/features` beside `features/ideas` | Two things named features. The framework as the parent folder of its features says what it is, and matches the UI. |
 | One Go module per domain | Agentry is one binary. More modules mean `replace` lines, like the desktop app's, and versioning between them for no gain. |
 | Deeper nesting, such as `domain/workers/link/server` | Package names that only make sense with their path (`link`, `server`, `api`) clash when imported together. `workerlink` and `workersapi` read alone. |
 | `machines` in `platform` | It imports `agents`, `workers`, `sessions` and `worktrees`: it is what runs agents on a machine, so `runtime`. |
+| `desk` in `platform` | It imports only `sessions`, like `terminal`. But `platform` means "no Agentry concept", which is about what a package does, not only what it imports: the desk is an Agentry role, with its own token and its own way of making tasks. Imports set the lowest folder a package can go in; its job picks among the ones left. |
 | `sessions` as a domain | It knows no Agentry concept, only engines and processes: `platform`. Its spec area points there. |
 | A `signin` domain | Sign-in is how `web` checks who calls it, with no events of its own. It stays in `web`. |
 | `workerservice` in `platform` | It imports only `procs`, so it could. It is only about running a worker, so it sits with workers, where a worker change looks. |
@@ -480,8 +553,9 @@ task that edits a moved package or adds an import of one.
 
 ## 9. Disagreements and how they were settled
 
-The proposal is the user's; this section lists where the design departs from
-it and why. The reviewer's challenges are added here as they are settled.
+The proposal is the user's; the first table lists where the design departs
+from it and why. The reviewer agreed with every row (review 1). The second
+table holds the reviewer's challenges and how each was settled.
 
 | # | The proposal | This design | Why |
 |---|---|---|---|
@@ -501,18 +575,26 @@ it and why. The reviewer's challenges are added here as they are settled.
 | 14 | `ui/src/features/<domain>` | `ui/src/domains/<area>`, and `ui/src/features` stays for features | `features` already means something in the UI |
 | 15 | `cmd/` thin: flags and wiring only | `cmd/agentry` keeps each subcommand's steps | its tests call those steps directly; moving them is a refactor per command, when one grows |
 
+The reviewer's challenges:
+
+| # | The reviewer | The engineer | Settled |
+|---|---|---|---|
+| R1 | Putting `httpapi` in one row with `store`, `current` and `rules` lets it import the store, which `internal/httpapi/imports_test.go` forbids today, so the new test would be weaker than the one it replaces. | Agreed: a slip of grouping, not a choice. | `core/httpapi` has its own row in section 3, with today's limit, and the import test keeps it. The diagram shows it as its own row. |
+| R2 | `ui/src/domains/workspace` and `domains/signin` look like domains, but Go has neither, and section 8 rejects a signin domain. | Agreed: the UI should follow where the Go code is, not add domains. | A UI domain folder exists only where Go has one. The Workspace page goes to `domains/tasks/workspace` (its routes are a task's and move to `tasksapi`); sign-in goes to `shell/signin` (part of `web` in Go). |
+| R3 | `desk` imports only `sessions`, so by the reasoning that puts `sessions` and `terminal` in `platform` it would be `platform` too. Agrees with `runtime`, but wants the reason stated. | `runtime`: it is an Agentry role, not an OS capability. | Kept in `runtime`, with the rule stated: imports set the lowest folder a package can go in, and its job picks among those left (In short, item 4; section 8). |
+
 ## 10. Questions only the user can answer
 
 1. **Rewrite history to drop `internal/web/dist`?** It would take the history
    from about 65 MB of blobs to about 12 MB. It needs a force-push of every
    branch and a fresh clone of every checkout and worktree, so only with no
    task open. Or keep the history and only stop committing `dist` from now on.
-2. **May a fresh clone need Node to build the page?** Ignoring `dist` (step 9)
+2. **May a fresh clone need Node to build the page?** Ignoring `dist` (step 10)
    means `go build` and `go install` from a clone serve a "UI not built" page
    until `make ui` runs. If not, `dist` stays committed and history keeps
    growing by about 0.5 MB per UI change.
 3. **`Agentry/` and `brag-output/`:** delete, move out of the repo folder, or
    ignore? This design suggests moving `Agentry/` out and ignoring
    `brag-output/`.
-4. **When to run the moves.** Steps 3 to 8 want a moment with few open tasks.
+4. **When to run the moves.** Steps 4 to 9 want a moment with few open tasks.
    They can run one group at a time between tasks, or all in one quiet hour.
