@@ -137,4 +137,4 @@ Feature: Performance
     When the user requests GET /api/changes with after set to that position, with the UI token, and times it
     Then the answer comes after 25 seconds, within 1 second of it
     And the position it names is the same one waited on
-    # internal/web/api.go waitForChanges, a 25 second timeout on the wait; no test asserts the timeout
+    # internal/web/config_api.go waitForChanges, a 25 second timeout on the wait; no test asserts the timeout

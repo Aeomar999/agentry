@@ -22,6 +22,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/policyapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles/sharedfilesapi"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks/tasksapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
@@ -62,6 +63,9 @@ type Config struct {
 
 	Settings func(extension string) extensions.Settings // each extension's own table in the settings file, for its routes; nil for none
 }
+
+// defaults are the limits a new task gets when it names none.
+func (c Config) defaults() tasks.Limits { return tasks.Limits{Budget: c.Budget, MaxTurns: c.MaxTurns} }
 
 // PolicySource is the policy in force and any problem with the file on
 // disk, and the one way to change it.

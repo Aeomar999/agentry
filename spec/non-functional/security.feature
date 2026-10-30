@@ -444,7 +444,7 @@ Feature: Security
     When it posts a message to a task's claude/message route
     Then the message is allowed
     And it reaches the task as the user's, marked as sent through Claude: yes
-    # every Workspace's session holds the same helper token, and the route takes it for any task (internal/web/server.go line 93)
+    # every Workspace's session holds the same helper token, and the route takes it for any task (internal/web/server.go line 97)
     # README.md, Use it; internal/web/claude_api_test.go TestClaudeSendsWhatYouAskedAndNothingElse
 
   @SEC-50 @test
@@ -467,7 +467,7 @@ Feature: Security
     Given a device opens the printed link or signs in with a code
     When the server sets the cookie
     Then its name is agentry_ui, its path is /, and it lasts at least 300 days
-    # not under test, checked by hand: it lasts 365 days (internal/web/server.go line 267); the tests use the uiCookie constant, agentry_ui (internal/web/server.go line 179)
+    # not under test, checked by hand: it lasts 365 days (internal/web/server.go line 271); the tests use the uiCookie constant, agentry_ui (internal/web/server.go line 183)
     And it is HttpOnly with SameSite Lax, so no script on the page reads it
     And it is Secure only when the request came over https
     And the app's manifest, service worker and icons are served with no token
