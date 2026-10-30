@@ -43,10 +43,11 @@ places, all because of what the import graph really is:
    and tools out of `mcp` changes code, so each domain does that in its own
    reviewed task, after the moves.
 
-Four questions are the user's to answer (see the end): whether to rewrite
-history to drop the committed UI, whether a fresh clone may need Node to
-build (and how the Mac app then stays buildable with only Go), what to do with `Agentry/` and `brag-output/`, and when the board is
-quiet enough to run the moves.
+The user decided four things (section 10): stop committing the built UI but
+keep the history; build the page on the publishing machine and copy it to
+the Mac, so the Mac app stays buildable with only Go; move `Agentry/` out of
+the checkout and ignore `brag-output/`; and land the moves one group per
+step, between tasks.
 
 ![The layers and what each may import](repo-organization/layers.svg)
 
@@ -351,10 +352,10 @@ setting turns on. One rule is checked, by ESLint's `no-restricted-imports`:
 | What | Today | Target |
 |---|---|---|
 | `internal/web/dist` | built by `make ui`, committed so `go build`, CI and the Dockerfile need no Node | `internal/web/static/dist`, git-ignored, beside a committed `internal/web/static/notbuilt.html` (below) |
-| history | 94 MB packed; `dist` is 81% of blob bytes | slimming it is the user's call: `git filter-repo --path internal/web/dist --invert-paths`, a force-push of every branch, and every clone and worktree cloned again. Only when no task is open. |
+| history | 94 MB packed; `dist` is 81% of blob bytes | kept as it is, by the user's decision: no rewrite, no force-push. It stops growing from step 10 on. |
 | `bin/`, `release/`, `/agentry` | build output, already ignored | unchanged |
-| `Agentry/` | an unpacked release, untracked, 138 MB | the user's: move it out of the repo folder or delete it |
-| `brag-output/` | the brag skill's videos, untracked, 15 MB | add to `.gitignore`, since the skill writes there by design |
+| `Agentry/` | an unpacked release, untracked, 138 MB | moved out of the main checkout, by the user's decision |
+| `brag-output/` | the brag skill's videos, untracked, 15 MB | added to `.gitignore`, since the skill writes there by design (the user's decision) |
 | `packaging/` | a root folder | `tools/packaging` |
 | `docker-stack.dev.yml` | at the root | `deploy/`, beside `entrypoint.sh` (the `Dockerfile` stays at the root, where Docker looks) |
 
@@ -390,32 +391,35 @@ tree with no `dist` and checks both the page and that `/api/` still answers.
 |---|---|---|
 | `make desktop` (Makefile, its comment, README lines 376 and 398) | it has no `ui` prerequisite, by design: the Mac app is built on a Mac with only Go, from the committed page (the user's choice in task-249) | see "The Mac build" below |
 | `make package` | runs `make ui` first | unchanged |
-| `internal/web/api_test.go:285-300` | a real `index.html` that names bundles, so `go test ./...` fails on a clone without `make ui` | `make test` gets `ui` as a prerequisite (it already needs Node, for `npm run lint`); the test skips, saying "the UI isn't built: run `make ui`", when `static/dist/index.html` is missing, so a bare `go test ./...` on a fresh clone passes. CI builds the UI first, so CI never skips it. |
-| `packaging/main.go:97` (`checkRoot`) | checks `internal/web/dist/index.html` | checks `internal/web/static/dist/index.html`, with the same message |
+| `internal/web/api_test.go:285-300` | a real `index.html` that names bundles, so `go test ./...` fails on a clone without `make ui` | `make test` depends on the file `internal/web/static/dist/index.html`, whose rule runs `make ui`. So the page is built once per worktree, when it is missing, not on every test run (`make test` already needs Node, for `npm run lint`). A page left from an older commit isn't rebuilt by `make test`; the test checks only that the page names bundles it can serve, so that is fine, and `make ui` refreshes it. The test skips, saying "the UI isn't built: run `make ui`", when `static/dist/index.html` is missing, so a bare `go test ./...` on a fresh clone passes. CI builds the UI first, so CI never skips it. |
+| `packaging/main.go:97` (`checkRoot`) | checks `internal/web/dist/index.html` | checks `internal/web/static/dist/index.html`, and its `built-from` (below) |
 | `.gitlab-ci.yml:3` and `:29` | the header says the pipeline needs no Node; the check job fails when `dist` isn't committed | the check job builds the UI in a Node stage; both lines go |
 | Makefile lines 2-3 | "the built UI is committed, so `go build` and `go install` work without it" | says `go build` without `make ui` serves the "not built" page |
 | README lines 108 and 380 | "built into the binary, so this needs no Node"; "`internal/web/dist`, which is committed" | 108 still holds for a release binary; 380 names `static/dist` and says it is built, not committed |
 | `page.go` | answers 500 when `index.html` is missing | serves `notbuilt.html` (above) |
 
-**The Mac build.** Step 10 would end Node-free Mac builds unless it keeps
-them on purpose. The options, for question 2:
+**The Mac build: copy the page in.** Step 10 would end Node-free Mac builds
+unless it keeps them on purpose, and the user chose to keep them (section
+10). The release steps already copy the Mac zip back to the publishing
+machine; step 10 adds a copy the other way first, of
+`internal/web/static/dist`, built on the publishing machine from the tagged
+commit. So the Mac still needs only Go, and `make desktop` keeps no `ui`
+prerequisite.
 
-- **A. Copy the built page to the Mac** (recommended). The release steps
-  already copy the Mac zip back to the publishing machine; this copies
-  `internal/web/static/dist` the other way first. `make ui` writes the commit
-  it built from into `static/dist/built-from`, and `make desktop` (through
-  `checkRoot`) refuses a page built from another commit, so a stale copy
-  can't ship. The Mac still needs only Go.
-- **B. Commit `dist` only on release tags.** The tag's commit holds the page,
-  so a clean checkout of the tag builds anywhere without Node. But that
-  commit is on no branch, or `dev` carries `dist` again, and history still
-  grows by the page once per release. Two kinds of commit to explain.
-- **C. Install Node on the Mac.** `desktop` gets `ui` as a prerequisite,
-  like `package`. Simplest, but undoes the user's choice in task-249.
+A stale copy can't ship:
 
-A fresh clone needs Node 24 to build a working page, and option A or B is
-needed to keep the Mac build Node-free, which is why the step waits for the
-user's yes.
+- `make ui` writes the commit it built from (`git rev-parse HEAD`) into
+  `static/dist/built-from`.
+- `checkRoot`, which `make desktop` runs (`desktop.go:63`), reads that file
+  and compares it with `git rev-parse HEAD`. When they differ, or the file is
+  missing, it refuses with: "the page was built from <commit>, not from HEAD
+  (<commit>): run `make ui`, or copy in a page built from this commit".
+- So a developer's `make desktop` after a new commit is refused with that
+  hint, not silently; with Node, `make ui` fixes it.
+
+README line 398's Mac step gains the copy, and loses "it uses the committed
+page". A fresh clone needs Node 24 to build a working page, which the user
+accepted.
 
 ## 6. How the rules are enforced
 
@@ -501,7 +505,7 @@ Every step but step 10 changes no behaviour, builds, passes `make test` and
 | 7 | `domain`, one area per commit: agents, tasks, workers, connections, policy, settings, sharedfiles, notifications | move |
 | 8 | `features/ideas`, `features/schedules` | move |
 | 9 | `runtime` | move |
-| 10 | The root: stop committing the built page, with a "not built" page in its place; CI, Docker and `make test` build the UI; the Mac build as the user chose (section 5); `brag-output/` ignored; `docker-stack.dev.yml` to `deploy/` | **behaviour change**: needs the user's yes and a scenario |
+| 10 | The root: stop committing the built page (history kept), with a "not built" page in its place; CI, Docker and `make test` build the UI; the Mac build copies the page in, with the built-from check (section 5); `brag-output/` ignored; `docker-stack.dev.yml` to `deploy/` | **behaviour change**, agreed by the user; needs a scenario |
 | 11 | The import test reads layers from paths; `spec/check` fails on a `domain/` or `features/` package no Sources names; `spec/constraints.md` section 1 grouped by folder | test and spec |
 | 12 | One task per domain: its routes out of `web` and its tools out of `mcp` into `domain/<area>/<area>api`, mounted as features' are | refactor |
 | 13 | `coordinator` stops naming `ideas` (`features.Coordinator`), and the import test's known list is empty | refactor |
@@ -569,7 +573,8 @@ lines change.
 There are 12 task worktrees open as this is written. A move conflicts with a
 task that edits a moved package or adds an import of one.
 
-- Move one group per step, so each step touches the fewest open tasks.
+- Move one group per step, landed between tasks, as the user decided, so
+  each step touches the fewest open tasks.
 - Before a step, list what each open task's branch touches
   (`git diff --stat dev...agentry/task-N`), and run the step when no open
   task touches its packages, or right after those tasks land.
@@ -601,6 +606,11 @@ task that edits a moved package or adds an import of one.
 | A `signin` domain | Sign-in is how `web` checks who calls it, with no events of its own. It stays in `web`. |
 | `workerservice` in `platform` | It imports only `procs`, so it could. It is only about running a worker, so it sits with workers, where a worker change looks. |
 | Move the built page to `ui/dist` behind a Go package in `ui/` | `go list ./...` would walk `ui/node_modules`, and an npm package that ships `.go` files would break `go vet ./...`. `internal/web/static/dist`, ignored, avoids that. |
+| Rewrite history to drop `internal/web/dist` (`git filter-repo --path internal/web/dist --invert-paths`) | It would take the blobs from about 65 MB to about 12 MB, but needs a force-push of every branch and every clone and worktree cloned again, with no task open. The user chose to keep the history. |
+| Commit `dist` only on release tags, so a tag builds anywhere without Node | The tag's commit is on no branch, or `dev` carries `dist` again; history still grows by the page once per release; and there are two kinds of commit to explain. Copying the page to the Mac, checked against the commit, keeps the Mac Node-free without them. |
+| Install Node on the Mac, with `ui` a prerequisite of `desktop` | Simplest, but undoes the user's choice in task-249 that the Mac app builds with only Go. |
+| Delete `Agentry/` and `brag-output/`, or ignore both | `Agentry/` is a whole release that has no place in the checkout, and ignoring it would hide 138 MB there; `brag-output/` is where a skill writes by design. The user chose to move the first and ignore the second. |
+| All the moves in one quiet hour, with no task open | One review instead of six, but it needs the board empty, and any task started after it rebases over every move at once. The user chose one group per step, between tasks. |
 | `git mv` alone in one commit, the rewrites in the next | The first commit wouldn't build. One commit per move, made by a script, is as easy to review. |
 
 ## 9. Disagreements and how they were settled
@@ -634,23 +644,18 @@ The reviewer's challenges:
 | R1 | Putting `httpapi` in one row with `store`, `current` and `rules` lets it import the store, which `internal/httpapi/imports_test.go` forbids today, so the new test would be weaker than the one it replaces. | Agreed: a slip of grouping, not a choice. | `core/httpapi` has its own row in section 3, with today's limit, and the import test keeps it. The diagram shows it as its own row. |
 | R2 | `ui/src/domains/workspace` and `domains/signin` look like domains, but Go has neither, and section 8 rejects a signin domain. | Agreed: the UI should follow where the Go code is, not add domains. | A UI domain folder exists only where Go has one. The Workspace page goes to `domains/tasks/workspace` (its routes are a task's and move to `tasksapi`); sign-in goes to `shell/signin` (part of `web` in Go). |
 | R3 | `desk` imports only `sessions`, so by the reasoning that puts `sessions` and `terminal` in `platform` it would be `platform` too. Agrees with `runtime`, but wants the reason stated. | `runtime`: it is an Agentry role, not an OS capability. | Kept in `runtime`, with the rule stated: imports set the lowest folder a package can go in, and its job picks among those left (In short, item 4; section 8). |
-| R4 | Step 10 said `make desktop` already runs `make ui`. It doesn't, by design: the Mac app is built with only Go from the committed page. Dropping the committed page quietly ends that, and breaks `api_test.go`, `checkRoot` and CI's check. | Not committing `dist` is still right for history, but the Mac build has to be kept on purpose, not by accident. | Section 5 lists everything that relies on the committed page and what each becomes. The Mac build is the user's call (question 2), with option A recommended: copy the page built on the publishing machine, checked against the commit. |
+| R4 | Step 10 said `make desktop` already runs `make ui`. It doesn't, by design: the Mac app is built with only Go from the committed page. Dropping the committed page quietly ends that, and breaks `api_test.go`, `checkRoot` and CI's check. | Not committing `dist` is still right for history, but the Mac build has to be kept on purpose, not by accident. | Section 5 lists everything that relies on the committed page and what each becomes. The user chose to keep the Mac build Node-free by copying the page built on the publishing machine, checked against HEAD by `checkRoot` (section 10, decision 2). |
 
-## 10. Questions only the user can answer
+## 10. Decisions by the user (2026-10-30)
 
-1. **Rewrite history to drop `internal/web/dist`?** It would take the history
-   from about 65 MB of blobs to about 12 MB. It needs a force-push of every
-   branch and a fresh clone of every checkout and worktree, so only with no
-   task open. Or keep the history and only stop committing `dist` from now on.
-2. **May a fresh clone need Node to build the page?** Ignoring `dist` (step 10)
-   means `go build` and `go install` from a clone serve a "UI not built" page
-   until `make ui` runs. If not, `dist` stays committed and history keeps
-   growing by about 0.5 MB per UI change. If yes, how does the Mac app stay
-   buildable with only Go (section 5, "The Mac build")? Recommended: A, copy
-   the page built on the publishing machine, checked against the commit. Or
-   B, commit `dist` only on release tags, or C, install Node on the Mac.
-3. **`Agentry/` and `brag-output/`:** delete, move out of the repo folder, or
-   ignore? This design suggests moving `Agentry/` out and ignoring
-   `brag-output/`.
-4. **When to run the moves.** Steps 4 to 9 want a moment with few open tasks.
-   They can run one group at a time between tasks, or all in one quiet hour.
+1. **The committed built page:** stop committing `internal/web/dist` from
+   step 10 on. The history stays as it is: no rewrite, no force-push.
+2. **The Mac build:** the page is built on the publishing machine from the
+   tagged commit and copied to the Mac. `checkRoot` compares the page's
+   `built-from` with HEAD, so a stale page can't ship, and `make desktop`
+   stays Node-free on the Mac (section 5). Committing `dist` on release tags
+   and installing Node on the Mac are under alternatives (section 8).
+3. **`Agentry/` and `brag-output/`:** move `Agentry/` out of the main
+   checkout, and git-ignore `brag-output/`.
+4. **When to move:** one group per step, each landed between tasks
+   (section 7, "Not getting in the way of open tasks").
