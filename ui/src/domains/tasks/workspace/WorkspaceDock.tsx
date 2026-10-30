@@ -11,9 +11,9 @@ import { cn } from "@/lib/cn";
 import { modKey } from "@/lib/shortcuts";
 import { clockTime } from "@/lib/time";
 import { tokens } from "@/lib/tokens";
-import { TerminalView } from "./TerminalView";
-import { CoordinatorChat } from "./CoordinatorChat";
-import { QuestionsPanel } from "./QuestionsPanel";
+import { TerminalView } from "@/components/organisms/TerminalView";
+import { CoordinatorChat } from "@/domains/tasks/CoordinatorChat";
+import { QuestionsPanel } from "@/components/organisms/QuestionsPanel";
 
 // The Workspace page's dock: your chat with the task's coordinator, which
 // can put the task back to work; your own Claude, in the worktree, for your

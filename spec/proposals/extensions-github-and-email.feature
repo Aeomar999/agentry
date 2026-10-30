@@ -193,7 +193,7 @@ Feature: Shipping through GitHub, and email
   @PROP-45 @user @test @to-tasks-and-board
   Scenario: The Merge request tab shows the request, its latest pipeline and a refusal
     # docs/design/t-019-shipping.md section 7, the taskTabs slot; GET /api/tasks/{task} gains slices (section 1)
-    # test: ui/src/extensions/git/MergeRequestTab.test.tsx and ui/src/pages/TaskPage.test.tsx (to write)
+    # test: ui/src/extensions/git/MergeRequestTab.test.tsx and ui/src/domains/tasks/TaskPage.test.tsx (to write)
     Given task-121 with request 412 open into dev, and its latest run on the head failed on test and passed lint
     When the task page is shown
     Then a tab "Merge request" is shown after Details, with 412, its link, open and dev: yes

@@ -8,9 +8,9 @@ import { CHANGE_COLOR, FileTree, WorkspaceFile } from "@/components/molecules/Fi
 import { FileView } from "@/components/molecules/FileView";
 import { Mono } from "@/components/molecules/Mono";
 import { TaskStatusBadge } from "@/components/molecules/StatusBadges";
-import { WorkspaceDock } from "@/components/organisms/WorkspaceDock";
-import { Commit, FileContext, Section, SourceControl } from "@/components/organisms/SourceControl";
-import { SvgPreview, WorkspacePreview, previewable } from "@/components/organisms/WorkspacePreview";
+import { WorkspaceDock } from "@/domains/tasks/workspace/WorkspaceDock";
+import { Commit, FileContext, Section, SourceControl } from "@/domains/tasks/workspace/SourceControl";
+import { SvgPreview, WorkspacePreview, previewable } from "@/domains/tasks/workspace/WorkspacePreview";
 import { ContextMenu, MenuItem } from "@/components/molecules/ContextMenu";
 import type { Agent, TaskDetail } from "@/api/types";
 import { AgentColorsProvider } from "@/live/agent-colors";

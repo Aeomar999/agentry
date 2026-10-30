@@ -22,11 +22,11 @@ import { useToast } from "@/shell/Toasts";
 import { api } from "@/api/client";
 import type { TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
-import { fileUnder } from "@/lib/epic-api";
+import { fileUnder } from "@/domains/tasks/epic-api";
 import { waitingLine } from "@/lib/epics";
 import { shownEpic } from "@/lib/shown-id";
 import { useNewTask } from "@/lib/new-task";
-import { rankAt } from "@/lib/rank";
+import { rankAt } from "@/domains/tasks/rank";
 import { DropLine, slotAt, slotIndex } from "@/lib/drag";
 import { cn } from "@/lib/cn";
 

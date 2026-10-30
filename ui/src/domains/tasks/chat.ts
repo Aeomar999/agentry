@@ -1,6 +1,6 @@
 import type { LogEvent, TaskDetail } from "@/api/types";
-import { onMachine } from "./machines";
-import { limitText } from "./time";
+import { onMachine } from "@/lib/machines";
+import { limitText } from "@/lib/time";
 
 // Your chat with a task's coordinator, read from the task's events, oldest
 // first: what you said, what it said back, its questions and its summary,

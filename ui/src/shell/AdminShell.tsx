@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { NewTaskDialog } from "@/components/organisms/NewTaskDialog";
+import { NewTaskDialog } from "@/domains/tasks/NewTaskDialog";
 import { useNewTask } from "@/lib/new-task";
 import { Outlet, useNavigate } from "react-router-dom";
 import { Bot, ListTodo, Map as MapIcon, Moon, Plug, Plus, Settings, ShieldCheck, Sparkles, SquareTerminal, Sun } from "lucide-react";

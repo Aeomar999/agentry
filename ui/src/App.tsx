@@ -3,10 +3,10 @@ import { AdminShell } from "@/shell/AdminShell";
 import { SignedIn } from "@/shell/SignedIn";
 import { ToastProvider } from "@/shell/Toasts";
 import { LiveProvider } from "@/live/LiveProvider";
-import { TasksPage } from "@/pages/TasksPage";
-import { PlanPage } from "@/pages/PlanPage";
+import { TasksPage } from "@/domains/tasks/TasksPage";
+import { PlanPage } from "@/domains/tasks/PlanPage";
 import { IntegrationsPage } from "@/pages/IntegrationsPage";
-import { TaskPage } from "@/pages/TaskPage";
+import { TaskPage } from "@/domains/tasks/TaskPage";
 import { AgentsPage } from "@/pages/AgentsPage";
 import { AgentPage } from "@/pages/AgentPage";
 import { AgentEditPage } from "@/pages/AgentEditPage";
@@ -15,7 +15,7 @@ import { SettingsPage } from "@/pages/SettingsPage";
 import { WorkersPage } from "@/pages/WorkersPage";
 import { NotFoundPage } from "@/shell/NotFoundPage";
 import { ErrorPage } from "@/shell/ErrorPage";
-import { WorkspacePage } from "@/pages/WorkspacePage";
+import { WorkspacePage } from "@/domains/tasks/workspace/WorkspacePage";
 import { EXTENSIONS } from "@/extensions";
 
 // Every page renders inside the one shell. The Go server answers any path

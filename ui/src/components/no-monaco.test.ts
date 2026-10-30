@@ -14,9 +14,9 @@ const SOURCES: Record<string, string> = import.meta.glob(["/src/**/*.ts", "/src/
 const KEPT_LIGHT = [
   "/src/components/molecules/CodeBox.tsx",
   "/src/components/molecules/LazyColorize.tsx",
-  "/src/components/organisms/EntryText.tsx",
-  "/src/components/organisms/ActivityFeed.tsx",
-  "/src/components/organisms/HandoffTimeline.tsx",
+  "/src/domains/tasks/EntryText.tsx",
+  "/src/domains/tasks/ActivityFeed.tsx",
+  "/src/domains/tasks/HandoffTimeline.tsx",
 ];
 
 const STATIC_IMPORT = /^\s*(?:import(?!\s*\()|export)\b[^;'"]*?(?:from\s*)?["']([^"']+)["']/gm;

@@ -2,14 +2,14 @@ Feature: Epics and stories
   A goal too big for one change is an epic, split into stories that wait in the
   Backlog, ordered in Plan, and closed once every story is done.
   # Sources: internal/domain/tasks, internal/runtime/coordinator/epics.go,
-  # internal/domain/tasks/tasksapi/epics_api.go, ui/src/pages/PlanPage.tsx, ui/src/lib/epics.ts and
+  # internal/domain/tasks/tasksapi/epics_api.go, ui/src/domains/tasks/PlanPage.tsx, ui/src/lib/epics.ts and
   # their tests.
 
   # ---- Making epics and stories ----------------------------------------------
 
   @EPIC-01 @user @manual
   Scenario: New epic and New story open from Plan and from their addresses
-    # the dialog's title: ui/src/components/organisms/NewTaskDialog.tsx line 28; the buttons: ui/src/components/organisms/NewTaskForm.tsx lines 262 and 343
+    # the dialog's title: ui/src/domains/tasks/NewTaskDialog.tsx line 28; the buttons: ui/src/domains/tasks/NewTaskForm.tsx lines 262 and 343
     Given the Plan page is open with the epic epic-7 in it
     When the user clicks New epic in the page header
     Then a dialog titled "New epic" is shown with ?new=epic in the address
@@ -64,7 +64,7 @@ Feature: Epics and stories
 
   @EPIC-06 @user @test
   Scenario: Plan has a column for the tasks of no epic, then one for each epic
-    # ui/src/pages/PlanPage.test.tsx
+    # ui/src/domains/tasks/PlanPage.test.tsx
     Given the epic task-21 with its story task-22, and the task task-30 of no epic
     When the Plan page is shown
     Then the ids are shown in the order task-30, epic-21, task-22
@@ -83,7 +83,7 @@ Feature: Epics and stories
 
   @EPIC-08 @user @manual
   Scenario: Dragging a card in Plan sets its priority or files it under another epic
-    # ui/src/pages/PlanPage.tsx drop
+    # ui/src/domains/tasks/PlanPage.tsx drop
     Given Plan with the epic epic-7 and 3 unstarted tasks in "No epic"
     When the user drags the third task to the top of "No epic"
     Then it is shown first, and the order is kept after a reload
@@ -96,7 +96,7 @@ Feature: Epics and stories
 
   @EPIC-09 @user @manual
   Scenario: Start on a story, and Start the ready ones on an epic
-    # ui/src/pages/PlanPage.tsx start, PlanCard and PlanColumn
+    # ui/src/domains/tasks/PlanPage.tsx start, PlanCard and PlanColumn
     Given epic-7 with 3 stories in the Backlog, none started and none waiting on another
     Then each card reads "Not started" and shows Start
     And the epic's header shows "Start the ready ones · 3"
@@ -121,10 +121,10 @@ Feature: Epics and stories
 
   @EPIC-11 @user @manual
   Scenario: A waiting story says what it waits for, and stays parked when that is done
-    # ui/src/lib/epics.ts waitingLine; the ready count: ui/src/pages/PlanPage.tsx line 175
+    # ui/src/lib/epics.ts waitingLine; the ready count: ui/src/domains/tasks/PlanPage.tsx line 175
     # a parked story gets no turn: internal/runtime/coordinator/next.go line 55
     # what blocks it empties when task-8 is done: internal/domain/tasks/tasksapi/views.go lines 132 to 142
-    # "Not started" and Start: ui/src/pages/PlanPage.tsx lines 298 to 304 and 341
+    # "Not started" and Start: ui/src/domains/tasks/PlanPage.tsx lines 298 to 304 and 341
     Given epic-7 with task-8 not started and task-9 that builds on task-8, both in the Backlog
     When the Plan page is shown
     Then task-9's card reads "Starts when task-8 is done"
@@ -173,7 +173,7 @@ Feature: Epics and stories
   Scenario: Close the epic from its page, and one Visionaries session follows
     # internal/domain/tasks/tasksapi/tasks_api_test.go TestYouCloseAnEpicYouLeftOpen and TestYouCloseAnEpic
     # internal/runtime/coordinator/followups_test.go TestClosingAnEpicStartsOneVisionariesSessionAboutIt
-    # ui/src/components/organisms/OpenEpic.tsx lines 34 to 45; internal/domain/tasks/tasksapi/answer_api.go lines 31 to 40
+    # ui/src/domains/tasks/OpenEpic.tsx lines 34 to 45; internal/domain/tasks/tasksapi/answer_api.go lines 31 to 40
     # the words "that is approved on the page": internal/domain/tasks/tasksapi/answer_api.go line 34; the test asserts the 403 only
     Given an epic left open with every story done, whose page shows the panel "All 1 stories done" with the button "Close the epic"
     Then the epic is not in Questions

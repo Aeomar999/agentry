@@ -4,7 +4,7 @@
 // running turn with your message in the middle of it.
 
 import type { Action, Agent, Turn } from "@/api/types";
-import type { ActivityItem } from "@/lib/activity";
+import type { ActivityItem } from "@/domains/tasks/activity";
 
 export const AGENTS = [
   { name: "coordinator", coordinates: true, column: "", team: "" },

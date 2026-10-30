@@ -3,9 +3,9 @@ Feature: Tasks and the board
   running limits, search, the keys and the archive.
   # Sources: internal/domain/tasks, internal/runtime/archive, internal/domain/settings,
   # internal/runtime/coordinator/slots.go, internal/web/domains.go, internal/domain/tasks/tasksapi,
-  # internal/domain/settings/settingsapi/settingsapi.go, ui/src/pages/TasksPage.tsx,
-  # ui/src/pages/TaskPage.tsx, ui/src/components/organisms/TaskBoard.tsx,
-  # ui/src/components/organisms/NewTaskForm.tsx,
+  # internal/domain/settings/settingsapi/settingsapi.go, ui/src/domains/tasks/TasksPage.tsx,
+  # ui/src/domains/tasks/TaskPage.tsx, ui/src/domains/tasks/TaskBoard.tsx,
+  # ui/src/domains/tasks/NewTaskForm.tsx,
   # ui/src/components/organisms/LimitEditor.tsx, ui/src/lib/limits.ts and their
   # tests.
 
@@ -74,7 +74,7 @@ Feature: Tasks and the board
 
   @TASK-06 @user @manual
   Scenario: The team and kind fields on the form
-    # the Team field shows only with more than 1 team: ui/src/components/organisms/NewTaskForm.tsx, teams.length > 1
+    # the Team field shows only with more than 1 team: ui/src/domains/tasks/NewTaskForm.tsx, teams.length > 1
     Given 2 teams, Software and Writing, and the New task dialog is open
     Then the Team field is shown with the chips "Let the coordinators decide", Software and Writing
     And "Let the coordinators decide" is the 1 chip pressed
@@ -119,7 +119,7 @@ Feature: Tasks and the board
 
   @TASK-10 @user @manual
   Scenario: The repo choice on the form asks for a full path
-    # "Give the repo's full path, starting with /.": ui/src/components/organisms/NewTaskForm.tsx
+    # "Give the repo's full path, starting with /.": ui/src/domains/tasks/NewTaskForm.tsx
     Given the New task dialog is open
     Then "Where the work goes" shows 3 choices: "The default repo", "Another repo" and "A new repo"
     And the repo field is hidden while "The default repo" is picked
@@ -141,7 +141,7 @@ Feature: Tasks and the board
 
   @TASK-12 @user @manual
   Scenario: The label field on the form and in Details
-    # ui/src/components/molecules/LabelInput.tsx and ui/src/components/organisms/LabelEditor.tsx
+    # ui/src/components/molecules/LabelInput.tsx and ui/src/domains/tasks/LabelEditor.tsx
     Given the New task dialog is open and another task already carries the label docs
     When the user types "Bug" in Labels and presses Enter
     Then exactly 1 chip, bug, is shown in the field
@@ -169,7 +169,7 @@ Feature: Tasks and the board
 
   @TASK-14 @user @manual
   Scenario: Tasks as a list or a board, with the keys 1 and 2
-    # 1 and 2: ui/src/lib/shortcuts.ts lines 24 and 25, bound in ui/src/pages/TasksPage.tsx
+    # 1 and 2: ui/src/lib/shortcuts.ts lines 24 and 25, bound in ui/src/domains/tasks/TasksPage.tsx
     Given the Tasks page is open as a list
     When the user presses 2
     Then the board is shown and the List / Board control has Board pressed
@@ -181,7 +181,7 @@ Feature: Tasks and the board
 
   @TASK-15 @user @test
   Scenario: The board's columns, with the Backlog only when asked
-    # ui/src/components/organisms/TaskBoard.test.tsx
+    # ui/src/domains/tasks/TaskBoard.test.tsx
     # the 6 columns in order: internal/domain/tasks/column.go line 39
     Given a board whose columns are backlog, todo, in-progress, review, shipping and done
     And "Show the backlog" is not pressed
@@ -249,7 +249,7 @@ Feature: Tasks and the board
 
   @TASK-21 @user @manual
   Scenario: A drag the board does not allow
-    # "No agent in this team ships work": ui/src/components/organisms/TaskBoard.tsx line 153
+    # "No agent in this team ships work": ui/src/domains/tasks/TaskBoard.tsx line 153
     Given the board with a card of a team that has no agent that ships work
     When the user drags that card over Shipping
     Then the column does not accept the drop and its border is not marked as a target
@@ -278,7 +278,7 @@ Feature: Tasks and the board
 
   @TASK-24 @user @manual
   Scenario: Dropping a card on another column asks once, then moves it at once
-    # ui/src/components/organisms/TaskBoard.tsx DirectDialog and move
+    # ui/src/domains/tasks/TaskBoard.tsx DirectDialog and move
     Given the board with task-5 in In progress
     When the user drops task-5 on Review
     Then a dialog titled "Have task-5 reviewed next?" is shown with a note field and the buttons Send and Cancel
@@ -308,7 +308,7 @@ Feature: Tasks and the board
 
   @TASK-27 @user @test
   Scenario: The Shipping filter chip is there only while the board has the column
-    # ui/src/pages/TasksPage.test.tsx
+    # ui/src/domains/tasks/TasksPage.test.tsx
     Given a board without Shipping, and the address ?status=shipping
     Then the Shipping chip is hidden and All is the 1 chip pressed
     Given a board without Shipping but a task in it
@@ -342,8 +342,8 @@ Feature: Tasks and the board
 
   @TASK-30 @user @test
   Scenario: Search finds a task by its id, title, repo, agent or label, and shows epics as epic-N
-    # ui/src/pages/TasksPage.test.tsx
-    # what the search matches: ui/src/pages/TasksPage.tsx line 211
+    # ui/src/domains/tasks/TasksPage.test.tsx
+    # what the search matches: ui/src/domains/tasks/TasksPage.tsx line 211
     Given the list with the epic task-21, its story task-22 and the task task-30
     Then the ids shown are exactly epic-21, task-22 and task-30
     When the user types "epic-21" in "Filter tasks"
@@ -353,8 +353,8 @@ Feature: Tasks and the board
 
   @TASK-31 @user @manual
   Scenario: Filtering by a label or an epic, and the empty result
-    # ui/src/pages/TasksPage.tsx pickLabel, pickEpic and EmptyState; the chips: lines 262 and 263
-    # the 7 filters: ui/src/pages/TasksPage.tsx line 46, FILTERS
+    # ui/src/domains/tasks/TasksPage.tsx pickLabel, pickEpic and EmptyState; the chips: lines 262 and 263
+    # the 7 filters: ui/src/domains/tasks/TasksPage.tsx line 46, FILTERS
     Given the list with 1 task labelled bug and 1 without, and the key / to reach the search
     Then the chips are shown in the order All, Needs you, Working, Review, Shipping, Held, Done, each with its count
     When the user clicks the bug chip on a row
@@ -380,7 +380,7 @@ Feature: Tasks and the board
 
   @TASK-33 @user @manual
   Scenario: A task waiting for a slot wears the queued badge
-    # ui/src/components/molecules/StatusBadges.tsx QueuedBadge, shown in ui/src/pages/TasksPage.tsx and ui/src/components/molecules/TaskCard.tsx
+    # ui/src/components/molecules/StatusBadges.tsx QueuedBadge, shown in ui/src/domains/tasks/TasksPage.tsx and ui/src/components/molecules/TaskCard.tsx
     Given "Most running at once" set to 1 and 2 tasks started
     When the Tasks page is shown
     Then exactly 1 task wears the badge "queued", in the list and on its card
@@ -418,7 +418,7 @@ Feature: Tasks and the board
   Scenario: The keys: the palette and the terminal from anywhere, g chords, j, k and Enter, and nothing while typing
     # modKey K and modKey J are caught before a field or the terminal sees them: ui/src/shell/AdminShell.tsx lines 97 to 113; the other keys: lines 116 to 123
     # keys do nothing while typing, a field, a textarea, a select or the terminal: ui/src/lib/shortcuts.ts lines 33 to 37 and 49; Enter only with nothing focused: line 50; a chord's second key within 1200 ms: line 59
-    # the palette's keys, groups and "Nothing matches": ui/src/shell/CommandPalette.tsx lines 59 to 65 and 90; j, k and Enter on the Tasks and Agents lists: ui/src/pages/TasksPage.tsx line 242, ui/src/pages/AgentsPage.tsx line 99
+    # the palette's keys, groups and "Nothing matches": ui/src/shell/CommandPalette.tsx lines 59 to 65 and 90; j, k and Enter on the Tasks and Agents lists: ui/src/domains/tasks/TasksPage.tsx line 242, ui/src/pages/AgentsPage.tsx line 99
     Given any page
     When the user presses modKey K, even while typing in a field or the terminal
     Then the palette opens, the focus in "Search tasks, agents and commands", and the same keys close it
@@ -437,7 +437,7 @@ Feature: Tasks and the board
 
   @TASK-37 @user @manual
   Scenario: A task's page: the header, the facts under it and its 2 buttons
-    # ui/src/pages/TaskPage.tsx lines 289 to 303, the header; lines 367 to 398, the facts
+    # ui/src/domains/tasks/TaskPage.tsx lines 289 to 303, the header; lines 367 to 398, the facts
     # README.md, Use it, "A task"
     Given task-5 is open, with a worktree and the engineer at work
     When the page is shown
@@ -451,7 +451,7 @@ Feature: Tasks and the board
 
   @TASK-38 @user @manual
   Scenario: The tabs, exactly as rendered, and the one an epic adds
-    # ui/src/pages/TaskPage.tsx lines 443 to 456
+    # ui/src/domains/tasks/TaskPage.tsx lines 443 to 456
     Given task-5 is open with 2 shared files and 4 handoffs
     When the tabs are shown
     Then exactly 8 tabs read, in order: Coordinator, Activity, Terminal, Files, Handoffs, Actions, Events, Details
@@ -464,7 +464,7 @@ Feature: Tasks and the board
 
   @TASK-39 @user @manual
   Scenario: The plan down the left follows the agent's plan live
-    # ui/src/components/organisms/PlanRail.tsx lines 10 to 14 and 65 to 137; ui/src/lib/plan.ts readPlan
+    # ui/src/domains/tasks/PlanRail.tsx lines 10 to 14 and 65 to 137; ui/src/domains/tasks/plan.ts readPlan
     # README.md, Use it, "A task": each agent writes its plan before it starts and ticks it off
     Given task-5 with no turn yet
     Then the rail reads "No plan yet. Each agent writes its plan before it starts, and it shows here as it works."
@@ -492,7 +492,7 @@ Feature: Tasks and the board
 
   @TASK-41 @user @test
   Scenario: The tokens and turns under the header, with the pencil
-    # ui/src/pages/TaskPage.test.tsx "can change its budget and max turns while it isn't done" and "shows its tokens and turns, and changes neither"
+    # ui/src/domains/tasks/TaskPage.test.tsx "can change its budget and max turns while it isn't done" and "shows its tokens and turns, and changes neither"
     # ui/src/components/organisms/LimitEditor.tsx lines 36 to 52; the lists are @TASK-05's, from ui/src/lib/limits.ts lines 26 and 33
     Given a working task with a budget of 5000 tokens, 1200 used, and 8 max turns
     When the facts are shown
@@ -503,7 +503,7 @@ Feature: Tasks and the board
 
   @TASK-42 @user @test
   Scenario: Activity lists everything that happened, newest first, under bands that name the author
-    # ui/src/components/organisms/ActivityFeed.test.tsx "names every band's author as copy.md says, newest first", "narrows to the turn from its band, and from its continued band" and "narrowed, the band is the turn's heading alone, with no Show only"
+    # ui/src/domains/tasks/ActivityFeed.test.tsx "names every band's author as copy.md says, newest first", "narrows to the turn from its band, and from its continued band" and "narrowed, the band is the turn's heading alone, with no Show only"
     # ui/src/components/molecules/AuthorBand.tsx lines 12 to 27
     Given a task with turns by the coordinator, the engineer on another machine and the reviewer, with messages from the user between them
     When the Activity tab is shown
@@ -515,8 +515,8 @@ Feature: Tasks and the board
 
   @TASK-43 @user @test
   Scenario: Activity that cannot be read offers Try again
-    # ui/src/components/organisms/ActivityFeed.retry.test.tsx "a failed read, then Try again, then the feed, with focus on it and no other read" and "a retry that fails again shows the alert again; two quick clicks read once"
-    # ui/src/components/organisms/ActivityFeed.tsx lines 546 to 565
+    # ui/src/domains/tasks/ActivityFeed.retry.test.tsx "a failed read, then Try again, then the feed, with focus on it and no other read" and "a retry that fails again shows the alert again; two quick clicks read once"
+    # ui/src/domains/tasks/ActivityFeed.tsx lines 546 to 565
     Given the task's events answer 502 Bad Gateway
     When the Activity tab is shown
     Then an alert "Couldn't load the activity" with the server's words and a "Try again" button is shown
@@ -529,7 +529,7 @@ Feature: Tasks and the board
   @TASK-44 @user @test
   Scenario: Events are read a page at a time, and Load earlier reads the page before
     # internal/domain/tasks/tasksapi/events_api_test.go TestAnEventPageIsBoundedAndSaysWhetherThereIsMore
-    # ui/src/components/organisms/ActivityFeed.test.tsx "puts the way to read earlier events under the oldest row, in the scroller"
+    # ui/src/domains/tasks/ActivityFeed.test.tsx "puts the way to read earlier events under the oldest row, in the scroller"
     # ui/src/live/event-pages.test.ts "load earlier reads the page before the oldest held, until there is none"; the button is hidden without earlier: ui/src/components/molecules/LoadEarlier.tsx line 12
     # 500 events in a page, 2000 at most: internal/domain/tasks/tasksapi/events_api.go lines 18 and 19
     Given a task with 7 events, a refused proposal among them
@@ -543,8 +543,8 @@ Feature: Tasks and the board
 
   @TASK-45 @user @test
   Scenario: Handoffs shows each handoff as a card: who passed it to whom, and the turn it led to
-    # ui/src/components/organisms/HandoffTimeline.test.tsx "draws each step as an article named by who passed it to whom, and when", "says Led to with the facts of an ended turn" and "folds a brief at 8 lines, and reports and your messages at 10"
-    # 8 and 10 lines: ui/src/components/organisms/HandoffTimeline.tsx lines 35 and 36
+    # ui/src/domains/tasks/HandoffTimeline.test.tsx "draws each step as an article named by who passed it to whom, and when", "says Led to with the facts of an ended turn" and "folds a brief at 8 lines, and reports and your messages at 10"
+    # 8 and 10 lines: ui/src/domains/tasks/HandoffTimeline.tsx lines 35 and 36
     Given a task whose coordinator handed a brief to the engineer, whose turn-4 ended after 48 minutes with 14 actions and 210k tokens
     When the Handoffs tab is shown
     Then each step is an article named "<from> to <to>, <time>", newest first
@@ -553,7 +553,7 @@ Feature: Tasks and the board
 
   @TASK-46 @user @manual
   Scenario: Actions and Events list the raw records, newest first, and the empty tabs say so
-    # ui/src/pages/TaskPage.tsx lines 70 to 113, the columns; lines 462 to 543, the tabs
+    # ui/src/domains/tasks/TaskPage.tsx lines 70 to 113, the columns; lines 462 to 543, the tabs
     Given task-5 with 12 actions, 1 of them waiting for approval
     When the Actions tab is shown
     Then exactly 6 columns read Time, Turn, Agent, Tool, Command, Decision, the newest action first
@@ -568,8 +568,8 @@ Feature: Tasks and the board
 
   @TASK-47 @user @test
   Scenario: Details: the id, repo, epic, budget and turns, each with its control while the task is live
-    # ui/src/pages/TaskPage.test.tsx "can change its repo and epic", "shows an epic as epic-N, in the header and its details" and "shows a story as task-N, with its epic as epic-M, linking to task-M"
-    # ui/src/pages/TaskPage.tsx lines 547 to 582; the words "story of": line 317, which the test does not assert
+    # ui/src/domains/tasks/TaskPage.test.tsx "can change its repo and epic", "shows an epic as epic-N, in the header and its details" and "shows a story as task-N, with its epic as epic-M, linking to task-M"
+    # ui/src/domains/tasks/TaskPage.tsx lines 547 to 582; the words "story of": line 317, which the test does not assert
     Given a live task's Details tab
     Then a Change button is shown on the Repo row and a list named Epic is shown on the Epic row
     Given a story of task-9
@@ -580,8 +580,8 @@ Feature: Tasks and the board
 
   @TASK-48 @user @manual
   Scenario: Change repo moves the task between turns, and the Epic list files it
-    # ui/src/pages/TaskPage.tsx lines 627 to 672, RepoEditor; internal/domain/tasks/tasksapi/repo_api.go lines 18 to 28
-    # ui/src/components/organisms/EpicPicker.tsx lines 12 to 14 and 27 to 35; internal/domain/tasks/tasksapi/epics_api.go lines 62 and 68
+    # ui/src/domains/tasks/TaskPage.tsx lines 627 to 672, RepoEditor; internal/domain/tasks/tasksapi/repo_api.go lines 18 to 28
+    # ui/src/domains/tasks/EpicPicker.tsx lines 12 to 14 and 27 to 35; internal/domain/tasks/tasksapi/epics_api.go lines 62 and 68
     Given a live task's Details tab
     When the user clicks Change on the Repo row
     Then a field with the current repo is shown, and "Move the task" is disabled until the path differs
@@ -597,8 +597,8 @@ Feature: Tasks and the board
 
   @TASK-49 @user @test
   Scenario: Erase this task asks first, and shows what is left afterwards
-    # ui/src/pages/TaskPage.test.tsx "asks first, saying nothing undoes it and what goes, and erases nothing until you say so" and "once erased, shows the task erased with the time, what may be left, and the note on backups"
-    # ui/src/components/organisms/EraseTask.tsx lines 59 to 83; internal/domain/tasks/tasksapi/erase_api.go lines 46 to 102
+    # ui/src/domains/tasks/TaskPage.test.tsx "asks first, saying nothing undoes it and what goes, and erases nothing until you say so" and "once erased, shows the task erased with the time, what may be left, and the note on backups"
+    # ui/src/domains/tasks/EraseTask.tsx lines 59 to 83; internal/domain/tasks/tasksapi/erase_api.go lines 46 to 102
     Given task-1's Details tab, with "Erase this task" at the bottom
     When the user clicks "Erase this task…"
     Then a dialog "Erase task-1 for good?" is shown reading "Nothing undoes this."
@@ -613,7 +613,7 @@ Feature: Tasks and the board
   @TASK-50 @user @test
   Scenario: An epic with stories is not erased, and an erased task is gone from every route
     # internal/domain/tasks/tasksapi/erase_test.go TestAnEpicWithStoriesIsntErased and TestTheRoutesOnAnErasedTaskSayItIsGone
-    # ui/src/pages/TaskPage.test.tsx "read again, an erased task shows the server's 410 words, not that there is no such task"
+    # ui/src/domains/tasks/TaskPage.test.tsx "read again, an erased task shows the server's 410 words, not that there is no such task"
     # internal/domain/tasks/tasksapi/erase_api.go lines 110 to 137; internal/core/httpapi/httpapi.go NoTask (lines 96 to 102)
     Given epic task-3 with the live story task-2
     When the user erases task-3
@@ -628,9 +628,9 @@ Feature: Tasks and the board
 
   @TASK-51 @user @manual
   Scenario: A done task's page: what it still allows and what it no longer does
-    # ui/src/pages/TaskPage.tsx lines 417 to 425, the Done banner; line 596, the worktree; lines 507 to 515, the terminal
-    # ui/src/components/organisms/LimitEditor.tsx lines 39 and 56; ui/src/components/organisms/CoordinatorChat.tsx line 119; internal/domain/tasks/tasksapi/chat_api.go lines 36 to 45
-    # no Reopen on the page: ui/src/pages/TaskPage.tsx has none; the board's dialog: ui/src/components/organisms/TaskBoard.tsx line 283
+    # ui/src/domains/tasks/TaskPage.tsx lines 417 to 425, the Done banner; line 596, the worktree; lines 507 to 515, the terminal
+    # ui/src/components/organisms/LimitEditor.tsx lines 39 and 56; ui/src/domains/tasks/CoordinatorChat.tsx line 119; internal/domain/tasks/tasksapi/chat_api.go lines 36 to 45
+    # no Reopen on the page: ui/src/domains/tasks/TaskPage.tsx has none; the board's dialog: ui/src/domains/tasks/TaskBoard.tsx line 283
     Given task-5 is done, moved there by the user
     When the page is shown
     Then the banner reads exactly "Done · Moved to Done by you" with the summary, or "Shipped" if an agent pushed its work
@@ -645,8 +645,8 @@ Feature: Tasks and the board
 
   @TASK-52 @user @test
   Scenario: An archived task's page is read only
-    # ui/src/pages/TaskPage.test.tsx "marks it archived and offers nothing that writes", "keeps its repo and epic as they are" and "shares no files and takes none away"
-    # ui/src/pages/TaskPage.tsx lines 236 and 296; ui/src/components/organisms/CoordinatorChat.tsx lines 188 and 189
+    # ui/src/domains/tasks/TaskPage.test.tsx "marks it archived and offers nothing that writes", "keeps its repo and epic as they are" and "shares no files and takes none away"
+    # ui/src/domains/tasks/TaskPage.tsx lines 236 and 296; ui/src/domains/tasks/CoordinatorChat.tsx lines 188 and 189
     Given task-1 archived on a date
     When the page is shown
     Then the badge "Archived <date>" is shown

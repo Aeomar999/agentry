@@ -3,7 +3,7 @@ import { ChevronRight, ListChecks, Square, SquareCheck } from "lucide-react";
 import type { Turn } from "@/api/types";
 import { AgentName } from "@/components/molecules/AgentName";
 import { Mono } from "@/components/molecules/Mono";
-import { PlanEntry, planSections } from "@/lib/plan";
+import { PlanEntry, planSections } from "@/domains/tasks/plan";
 import { clockTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
 

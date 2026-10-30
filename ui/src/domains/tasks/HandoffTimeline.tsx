@@ -6,7 +6,7 @@ import { AgentName } from "@/components/molecules/AgentName";
 import { Avatar, isNeutral } from "@/components/molecules/Avatar";
 import { InlineMarkdown } from "@/components/molecules/Markdown";
 import { Mono } from "@/components/molecules/Mono";
-import { EntryText, TaskLinks } from "@/components/organisms/EntryText";
+import { EntryText, TaskLinks } from "@/domains/tasks/EntryText";
 import { clockMinutes, duration } from "@/lib/time";
 import { tokens } from "@/lib/tokens";
 import { cn } from "@/lib/cn";

@@ -6,7 +6,7 @@ Feature: Observability
     Given a task whose 2 turns have ended, each with the tokens its engine counted from its transcript
     When the task is read from the log
     Then the task's tokens used are exactly the sum of the 2 turns' tokens
-    # not under test, checked by hand: the sum is shown on the task's page (ui/src/pages/TaskPage.tsx line 373), in the list (ui/src/pages/TasksPage.tsx line 116) and on its card (ui/src/components/molecules/TaskCard.tsx line 78)
+    # not under test, checked by hand: the sum is shown on the task's page (ui/src/domains/tasks/TaskPage.tsx line 373), in the list (ui/src/domains/tasks/TasksPage.tsx line 116) and on its card (ui/src/components/molecules/TaskCard.tsx line 78)
     # README.md, Use it, Budgets and turn limits; internal/domain/tasks/split_test.go TestATurnWithOnlyATotalHasNoSplit
 
   @OBS-02 @test
@@ -75,8 +75,8 @@ Feature: Observability
     And a turn's band names the turn, the machine it ran on, whether it ended or runs, its tokens as "41k tokens" and its duration as "5m 00s"
     And clicking a turn's band asks for that turn alone, and narrowed to it the feed shows only that turn's band: yes
     But a task with no rows yet says "Nothing here yet"
-    # not under test, checked by hand: the Activity tab shows this feed (ui/src/pages/TaskPage.tsx line 490)
-    # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.test.tsx "names every band's author as copy.md says, newest first", "is one list of runs, one item each, with its band and its rows; no regions among them", "puts the turn's facts in the band: badge, tokens, and the duration for a phone", "narrows to the turn from its band, and from its continued band", "narrowed, the band is the turn's heading alone, with no Show only" and "a new task"
+    # not under test, checked by hand: the Activity tab shows this feed (ui/src/domains/tasks/TaskPage.tsx line 490)
+    # README.md, Use it, A task; ui/src/domains/tasks/ActivityFeed.test.tsx "names every band's author as copy.md says, newest first", "is one list of runs, one item each, with its band and its rows; no regions among them", "puts the turn's facts in the band: badge, tokens, and the duration for a phone", "narrows to the turn from its band, and from its continued band", "narrowed, the band is the turn's heading alone, with no Show only" and "a new task"
 
   @OBS-08 @test
   Scenario: A coordinator's handoff shows under its turn and offers the turn it led to
@@ -84,8 +84,8 @@ Feature: Observability
     When the Activity feed is shown
     Then the handoff is shown as the newest row under the coordinator's turn band, reading "coordinator to engineer on" the machine it named, with the instructions it gave
     And it carries a button "Show only turn-2": yes
-    # not under test, checked by hand: the button narrows the feed to that turn (ui/src/components/organisms/ActivityFeed.tsx line 410); the Activity tab shows this feed (ui/src/pages/TaskPage.tsx line 490)
-    # README.md, How it works, How a task moves; ui/src/components/organisms/ActivityFeed.test.tsx "keeps the coordinator's handoff under its turn's band, from → to with ' to ' said"
+    # not under test, checked by hand: the button narrows the feed to that turn (ui/src/domains/tasks/ActivityFeed.tsx line 410); the Activity tab shows this feed (ui/src/domains/tasks/TaskPage.tsx line 490)
+    # README.md, How it works, How a task moves; ui/src/domains/tasks/ActivityFeed.test.tsx "keeps the coordinator's handoff under its turn's band, from → to with ' to ' said"
 
   @OBS-09 @test
   Scenario: When the events cannot be read, Activity says so and offers Try again
@@ -94,8 +94,8 @@ Feature: Observability
     Then an alert is shown that says "Couldn't load the activity", quotes the server's answer and adds "If it keeps failing, check that Agentry is still running."
     And the two clicks make exactly 1 read, with focus kept on the feed through the loading
     And a retry that fails shows the alert again, and one that succeeds shows the rows with no alert
-    # not under test, checked by hand: the Activity tab shows this feed (ui/src/pages/TaskPage.tsx line 490)
-    # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.retry.test.tsx "a failed read, then Try again, then the feed, with focus on it and no other read" and "a retry that fails again shows the alert again; two quick clicks read once"; the words: ui/src/components/organisms/ActivityFeed.test.tsx "an error, with what the server said and Try again"
+    # not under test, checked by hand: the Activity tab shows this feed (ui/src/domains/tasks/TaskPage.tsx line 490)
+    # README.md, Use it, A task; ui/src/domains/tasks/ActivityFeed.retry.test.tsx "a failed read, then Try again, then the feed, with focus on it and no other read" and "a retry that fails again shows the alert again; two quick clicks read once"; the words: ui/src/domains/tasks/ActivityFeed.test.tsx "an error, with what the server said and Try again"
 
   @OBS-10 @test
   Scenario: The handoff path counts an agent's turns in a row as one step
@@ -103,7 +103,7 @@ Feature: Observability
     When its handoff path is shown
     Then the engineer's 2 turns in a row are one step marked "×2", in muted ink
     And the chevrons between the steps are hidden from screen readers, exactly 2 of them when the task is done
-    # not under test, checked by hand: the task page shows the path above its tabs (ui/src/pages/TaskPage.tsx line 438)
+    # not under test, checked by hand: the task page shows the path above its tabs (ui/src/domains/tasks/TaskPage.tsx line 438)
     # README.md, Use it, A task; ui/src/components/molecules/HandoffPath.test.tsx "counts an agent's turns in a row in muted ink, not faint" and "hides its chevrons from screen readers"
 
   @OBS-11 @test
@@ -114,7 +114,7 @@ Feature: Observability
     And the footer of the step to the engineer reads "Led to turn-4·engineer·48m 00s·14 actions·210k tokens", is named "Led to turn-4, engineer. Open its activity" for screen readers, and a click asks to open turn-4: yes
     And the step to the reviewer is shown as running in its footer, or as usage limit while its turn waits for one
     And a step with no turn, such as the user's to the coordinator, has no button
-    # README.md, Use it, A task; ui/src/components/organisms/HandoffTimeline.test.tsx "draws each step as an article named by who passed it to whom, and when", "says Led to with the facts of an ended turn", "opens the turn a footer names", "puts the running badge in a running turn's footer, and in its name", "says a turn waiting for the usage limit is waiting, not running" and "makes the footer the card's only button, and no button wraps the card"
+    # README.md, Use it, A task; ui/src/domains/tasks/HandoffTimeline.test.tsx "draws each step as an article named by who passed it to whom, and when", "says Led to with the facts of an ended turn", "opens the turn a footer names", "puts the running badge in a running turn's footer, and in its name", "says a turn waiting for the usage limit is waiting, not running" and "makes the footer the card's only button, and no button wraps the card"
 
   @OBS-12 @test
   Scenario: The coordinator's brief carries the trail, numbered, as who handed what to whom
@@ -267,8 +267,8 @@ Feature: Observability
     Then turn-1's row shows "53.2k" with "in 4", "cache write 12.8k", "cache read 40k" and "out 370" under it, exactly 4 parts
     And turn-2's row shows "1k" and no parts
     And the task page shows "in 4 · cache write 12.8k · cache read 40k · out 370 · 1k not split"
-    # not under test, checked by hand: that line is in the Tokens fact under the header (ui/src/pages/TaskPage.tsx line 376)
-    # README.md, Use it, Budgets and turn limits; ui/src/pages/TaskPage.test.tsx "shows each turn's split stacked under its total, and a turn with none as before" and "shows the task's split and what isn't split"
+    # not under test, checked by hand: that line is in the Tokens fact under the header (ui/src/domains/tasks/TaskPage.tsx line 376)
+    # README.md, Use it, Budgets and turn limits; ui/src/domains/tasks/TaskPage.test.tsx "shows each turn's split stacked under its total, and a turn with none as before" and "shows the task's split and what isn't split"
 
   @OBS-28 @test
   Scenario: A turn whose tokens could not be counted says why
@@ -290,7 +290,7 @@ Feature: Observability
     When its Details tab is shown
     Then under each turn's tokens it reads exactly "resumed", "forked", "resumed from task-2" or "forked from task-2", with the session id shown on hover; "forked from task-2" links to task-2's page, and a plain "resumed" has no link
     And the turn that started fresh reads "fresh: " and its reason, and the turn whose log said neither reads nothing of how it started
-    # Agentry task-206, sessions shared across an epic's stories (SESSION-02, SESSION-03); ui/src/pages/TaskPage.test.tsx "says which story a turn's session came from, and whether it forked it" and "shows under its tokens whether each turn resumed or started fresh, and nothing for a turn that didn't say"
+    # Agentry task-206, sessions shared across an epic's stories (SESSION-02, SESSION-03); ui/src/domains/tasks/TaskPage.test.tsx "says which story a turn's session came from, and whether it forked it" and "shows under its tokens whether each turn resumed or started fresh, and nothing for a turn that didn't say"
 
   @OBS-29 @test
   Scenario: A worker that connects is listed online, with its details and history

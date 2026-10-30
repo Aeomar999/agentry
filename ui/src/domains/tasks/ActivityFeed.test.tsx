@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import type { ReactNode } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import type { Show } from "@/lib/activity";
+import type { Show } from "@/domains/tasks/activity";
 import { layOut } from "@/test-layout";
 import { ActivityFeed, Now } from "./ActivityFeed";
 import { AGENTS, ITEMS } from "./ActivityFeed.fixtures";

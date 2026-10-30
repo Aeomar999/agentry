@@ -1,7 +1,7 @@
 Feature: Worktrees and branches
   Each task works in its own worktree on its own branch, shown on the Workspace page.
   # Sources: internal/platform/worktrees, internal/platform/workspace, internal/domain/tasks/tasksapi/workspace_api.go,
-  # ui/src/pages/WorkspacePage.tsx and their tests.
+  # ui/src/domains/tasks/workspace/WorkspacePage.tsx and their tests.
 
   # ---- Worktrees and branches ------------------------------------------------
 
@@ -75,7 +75,7 @@ Feature: Worktrees and branches
 
   @TREE-07 @user @manual
   Scenario: The Workspace page: the git view of the task's worktree
-    # ui/src/pages/WorkspacePage.tsx lines 23 to 29 and 130 to 196; ui/src/components/organisms/SourceControl.tsx lines 8 to 13
+    # ui/src/domains/tasks/workspace/WorkspacePage.tsx lines 23 to 29 and 130 to 196; ui/src/domains/tasks/workspace/SourceControl.tsx lines 8 to 13
     # files over 2 MB: internal/platform/workspace/workspace.go lines 163 and 185
     Given task-5 has a worktree with 2 changed files, 1 added file and 3 commits on its branch
     When the user clicks Workspace on the task's page
@@ -92,7 +92,7 @@ Feature: Worktrees and branches
 
   @TREE-08 @user @manual
   Scenario: Markdown and SVG previews in the Workspace
-    # ui/src/components/organisms/WorkspacePreview.tsx line 13, previewable; line 81, the outline; lines 169 to 272, the SVG
+    # ui/src/domains/tasks/workspace/WorkspacePreview.tsx line 13, previewable; line 81, the outline; lines 169 to 272, the SVG
     # zoom from 5% to 1600%: line 183; 3 backdrops: line 231
     Given a Markdown file with 4 headings and an SVG in the worktree
     When the user opens the Markdown file
@@ -107,7 +107,7 @@ Feature: Worktrees and branches
 
   @TREE-09 @user @manual
   Scenario: The Workspace dock: the coordinator, Claude, the terminal and the agents who worked there
-    # ui/src/pages/WorkspacePage.tsx lines 72 to 89; ui/src/components/organisms/WorkspaceDock.tsx lines 33 to 49 and 89 to 109
+    # ui/src/domains/tasks/workspace/WorkspacePage.tsx lines 72 to 89; ui/src/domains/tasks/workspace/WorkspaceDock.tsx lines 33 to 49 and 89 to 109
     # the dock's height is kept in this browser, 280 px at first, never under 120: WorkspacePage.tsx lines 75 to 78
     Given the Workspace of task-5 while the engineer works
     When the user presses Ctrl+J
@@ -122,8 +122,8 @@ Feature: Worktrees and branches
 
   @TREE-10 @user @test
   Scenario: A link in the chat opens a file in its Workspace preview
-    # ui/src/components/organisms/EntryText.test.tsx "sends a repo path to the Workspace preview", "links a task id the board knows and a SHA of the task's commits, and nothing else" and "draws a javascript: link as its label"
-    # ui/src/lib/links.ts lines 128 to 138, linkInto; ui/src/components/organisms/CoordinatorChat.tsx line 427
+    # ui/src/domains/tasks/EntryText.test.tsx "sends a repo path to the Workspace preview", "links a task id the board knows and a SHA of the task's commits, and nothing else" and "draws a javascript: link as its label"
+    # ui/src/lib/links.ts lines 128 to 138, linkInto; ui/src/domains/tasks/CoordinatorChat.tsx line 427
     # README.md, Use it, "Showing work"
     Given an agent wrote "[the design](docs/design.md)" in a report on task-75
     When the text is shown
@@ -134,7 +134,7 @@ Feature: Worktrees and branches
 
   @TREE-11 @user @manual
   Scenario: The Workspace button and the task's Stories tab for an epic
-    # ui/src/pages/TaskPage.tsx line 300, the button; lines 363 to 365, 444 and 484, Stories
+    # ui/src/domains/tasks/TaskPage.tsx line 300, the button; lines 363 to 365, 444 and 484, Stories
     # the count "1/3", titled "1 of 3 stories done": ui/src/components/molecules/StoryProgress.tsx lines 7 and 12
     # README.md, Use it, "Epics and stories": file tasks under an epic from the epic's Stories tab
     Given an epic with 3 stories, 1 done

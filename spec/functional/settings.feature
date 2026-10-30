@@ -33,7 +33,7 @@ Feature: Settings
   @SET-02 @user @test
   Scenario: Redact a text counts first, then redacts, and says what is left
     # ui/src/components/organisms/RedactText.test.tsx "shows the count first, redacts only once you say yes, then what it did and the note on backups"
-    # ui/src/pages/TaskPage.test.tsx "asks about the text marked on the page, in %s"
+    # ui/src/domains/tasks/TaskPage.test.tsx "asks about the text marked on the page, in %s"
     # internal/domain/settings/settingsapi/redact_api.go lines 37 to 68
     Given the user marked "sk-live-0123456789" on task-1's page
     When the user clicks "Redact a text" in the header

@@ -109,7 +109,7 @@ Feature: Usability
     Then scrollWidth equals clientWidth on each of the 4 pages, so the page itself does not scroll sideways
     And what is wider than the screen scrolls inside its own box, each with overflow-x-auto: the board's columns, the Plan's columns, the handoff path, a tab list, a code block and a table
     And a toast is at most the screen width minus 32 px wide
-    # README.md, Install, What Start Agentry does (a phone can open it); ui/index.html line 5 (viewport width=device-width); ui/src/components/organisms/TaskBoard.tsx line 147, pages/PlanPage.tsx line 128, molecules/HandoffPath.tsx line 41, molecules/Tabs.tsx line 13, molecules/CodeFence.tsx line 29, molecules/ResourceTable.tsx line 57, ui/src/shell/Toasts.tsx line 46; no test
+    # README.md, Install, What Start Agentry does (a phone can open it); ui/index.html line 5 (viewport width=device-width); ui/src/domains/tasks/TaskBoard.tsx line 147, domains/tasks/PlanPage.tsx line 128, molecules/HandoffPath.tsx line 41, molecules/Tabs.tsx line 13, molecules/CodeFence.tsx line 29, molecules/ResourceTable.tsx line 57, ui/src/shell/Toasts.tsx line 46; no test
 
   @USE-11 @manual
   Scenario: Under 768 px the sidebar is a drawer and the top bar keeps only its icons
@@ -128,7 +128,7 @@ Feature: Usability
     And under 1024 px the task's Plan rail is a band at most 256 px tall above the content, and at 1024 px a 320 px column beside it
     And under 1024 px the Details tab is 1 column of panels, and at 1024 px 2
     And in the Activity tab the time column is 56 px wide under 640 px, 104 px from 640 px and 120 px from 768 px
-    # README.md, Use it, Tasks; README.md, Use it, A task; ui/src/pages/TasksPage.tsx lines 109-120; pages/TaskPage.tsx lines 430-433, 546; organisms/ActivityFeed.tsx line 63; no test
+    # README.md, Use it, Tasks; README.md, Use it, A task; ui/src/domains/tasks/TasksPage.tsx lines 109-120; domains/tasks/TaskPage.tsx lines 430-433, 546; domains/tasks/ActivityFeed.tsx line 63; no test
 
   @USE-13 @test
   Scenario: A turn's band holds its facts, and its duration for a phone
@@ -136,8 +136,8 @@ Feature: Usability
     When the turn's band is shown
     Then the band holds the turn's id, the machine it ran on, "41k tokens" and its state "ended"
     And the duration "5m 00s" is in a span shown only under 768 px
-    # not under test, checked by hand: the id, the machine and the tokens are in spans shown only at 768 px and wider, and the state in a badge shown at every width, so a phone sees the duration and a wider screen the facts (ui/src/components/organisms/ActivityFeed.tsx lines 286-292)
-    # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.tsx lines 286-292; ui/src/components/organisms/ActivityFeed.test.tsx "puts the turn's facts in the band: badge, tokens, and the duration for a phone"
+    # not under test, checked by hand: the id, the machine and the tokens are in spans shown only at 768 px and wider, and the state in a badge shown at every width, so a phone sees the duration and a wider screen the facts (ui/src/domains/tasks/ActivityFeed.tsx lines 286-292)
+    # README.md, Use it, A task; ui/src/domains/tasks/ActivityFeed.tsx lines 286-292; ui/src/domains/tasks/ActivityFeed.test.tsx "puts the turn's facts in the band: badge, tokens, and the duration for a phone"
 
   @USE-14 @manual
   Scenario: A long word in a turn's start reason wraps instead of widening the table
@@ -145,7 +145,7 @@ Feature: Usability
     When the task page shows the Turns table at 375 px wide
     Then the reason breaks onto more lines under the turn's tokens, in 11 px muted ink, and the table is not widened
     And the page does not scroll sideways
-    # README.md, Use it, A task; ui/src/pages/TaskPage.tsx lines 136 (break-words, contain inline-size), 174; commit 0701ba9c; no test
+    # README.md, Use it, A task; ui/src/domains/tasks/TaskPage.tsx lines 136 (break-words, contain inline-size), 174; commit 0701ba9c; no test
 
   # --- Keys and focus ---
 
@@ -165,7 +165,7 @@ Feature: Usability
     Then ? shows the shortcuts overlay listing exactly 14 shortcuts in 4 groups, Anywhere, Go to, Tasks and Lists; n opens New task; / focuses the page's search field; g t, g a and g p go to Tasks, Agents and Policy when the second key comes within 1200 ms; 1 and 2 show Tasks as a list and as a board; j and k move the row cursor and Enter opens the row under it
     And the same keys typed in an input, a textarea, a select or an editable element, or with Ctrl, ⌘ or Alt held, run no shortcut
     And Esc closes the overlay, the palette, a dialog and a context menu; a context menu also closes on a click elsewhere or a scroll, and is kept 8 px inside the window's right edge
-    # README.md, Use it, Keys; ui/src/lib/shortcuts.ts lines 14-29 (the list the overlay shows), 33-37 (isTyping), 49, 59 (1200 ms), 72-80; ui/src/shell/AdminShell.tsx lines 117-125; pages/TasksPage.tsx line 184; ui/src/shell/ShortcutOverlay.tsx line 8; molecules/ContextMenu.tsx lines 5, 13, 30; no test presses these keys
+    # README.md, Use it, Keys; ui/src/lib/shortcuts.ts lines 14-29 (the list the overlay shows), 33-37 (isTyping), 49, 59 (1200 ms), 72-80; ui/src/shell/AdminShell.tsx lines 117-125; domains/tasks/TasksPage.tsx line 184; ui/src/shell/ShortcutOverlay.tsx line 8; molecules/ContextMenu.tsx lines 5, 13, 30; no test presses these keys
 
   @USE-17 @test
   Scenario: Esc or a press outside closes a dialog, unless it is held
@@ -199,7 +199,7 @@ Feature: Usability
     Then the element reached by Tab shows a 2 px solid line in the focus colour, brand orange in dark and a darker orange in light, and the clicked one shows none
     And the line sits 2 px outside the primary button, and inside where a scroller or a strip would clip it: 3 px inside a tab, 2 px inside a table row and 1 px inside the Activity scroller
     And a text field, textarea or select shows no line of its own; its wrapper's border turns the focus colour instead, so there is only one line
-    # ui/src/styles/globals.css lines 62-64, 121, 186-199; ui/src/components/atoms/Button.tsx line 15; molecules/ResourceTable.tsx line 99; molecules/Tabs.tsx line 24; organisms/ActivityFeed.tsx line 159; atoms/Input.tsx line 9; no test
+    # ui/src/styles/globals.css lines 62-64, 121, 186-199; ui/src/components/atoms/Button.tsx line 15; molecules/ResourceTable.tsx line 99; molecules/Tabs.tsx line 24; domains/tasks/ActivityFeed.tsx line 159; atoms/Input.tsx line 9; no test
 
   @USE-21 @test
   Scenario: Focus moved in a scroller that keeps focus in view is scrolled wholly into view
@@ -208,8 +208,8 @@ Feature: Usability
     Then the element under the band ends just below it, the one past the bottom just above the padding, and the one already in view moves 0 px
     And the element taller than the room is brought only up to the band, and inside the folded code only the lines above the cut count as what must be in view
     And a click that focuses an element scrolls 0 px
-    # not under test, checked by hand: the Activity feed's scroller keeps focus in view this way, with that padding (ui/src/components/organisms/ActivityFeed.tsx lines 148 and 159)
-    # README.md, Use it, A task; ui/src/lib/focus-in-view.ts; ui/src/components/organisms/ActivityFeed.tsx lines 148, 159; ui/src/pages/TaskPage.tsx line 464; ui/src/lib/focus-in-view.test.tsx "scrolls an element under the band down to just below it", "scrolls an element past the bottom up to just above the padding", "leaves an element already in view", "brings an element taller than the room only up to the band", "leaves an element whose lines shown above a fold's cut are in view", "scrolls only far enough to show the lines above a fold's cut" and "doesn't scroll for a click"
+    # not under test, checked by hand: the Activity feed's scroller keeps focus in view this way, with that padding (ui/src/domains/tasks/ActivityFeed.tsx lines 148 and 159)
+    # README.md, Use it, A task; ui/src/lib/focus-in-view.ts; ui/src/domains/tasks/ActivityFeed.tsx lines 148, 159; ui/src/domains/tasks/TaskPage.tsx line 464; ui/src/lib/focus-in-view.test.tsx "scrolls an element under the band down to just below it", "scrolls an element past the bottom up to just above the padding", "leaves an element already in view", "brings an element taller than the room only up to the band", "leaves an element whose lines shown above a fold's cut are in view", "scrolls only far enough to show the lines above a fold's cut" and "doesn't scroll for a click"
 
   @USE-22 @test
   Scenario: The Activity scroller is a Tab stop named by its heading
@@ -217,8 +217,8 @@ Feature: Usability
     When its scroller is focused
     Then the scroller is a Tab stop with tabIndex 0, a region named "Activity" through aria-labelledby from the tab's heading, with no aria-label of its own
     And focusing the scroller itself moves it 0 px
-    # not under test, checked by hand: the Activity tab shows this feed (ui/src/pages/TaskPage.tsx line 490); every agent chip in the bands is aria-hidden (ui/src/components/molecules/Avatar.tsx line 20): the test checks each chip it finds, not that it finds any
-    # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.tsx lines 144-159; ui/src/components/organisms/ActivityFeed.test.tsx "makes the scroller a Tab stop named Activity, so the keyboard can scroll rows with nothing focusable", "names the scroller by the tab's heading, so the name has one source" and "hides chips from screen readers"
+    # not under test, checked by hand: the Activity tab shows this feed (ui/src/domains/tasks/TaskPage.tsx line 490); every agent chip in the bands is aria-hidden (ui/src/components/molecules/Avatar.tsx line 20): the test checks each chip it finds, not that it finds any
+    # README.md, Use it, A task; ui/src/domains/tasks/ActivityFeed.tsx lines 144-159; ui/src/domains/tasks/ActivityFeed.test.tsx "makes the scroller a Tab stop named Activity, so the keyboard can scroll rows with nothing focusable", "names the scroller by the tab's heading, so the name has one source" and "hides chips from screen readers"
 
   @USE-23 @test
   Scenario: A folded entry keeps only what is visible in the Tab order

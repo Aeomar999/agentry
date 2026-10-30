@@ -149,7 +149,7 @@ func walkEvents(t *testing.T, server http.Handler, id, query string) eventWalk {
 }
 
 // chatTypes is the ?type= query of the types the chat reads, from the
-// page's own list of them (CHAT_TYPES in ui/src/lib/chat.ts).
+// page's own list of them (CHAT_TYPES in ui/src/domains/tasks/chat.ts).
 func chatTypes(t *testing.T) string {
 	t.Helper()
 	source, err := os.ReadFile(filepath.Join("..", "..", "ui", "src", "lib", "chat.ts"))

@@ -9,7 +9,7 @@ import { api } from "@/api/client";
 import type { Agent, BoardColumn, TaskSummary } from "@/api/types";
 import { cn } from "@/lib/cn";
 import { useToast } from "@/shell/Toasts";
-import { rankAt } from "@/lib/rank";
+import { rankAt } from "@/domains/tasks/rank";
 import { DropLine, slotAt, slotIndex } from "@/lib/drag";
 import { DONE_DAYS, onBoard } from "@/lib/epics";
 import { shownEpic, shownId } from "@/lib/shown-id";

@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { LogEvent, TaskDetail } from "@/api/types";
-import { activityOf } from "@/lib/activity";
+import { activityOf } from "@/domains/tasks/activity";
 import { EventPages } from "@/live/event-pages";
 import { useEvents } from "@/live/use-events";
 import { layOut } from "@/test-layout";

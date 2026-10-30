@@ -16,7 +16,7 @@ import { Markdown } from "@/components/molecules/Markdown";
 import { Mono } from "@/components/molecules/Mono";
 import { api } from "@/api/client";
 import type { TaskDetail } from "@/api/types";
-import { CHAT_TYPES, ChatEntry, ChatItem, chatOf, threadOf } from "@/lib/chat";
+import { CHAT_TYPES, ChatEntry, ChatItem, chatOf, threadOf } from "@/domains/tasks/chat";
 import { clockTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { linkInto } from "@/lib/links";

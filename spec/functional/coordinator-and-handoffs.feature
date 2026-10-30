@@ -2,7 +2,7 @@ Feature: The coordinator and its handoffs
   An ordinary agent that reads every report and ends each turn with a decision the loop carries out:
   a task's life, briefs, reports, issues, safety stops and limits.
   # Sources: internal/runtime/coordinator, internal/runtime/watchdog, internal/domain/tasks,
-  # internal/domain/tasks/tasksapi/chat_api.go, ui/src/components/organisms/CoordinatorChat.tsx and
+  # internal/domain/tasks/tasksapi/chat_api.go, ui/src/domains/tasks/CoordinatorChat.tsx and
   # their tests.
 
   # ---- A task's life ---------------------------------------------------------
@@ -83,7 +83,7 @@ Feature: The coordinator and its handoffs
 
   @HANDOFF-09 @user @manual
   Scenario: The chat's field, its status line and the message it refuses
-    # ui/src/components/organisms/CoordinatorChat.tsx lines 107 to 124, the status and the hint; line 37, the 3 suggestions
+    # ui/src/domains/tasks/CoordinatorChat.tsx lines 107 to 124, the status and the hint; line 37, the 3 suggestions
     # a blank message: internal/domain/tasks/tasksapi/chat_api.go lines 27 to 30
     Given task-5 is open on the Coordinator tab while the engineer works
     Then the status under the coordinator's name reads exactly "engineer is working on it"
@@ -217,7 +217,7 @@ Feature: The coordinator and its handoffs
     # Steps: on a task with Max turns 24, have the coordinator assign the engineer and the engineer end each turn with
     # the report "still broken", 12 times over. Open the task's Events tab: no issue.raised row, and the last
     # task.needs_you row has "limit":"turns" and the question "This task has had 24 of its 24 turns without finishing"
-    # (internal/runtime/coordinator/next.go). The page says Waiting for you and Turns since your answer reads "24 of 24 turns", in red (internal/domain/tasks/summary.go atTurnLimit; ui/src/pages/TaskPage.tsx line 386).
+    # (internal/runtime/coordinator/next.go). The page says Waiting for you and Turns since your answer reads "24 of 24 turns", in red (internal/domain/tasks/summary.go atTurnLimit; ui/src/domains/tasks/TaskPage.tsx line 386).
 
   # ---- Safety stops and limits -----------------------------------------------
 

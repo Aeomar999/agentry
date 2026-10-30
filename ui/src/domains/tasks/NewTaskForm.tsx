@@ -14,7 +14,7 @@ import { IDEAS, addTeam, missingProfilesOf, teamMadeFrom, teamsOf, useTeamWith }
 import { LimitSelect } from "@/components/molecules/LimitSelect";
 import { LimitChoice, LimitKind, SCALES, choiceOf, limitOf, sent } from "@/lib/limits";
 import { LabelInput } from "@/components/molecules/LabelInput";
-import { knownLabels } from "@/lib/labels";
+import { knownLabels } from "@/domains/tasks/labels";
 import { shownEpic, shownId } from "@/lib/shown-id";
 import { useResource } from "@/live/use-resource";
 import { modKey } from "@/lib/shortcuts";

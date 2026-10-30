@@ -1,7 +1,7 @@
 import type { TaskDetail, TaskSummary } from "@/api/types";
 import { Select } from "@/components/atoms/Select";
 import { useResource } from "@/live/use-resource";
-import { fileUnder } from "@/lib/epic-api";
+import { fileUnder } from "@/domains/tasks/epic-api";
 import { shownEpic } from "@/lib/shown-id";
 import { useToast } from "@/shell/Toasts";
 

@@ -5,7 +5,7 @@ import { LabelList } from "@/components/molecules/LabelChip";
 import { LabelInput } from "@/components/molecules/LabelInput";
 import { api } from "@/api/client";
 import type { TaskSummary } from "@/api/types";
-import { knownLabels } from "@/lib/labels";
+import { knownLabels } from "@/domains/tasks/labels";
 import { useResource } from "@/live/use-resource";
 import { useToast } from "@/shell/Toasts";
 

@@ -120,7 +120,7 @@ Feature: Performance
     Then each of the 3 paths is read exactly once for all its watchers on the first read, and once more for the 1 event
     And events 42 to 50 give exactly 1 more read once the read for 41 answers, not 1 each, and the read out is not aborted
     And a failed read shows its error, keeps the last data and is read again when the log moves: yes
-    # not under test, checked by hand: until its first read answers, the tasks list says "Loading the tasks…" instead of showing an empty table (ui/src/pages/TasksPage.tsx line 287)
+    # not under test, checked by hand: until its first read answers, the tasks list says "Loading the tasks…" instead of showing an empty table (ui/src/domains/tasks/TasksPage.tsx line 287)
 
   @PERF-16 @test
   Scenario: Listing ideas reads the state in memory and sends no query to the database

@@ -1,8 +1,8 @@
-import { onMachine } from "./machines";
+import { onMachine } from "@/lib/machines";
 import type { Action, LogEvent, TaskDetail, Turn } from "@/api/types";
 import { readPlan } from "./plan";
-import { limitText } from "./time";
-import { tokens } from "./tokens";
+import { limitText } from "@/lib/time";
+import { tokens } from "@/lib/tokens";
 
 // A task's activity: its event log, or the newest part of it, read as rows
 // a person follows, oldest first (sections groups them by author, newest
