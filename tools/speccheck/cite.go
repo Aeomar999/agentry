@@ -179,6 +179,7 @@ type citer struct {
 	ignored []string            // top folders .gitignore leaves out, read once
 	paths   int                 // cited paths checked
 	tests   int                 // cited Go tests checked
+	sourced map[string]string   // each path a Sources names, outside proposals/, to the first file naming it
 }
 
 // A testFile is a cited test file as it was read.
@@ -188,7 +189,7 @@ type testFile struct {
 }
 
 func newCiter(root string) *citer {
-	return &citer{root: root, files: map[string]testFile{}}
+	return &citer{root: root, files: map[string]testFile{}, sourced: map[string]string{}}
 }
 
 // problems checks a @test scenario's citations: every cited path exists,

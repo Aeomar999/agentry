@@ -21,7 +21,10 @@
 //
 // It also reports a functional file with no "# Sources:" comment, and a
 // path that a feature file's Sources names and the repo doesn't have, in
-// any file, proposals/ too.
+// any file, proposals/ too. It reports a Go package under internal/domain
+// or internal/extensions that no Sources outside proposals/ names, unless
+// the folder's README.md lists it under "Code with no spec yet", a list
+// that may only shrink.
 //
 // A file directly under the folder's proposals/ holds a feature that is
 // agreed and not built. Any file name is allowed there, and its scenarios

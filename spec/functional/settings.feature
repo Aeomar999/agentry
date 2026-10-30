@@ -3,6 +3,7 @@ Feature: Settings
   # Sources: internal/extensions, internal/web/extensions_api.go,
   # internal/web/redact_api.go, internal/web/redact_log_api.go,
   # internal/core/store/redact.go, internal/core/rules/redact_rules.go,
+  # internal/domain/settings/settingsfile,
   # ui/src/pages/SettingsPage.tsx, ui/src/components/organisms/RedactText.tsx,
   # ui/src/components/organisms/RedactLog.tsx and their tests.
 

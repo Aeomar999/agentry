@@ -145,6 +145,8 @@ In a `@test` scenario, the check fails on a path that does not exist (`cited pat
 
 Every functional file names the code behind it in a `# Sources:` comment under its description, ending with `and their tests.`, and the check fails on a functional file without one. The check reads it up to the line that ends with a full stop, or to a blank line, one that isn't a comment or a `# ----` rule. Every word in it but `Sources`, `and`, `their`, `its` and `tests` is a path from the repo root, with each part's case as written, so a typo such as `intenal/x` or `Internal/x`, a bare `TaskPage.tsx` or a stray word fails. It fails, in any feature file, on a path that does not exist (`Sources names internal/x, which doesn't exist`), on one that starts with `./`, and on a word that is not a path into the repo: `/`, one that starts with `/`, or one with an empty, `.` or `..` part, such as `internal//x` (`Sources names /, which isn't a path into the repo`).
 
+Every Go package under `internal/domain` and `internal/extensions` is named by the Sources of a feature file outside `spec/proposals`, as its folder: a package nobody specified is either dead or missing its spec. A folder names its own package and not its subpackages, so `internal/extensions` is the framework, not `internal/extensions/ideas`, and `internal/domain/workers` does not name `internal/domain/workers/workerlink`; a file such as `internal/domain/tasks/resume.go` names no package. A test helper, a `<name>test` package beside its `<name>` such as `taskstest`, needs no Sources. The check fails on a package no Sources names (`internal/x is named by no feature file's # Sources: line`) unless it is on the list below, Code with no spec yet.
+
 Line numbers go stale as dev moves, so a new scenario cites a function or a test by name instead. The check fails on `line N` or `lines N`, in any case, or on a path with a line number after it such as `internal/x/x.go:42` or `internal/x/x.go:3-5`, in a comment line of any scenario numbered above the last ID each file had when this rule came in, or, for a functional file, when the files were regrouped by feature: TASK 55, EPIC 19, APPROVE 7, IDEA 17, TEAM 14, POLICY 46, SESSION 5, HANDOFF 42, TURN 19, TREE 12, MACHINE 34, FILES 8, SIGNIN 7, NOTIFY 3, SET 4, TOOLS 54, REL 54, SEC 68, OPS 42, PERF 16, LIM 35, USE 29, COMPAT 27 and OBS 34, and PROP 0, so the rule holds for every proposal. These numbers are fixed, in `lastIDBeforeLineRule` in `tools/speccheck/rules.go`, and the scenarios at or below them keep their line numbers. A step is not a citation, so a Then such as "line 1 of the report is the verdict" passes.
 
 A passing run prints the scenarios per file, the totals per check tag for the baseline and then, on a line of their own, for the proposals, and exits 0:
@@ -168,3 +170,9 @@ exit status 1
 ```
 
 The last line is `go run` reporting the exit code.
+
+## Code with no spec yet
+
+The packages under `internal/domain` and `internal/extensions` that no feature file's Sources names yet, one per line as a path from the repo root in backquotes. The list may only shrink: when a feature file's Sources names an entry, the entry comes off in the same change. The check fails on an entry a Sources names, on one that is no such package, and on one that was not on the list when this rule came in (`noSpecYet` in `tools/speccheck/specified.go`).
+
+- `internal/extensions/schedules`: comes off when someone writes `schedules.feature`.

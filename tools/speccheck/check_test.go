@@ -642,10 +642,11 @@ func TestATargetTagOutsideProposalsFails(t *testing.T) {
 
 func TestEveryPathAFeaturesSourcesNamesExists(t *testing.T) {
 	repo := map[string]string{
-		"../internal/domain/tasks/task.go": "package tasks\n",
-		"../ui/src/pages/TaskPage.tsx":     "",
-		"../README.md":                     "# Agentry\n",
-		"../scripts/build.sh":              "",
+		// No Go file, so no package that every case would have to name.
+		"../internal/domain/tasks/README.md": "",
+		"../ui/src/pages/TaskPage.tsx":       "",
+		"../README.md":                       "# Agentry\n",
+		"../scripts/build.sh":                "",
 	}
 	feature := func(sources string) string {
 		return strings.Replace(goodScenario, "  # Sources: internal/web and its tests.\n", sources+"\n", 1)
@@ -722,4 +723,61 @@ func TestEveryPathAFeaturesSourcesNamesExists(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEveryDomainAndExtensionPackageIsNamedBySources(t *testing.T) {
+	repo := map[string]string{
+		"../internal/domain/tasks/task.go":                "package tasks\n",
+		"../internal/domain/tasks/resume.go":              "package tasks\n",
+		"../internal/domain/tasks/taskstest/taskstest.go": "package taskstest\n",
+		"../internal/domain/tasks/waitlist/waitlist.go":   "package waitlist\n",
+		"../internal/domain/tasks/only/only_test.go":      "package only\n",
+		"../internal/domain/tasks/testdata/fixture.go":    "package fixture\n",
+		"../internal/extensions/extension.go":             "package extensions\n",
+		"../internal/extensions/schedules/schedules.go":   "package schedules\n",
+		"../internal/extensions/schedules/schedules.toml": "",
+	}
+	const list = "# The spec\n\n## Code with no spec yet\n\nWhat no Sources names.\n\n- `internal/extensions/schedules`: one day.\n"
+	feature := func(sources string) string {
+		return strings.Replace(goodScenario, "  # Sources: internal/web and its tests.\n", "  # Sources: "+sources+" and their tests.\n", 1)
+	}
+	all := "internal/web, internal/domain/tasks, internal/domain/tasks/waitlist/, internal/extensions"
+	for name, c := range map[string]struct {
+		sources, readme, proposal string
+		want                      []string
+	}{
+		"every package named or listed": {all, list, "", nil},
+		"no README, so no list": {all, "", "", []string{
+			"README.md:1: internal/extensions/schedules is named by no feature file's # Sources: line; name it in the Sources of the feature file that specifies it"}},
+		"a folder doesn't name its subpackages": {"internal/web, internal/domain/tasks, internal/extensions", list, "", []string{
+			"README.md:3: internal/domain/tasks/waitlist is named by no feature file's # Sources: line"}},
+		"a file doesn't name its package": {"internal/web, internal/domain/tasks/resume.go, internal/domain/tasks/waitlist, internal/extensions", list, "", []string{
+			"README.md:3: internal/domain/tasks is named by no feature file's # Sources: line"}},
+		"a proposal's Sources names nothing": {"internal/web, internal/domain/tasks, internal/domain/tasks/waitlist", list, "internal/extensions", []string{
+			"README.md:3: internal/extensions is named by no feature file's # Sources: line"}},
+		"a listed entry a Sources names": {all + ", internal/extensions/schedules", list, "", []string{
+			"spec/functional/tasks-and-board.feature's Sources names it; take it off the list"}},
+		"an entry added to the list": {all, list + "- `internal/domain/tasks`\n", "", []string{
+			"README.md:8: internal/domain/tasks is on Code with no spec yet, which may only shrink; name it in the Sources of the feature file that specifies it"}},
+		"an entry under a later heading is no entry": {all, list + "\n## Later\n\n- `internal/domain/gone`\n", "", nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			files := maps.Clone(repo)
+			files["functional/tasks-and-board.feature"] = feature(c.sources)
+			if c.readme != "" {
+				files["README.md"] = c.readme
+			}
+			if c.proposal != "" {
+				files["proposals/later.feature"] = strings.Replace(goodProposal, "  # Sources: internal/web and its tests.\n", "  # Sources: "+c.proposal+" and its tests.\n", 1)
+			}
+			expectProblems(t, problemsOf(t, files), c.want...)
+		})
+	}
+}
+
+func TestAListedEntryThatIsNoPackageFails(t *testing.T) {
+	expectProblems(t, problemsOf(t, map[string]string{
+		"functional/tasks-and-board.feature": goodScenario,
+		"README.md":                          "## Code with no spec yet\n\n- `internal/extensions/schedules`\n",
+	}), "README.md:3: internal/extensions/schedules is on Code with no spec yet, and is no package under internal/domain or internal/extensions; take it off the list")
 }

@@ -35,7 +35,8 @@ type Result struct {
 }
 
 // Check walks the spec folder and judges every feature file in it, then
-// every file for an em-dash. Cited paths are read from the folder's parent,
+// every file for an em-dash, then checks that a feature file's Sources
+// names every package under specifiedFolders. Cited paths are read from the folder's parent,
 // the repo root. The error is for a folder that cannot be read, not for a
 // spec that fails: that is in the problems.
 func Check(folder string) (Result, error) {
@@ -57,6 +58,11 @@ func Check(folder string) (Result, error) {
 		return nil
 	})
 	result.Paths, result.Tests = cites.paths, cites.tests
+	if err != nil {
+		return result, err
+	}
+	unspecified, err := cites.unspecifiedProblems(folder)
+	result.Problems = append(result.Problems, unspecified...)
 	return result, err
 }
 
@@ -80,6 +86,9 @@ func checkFeature(result *Result, seen map[string]string, cites *citer, folder, 
 		result.Problems = append(result.Problems, Problem{path, 1, "unknown feature file name; the known names are " + knownNames()})
 	}
 	result.Problems = append(result.Problems, cites.sourcesProblems(path, text, filepath.Base(filepath.Dir(path)) == "functional")...)
+	if !proposal {
+		cites.nameSources(path, text)
+	}
 	for _, l := range outlines {
 		result.Problems = append(result.Problems, Problem{path, l.number, "Scenario Outline is not used in this spec: write one Scenario per case"})
 	}
