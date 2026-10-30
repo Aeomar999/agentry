@@ -120,7 +120,7 @@ Feature: Reliability
     Then the last event of the task is turn.limited with error rate_limit and resetsAt at 3:00 UTC
     And the turn is still open: yes
     And the task's count of issues in a row is 0
-    # internal/hooks/handler_test.go TestAUsageLimitIsRecordedWithItsResetTime
+    # internal/domain/policy/hooks/handler_test.go TestAUsageLimitIsRecordedWithItsResetTime
 
   @REL-11 @test
   Scenario: A limited turn is retried once, 1 minute after the engine's reset time
@@ -157,20 +157,20 @@ Feature: Reliability
 
   @REL-14 @test
   Scenario: A turn that hits the limit again straight after its retry is an issue, not another wait
-    # internal/hooks/handler.go: a second limit with no work since the retry ends the turn as an issue
+    # internal/domain/policy/hooks/handler.go: a second limit with no work since the retry ends the turn as an issue
     Given a turn retried by the watchdog when its limit reset
     When its engine reports the usage limit again before any tool call
     Then the turn ends as 1 issue, and no second wait is started
-    # internal/hooks/handler_test.go TestALimitStraightAfterTheRetryIsAnIssue
+    # internal/domain/policy/hooks/handler_test.go TestALimitStraightAfterTheRetryIsAnIssue
 
   @REL-46 @test
   Scenario: A retried turn that worked before hitting the limit again waits for the next reset
-    # internal/hooks/handler.go: a tool call after the retry means the retry worked
+    # internal/domain/policy/hooks/handler.go: a tool call after the retry means the retry worked
     Given a turn retried by the watchdog when its limit reset, which made a tool call after the retry
     When its engine reports the usage limit again
     Then the turn is kept open and limited, with its retry cleared: yes
     # not under test, checked by hand: the watchdog waits out any limited turn (internal/watchdog/watchdog.go lines 111 and 160)
-    # internal/hooks/handler_test.go TestALimitAfterWorkSinceTheRetryIsWaitedOut
+    # internal/domain/policy/hooks/handler_test.go TestALimitAfterWorkSinceTheRetryIsWaitedOut
 
   @REL-15 @test
   Scenario: A limited turn that the log refuses to resume is a stall 10 minutes after the reset
@@ -251,7 +251,7 @@ Feature: Reliability
 
   @REL-20 @test
   Scenario: An action left asking the user when the server stops is held for the user
-    # internal/hooks/orphans.go HoldOrphanedAsks runs at every start
+    # internal/domain/policy/hooks/orphans.go HoldOrphanedAsks runs at every start
     # cmd/agentry/serve.go serveUntilDone: requests share the server's context, with 2 seconds to shut down
     Given an action the policy asked the user about, with its hook call waiting
     When the hook call's context ends, as when the server stops
@@ -261,7 +261,7 @@ Feature: Reliability
     Then the action is held for the user: yes
     And its decision is still undecided, and 0 hooks are waiting on it
     # not under test, checked by hand: serve holds them before it serves (cmd/agentry/serve.go line 200)
-    # internal/hooks/handler_test.go TestARestartHoldsAsksNoHookIsWaitingFor
+    # internal/domain/policy/hooks/handler_test.go TestARestartHoldsAsksNoHookIsWaitingFor
 
   @REL-21 @test
   Scenario: After a start, a worker that was online is waited for, not refused at once
@@ -495,18 +495,18 @@ Feature: Reliability
 
   @REL-35 @test
   Scenario: An ask the user does not answer in time is held for the user, and the agent is told no
-    # internal/hooks/handler.go hold and Held
+    # internal/domain/policy/hooks/handler.go hold and Held
     Given an agent's command the policy asks the user about
     When no answer comes before the hook's wait runs out
     Then the hook's reply is deny, saying the command is held for the user's approval and not to retry it now
     And the action is recorded as held, with no decision yet
     And the task's status shown is Needs you
     And 0 hooks are waiting on the task
-    # README.md, What happens to one action; internal/hooks/handler_test.go TestAnAskThatTimesOutIsHeldForTheUser; not to retry: TestAnAskIsHeldBeforeTheDeadlineTheHookSent
+    # README.md, What happens to one action; internal/domain/policy/hooks/handler_test.go TestAnAskThatTimesOutIsHeldForTheUser; not to retry: TestAnAskIsHeldBeforeTheDeadlineTheHookSent
 
   @REL-36 @test
   Scenario: A late approval hands the command back and lets that exact command through once
-    # internal/hooks/handler.go usePass, reason "the user approved this earlier, after it timed out"
+    # internal/domain/policy/hooks/handler.go usePass, reason "the user approved this earlier, after it timed out"
     Given a held command, git push origin HEAD:dev, that the user approves after it timed out
     Then the task's coordinator is handed the full command back: yes
     When the agent asks for the same command again before its next turn
@@ -517,24 +517,24 @@ Feature: Reliability
     Then it is allowed with a reason saying the user approved this earlier: yes
     When the agent asks for the same command once more
     Then the pass is used: yes, and the user is asked again
-    # not under test, checked by hand: the reason goes on ", after it timed out" (internal/hooks/handler.go line 375)
-    # README.md, What happens to one action; internal/hooks/handler_test.go TestALateApprovalLetsTheSameCommandThroughOnce
+    # not under test, checked by hand: the reason goes on ", after it timed out" (internal/domain/policy/hooks/handler.go line 375)
+    # README.md, What happens to one action; internal/domain/policy/hooks/handler_test.go TestALateApprovalLetsTheSameCommandThroughOnce
 
   @REL-37 @test
   Scenario: A pass never overrides a denial
-    # internal/hooks/handler.go: the policy is judged first, the pass skips only the question to the user
+    # internal/domain/policy/hooks/handler.go: the policy is judged first, the pass skips only the question to the user
     Given a held command the user approved late, and a policy that now denies that command
     When the agent asks for it in its next turn
     Then it is denied: yes, and the pass is kept for a later ask
-    # README.md, What happens to one action; internal/hooks/handler_test.go TestAPassDoesntOverrideADenial
+    # README.md, What happens to one action; internal/domain/policy/hooks/handler_test.go TestAPassDoesntOverrideADenial
 
   @REL-51 @test
   Scenario: A late denial gives no pass
-    # internal/hooks/handler.go: only a late approval makes a pass
+    # internal/domain/policy/hooks/handler.go: only a late approval makes a pass
     Given a held command the user denied late
     When the agent asks for it in its next turn
     Then it passes: no
-    # README.md, What happens to one action; internal/hooks/handler_test.go TestALateDenialGivesNoPass
+    # README.md, What happens to one action; internal/domain/policy/hooks/handler_test.go TestALateDenialGivesNoPass
 
   # A held reply before a hook's deadline
 
@@ -548,7 +548,7 @@ Feature: Reliability
 
   @REL-39 @test
   Scenario: The server stops waiting on an ask 5 seconds before the hook's deadline, or a quarter of a short one
-    # internal/hooks/handler.go replyMargin = 5 seconds, answerWithin
+    # internal/domain/policy/hooks/handler.go replyMargin = 5 seconds, answerWithin
     Given a hook call with a deadline of 20 seconds
     Then the server waits at most 15 seconds
     Given a hook call with a deadline of 1 second
@@ -557,17 +557,17 @@ Feature: Reliability
     Then the server waits at most 29 minutes and 45 seconds
     Given a hook call with no deadline, or a negative one
     Then the server's wait has no limit of its own: yes
-    # internal/hooks/handler_test.go TestTheServerAnswersBeforeTheHooksDeadline
+    # internal/domain/policy/hooks/handler_test.go TestTheServerAnswersBeforeTheHooksDeadline
 
   @REL-40 @test
   Scenario: An ask is held and answered before the deadline the hook sent
-    # internal/hooks/handler.go Handle and hold
+    # internal/domain/policy/hooks/handler.go Handle and hold
     Given a hook call asking about a command with a deadline of 1 second and no answer from the user
     When the server handles it
     Then the reply comes in under 1 second: yes
     And the reply is deny and says not to retry: yes
     And the action is held: yes
-    # internal/hooks/handler_test.go TestAnAskIsHeldBeforeTheDeadlineTheHookSent
+    # internal/domain/policy/hooks/handler_test.go TestAnAskIsHeldBeforeTheDeadlineTheHookSent
 
   # A worker going offline during a turn
 

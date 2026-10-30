@@ -94,7 +94,7 @@ Feature: Performance
     When the read-only profile judges it
     Then the verdict comes within 1 second, 30 under the race detector
     And the call is asked, as a variable with too many values is unknown, under read-only, read-mostly, network-diagnosis and developer
-    # README.md, The policy; internal/policy/default_test.go TestAVariableWithTooManyValuesIsJudgedQuickly and TestAVariableWithTooManyValuesIsUnknown
+    # README.md, The policy; internal/domain/policy/default_test.go TestAVariableWithTooManyValuesIsJudgedQuickly and TestAVariableWithTooManyValuesIsUnknown
 
   @PERF-12 @test
   Scenario: A word with too many braces is judged within a tenth of a second
@@ -102,7 +102,7 @@ Feature: Performance
     When the read-only profile judges each
     Then each verdict comes within 0.1 second, 3 seconds under the race detector
     And each call is asked
-    # README.md, The policy; internal/policy/default_test.go TestAWordWithManyBracesIsJudgedQuickly; the cap of 256 brace groups is internal/policy/shell.go maxBraces
+    # README.md, The policy; internal/domain/policy/default_test.go TestAWordWithManyBracesIsJudgedQuickly; the cap of 256 brace groups is internal/domain/policy/shell.go maxBraces
 
   @PERF-13 @test
   Scenario: A wait for changes answers as soon as the log moves

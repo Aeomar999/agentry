@@ -86,7 +86,7 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **notification**: what Claude Code shows on the user's computer when something needs them, and what a browser subscribed under Notifications on this device receives as a push.
 - **org chart**: the Agents page's view of each team as its lead above the agents it hands work to.
 - **page**: Agentry's UI in the browser, an admin console with Tasks, Plan and Ideas, then Agents, Workers, Integrations, Policy and Settings in the sidebar, everything updating live.
-- **pass**: a late approval of a held ask: that exact command goes through once without asking again, if the agent that asked runs it in its next turn and the policy still asks rather than denies (internal/hooks).
+- **pass**: a late approval of a held ask: that exact command goes through once without asking again, if the agent that asked runs it in its next turn and the policy still asks rather than denies (internal/domain/policy/hooks).
 - **path**: the steps a task's work took from agent to agent, `engineer › reviewer › tester`, shown above the task page's tabs; each step is a stage.
 - **plan**: an agent's checklist for its turn, written before it starts and ticked off as it works, shown down the left of the task page; also the Plan page.
 - **Plan page**: where work is shaped before it runs: each epic a column of its stories, one more for tasks of no epic, with Start on each story and Start the ready ones on each epic.
@@ -158,7 +158,7 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **trust page**: `/trust/` on the server, reached over plain http before a device trusts the CA, with the fingerprint, the CA to download and the steps for each system.
 - **turn**: one agent working once in the task's worktree, from a brief to a report, in a fresh engine session or going on with its last one; each turn's tokens, status and time show on the page.
 - **turns**: a task's turn limit: the turns it may have without the user's answer before it stops and asks for guidance, `-max-turns` (24 by default) or the task's own, changed at any time or made unlimited; turn limit means the same.
-- **usage limit**: the engine account's limit, at which a turn stops and waits; Agentry records when it resets and the turn goes on once it does (internal/platform/engines, internal/hooks).
+- **usage limit**: the engine account's limit, at which a turn stops and waits; Agentry records when it resets and the turn goes on once it does (internal/platform/engines, internal/domain/policy/hooks).
 - **use_for_everyone**: the policy.toml line that puts every agent under one profile, ignoring its own; the shipped default sets it to allow-everything, and the Policy and Agents pages say so while it is set.
 - **user**: the person at the page, or in Claude Code: the one who adds tasks, answers, approves and closes epics.
 - **verdict**: how a checker's report ends, `Verdict: approved` or `Verdict: changes needed`; every checker must approve the last change before the coordinator may finish.

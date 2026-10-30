@@ -64,7 +64,7 @@ var newPath = map[string]string{
 	"internal/domain/tasks":       "internal/domain/tasks",
 	"internal/domain/workers":     "internal/domain/workers",
 	"internal/domain/connections": "internal/domain/connections",
-	"internal/policy":             "internal/domain/policy",
+	"internal/domain/policy":      "internal/domain/policy",
 	"internal/settings":           "internal/domain/settings",
 	"internal/sharedfiles":        "internal/domain/sharedfiles",
 
@@ -72,7 +72,7 @@ var newPath = map[string]string{
 	"internal/domain/tasks/waitlist":        "internal/domain/tasks/waitlist",
 	"internal/domain/workers/workerlink":    "internal/domain/workers/workerlink",
 	"internal/domain/workers/workerservice": "internal/domain/workers/workerservice",
-	"internal/hooks":                        "internal/domain/policy/hooks",
+	"internal/domain/policy/hooks":          "internal/domain/policy/hooks",
 	"internal/settingsfile":                 "internal/domain/settings/settingsfile",
 	"internal/webpush":                      "internal/domain/notifications/webpush",
 

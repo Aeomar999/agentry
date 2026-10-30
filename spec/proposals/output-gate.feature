@@ -14,7 +14,7 @@ Feature: Output gate
   @PROP-65 @agent @test @to-policy
   Scenario: A result no rule for results matches reaches the agent unchanged
     # the gate today: @POLICY-07 and the reporting hooks, which end || true (internal/platform/engines/hook_config.go)
-    # test: internal/hooks/output_test.go (to write)
+    # test: internal/domain/policy/hooks/output_test.go (to write)
     Given the developer profile with 1 rule for results, which holds a result from WebFetch that has "ignore previous instructions"
     When the engineer runs go test, reads a file and fetches a page without those words
     Then each result reaches the agent byte for byte as the tool gave it: yes
@@ -22,8 +22,8 @@ Feature: Output gate
 
   @PROP-66 @agent @test @to-policy
   Scenario: Rules for results are read top to bottom, and judge every tool's result
-    # rules are read top to bottom and the first that matches decides (@POLICY-07, internal/policy); a rule names its tools as the action rules do
-    # test: internal/policy/output_test.go (to write)
+    # rules are read top to bottom and the first that matches decides (@POLICY-07, internal/domain/policy); a rule names its tools as the action rules do
+    # test: internal/domain/policy/output_test.go (to write)
     Given a profile whose rule 1 redacts results that have "BEGIN PRIVATE KEY", and whose rule 2 blocks results from WebFetch that have "BEGIN"
     When a Bash command's output, a file read with Read, a page from WebFetch and an MCP tool's reply each hold "BEGIN PRIVATE KEY"
     Then each of the 4 is redacted by rule 1, and none is blocked
@@ -34,7 +34,7 @@ Feature: Output gate
   @PROP-67 @agent @test @to-policy
   Scenario: A held result waits for the user, as an ask does
     # @APPROVE-01: Needs you, approve or deny; the gate's wait, GateTimeoutSeconds, 30 minutes (internal/platform/engines)
-    # test: internal/hooks/output_test.go and internal/web/api_test.go (to write)
+    # test: internal/domain/policy/hooks/output_test.go and internal/web/api_test.go (to write)
     Given a rule "pages that talk to the agent" that holds results from WebFetch that have "ignore previous instructions"
     When the engineer fetches a page that holds those words
     Then the agent waits, and the task needs you, its line exactly "Waiting for you to let through a result from WebFetch: pages that talk to the agent"
@@ -47,7 +47,7 @@ Feature: Output gate
   @PROP-68 @agent @test @to-policy
   Scenario: A held result nobody answers in time is withheld, and the agent carries on
     # @APPROVE-02 for an action; a result cannot be let through after the agent moved on
-    # test: internal/hooks/output_test.go (to write)
+    # test: internal/domain/policy/hooks/output_test.go (to write)
     Given a result held for the user
     When the gate's wait of 30 minutes runs out with no answer
     Then the agent gets "Agentry withheld this result: no answer came in time", and its turn goes on: yes
@@ -56,7 +56,7 @@ Feature: Output gate
   @PROP-69 @agent @test @to-policy
   Scenario: A redacted result reaches the agent with each matching text replaced by [redacted]
     # the marker the user's redaction writes: @SET-02 (internal/core/store/redact.go)
-    # test: internal/hooks/output_test.go (to write)
+    # test: internal/domain/policy/hooks/output_test.go (to write)
     Given a rule "keys never reach a model" that redacts results that have a text of the form "sk-live-*"
     When cat config.yaml prints 40 lines, 2 of them holding a key of that form
     Then the agent gets the 40 lines with exactly those 2 keys replaced by [redacted], and every other character the same: yes
@@ -65,7 +65,7 @@ Feature: Output gate
   @PROP-70 @agent @test @to-policy
   Scenario: A blocked result never reaches the agent, and the coordinator is told
     # a denied action is shown to the coordinator under Actions Agentry refused: @HANDOFF-20
-    # test: internal/hooks/output_test.go and internal/coordinator/brief_test.go (to write)
+    # test: internal/domain/policy/hooks/output_test.go and internal/coordinator/brief_test.go (to write)
     Given a rule "no pages from paste sites" that blocks results from WebFetch of a page whose address has "paste"
     When the engineer fetches such a page
     Then the agent gets only "Agentry blocked this result: no pages from paste sites", and none of the page
@@ -75,8 +75,8 @@ Feature: Output gate
 
   @PROP-71 @test @to-observability
   Scenario: Each decision on a result is logged with its rule, never the result's text
-    # actions and their decisions are events by the policy (internal/core/events/catalogue.go action.approved, action.denied); action.result holds no text today (internal/hooks/handler.go)
-    # test: internal/hooks/output_test.go (to write)
+    # actions and their decisions are events by the policy (internal/core/events/catalogue.go action.approved, action.denied); action.result holds no text today (internal/domain/policy/hooks/handler.go)
+    # test: internal/domain/policy/hooks/output_test.go (to write)
     Given one result held and let through, one redacted twice and one blocked
     When the task's Actions tab is shown
     Then each of the 3 actions shows its result's decision beside its own: "let through by you", "redacted 2 texts: keys never reach a model", "blocked: no pages from paste sites"
@@ -85,8 +85,8 @@ Feature: Output gate
 
   @PROP-72 @test @to-security
   Scenario: A held result is kept in the server's memory only, and only while it is held
-    # the user's redaction keeps its secrets in memory only, never on disk (internal/hooks/redactions.go Redactions)
-    # test: internal/hooks/output_test.go (to write)
+    # the user's redaction keeps its secrets in memory only, never on disk (internal/domain/policy/hooks/redactions.go Redactions)
+    # test: internal/domain/policy/hooks/output_test.go (to write)
     Given a result held for the user
     Then it is in no event, no snapshot and no file in the data folder: yes
     When the user answers, the wait runs out or the server restarts
@@ -97,7 +97,7 @@ Feature: Output gate
   @PROP-73 @test @to-reliability
   Scenario: A result the gate has not judged by the hook's deadline does not reach the agent
     # the gate fails closed: a gate's hook ends || exit 2, which blocks a call at PreToolUse (docs/design/proofs.md, proof 01; internal/platform/engines/hook_config.go); nothing yet shows exit 2 at PostToolUse withholds a result, so Agentry ends the session instead, as in @PROP-75; a hook that crashes or cannot reach the server is an open question below
-    # test: internal/hooks/output_test.go and internal/platform/engines/engines_test.go (to write)
+    # test: internal/domain/policy/hooks/output_test.go and internal/platform/engines/engines_test.go (to write)
     Given an agent whose profile has 1 rule for results
     When the hook's deadline passes before a decision
     Then the result reaches 0 model calls: Agentry ends the agent's session before the hook returns, as in @PROP-75, and exactly 1 issue goes back to the coordinator
@@ -119,7 +119,7 @@ Feature: Output gate
   @PROP-75 @test @to-compatibility
   Scenario: Where an engine cannot replace or withhold a result, a hold, a redaction or a block ends the session first
     # docs/design/proofs.md, proof 07: Codex has the same hook events and fields; its PreToolUse can only deny and needs a reason; its PostToolUse fires for a command that failed too, with no exit code (internal/domain/tasks/task.go Pushed)
-    # test: internal/platform/engines/engines_test.go and internal/hooks/output_test.go (to write)
+    # test: internal/platform/engines/engines_test.go and internal/domain/policy/hooks/output_test.go (to write)
     Given an agent on an engine whose PostToolUse cannot replace or withhold what the agent sees
     When a rule holds, redacts or blocks a result
     Then Agentry ends the agent's session before the hook returns, so the result reaches 0 model calls: yes
@@ -128,16 +128,16 @@ Feature: Output gate
 
   @PROP-76 @test @to-compatibility
   Scenario: Profiles with no rules for results work as today
-    # the shipped profiles (internal/policy/default.toml) gain no rule for results
-    # test: internal/policy/default_test.go (to write)
+    # the shipped profiles (internal/domain/policy/default.toml) gain no rule for results
+    # test: internal/domain/policy/default_test.go (to write)
     Given the shipped policy, and a policy.toml written before rules for results were built
     When every agent works
     Then 0 results are held, redacted or blocked, and the hooks are written as today: yes
 
   @PROP-77 @benchmark @to-performance
   Scenario: Judging a result adds little to a tool call
-    # the gate already has bounds on how long it judges an action: @PERF-11 and @PERF-12 (internal/policy)
-    # to measure: a Go benchmark in internal/policy (to write), on the machine Agentry runs on
+    # the gate already has bounds on how long it judges an action: @PERF-11 and @PERF-12 (internal/domain/policy)
+    # to measure: a Go benchmark in internal/domain/policy (to write), on the machine Agentry runs on
     Given a profile with 20 rules for results, and a result of 1 MB that matches none
     When the gate judges it
     Then the decision takes under 20 ms at the 95th percentile

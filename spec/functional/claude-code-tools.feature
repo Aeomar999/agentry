@@ -279,7 +279,7 @@ Feature: Agentry from Claude Code
     When Claude calls review_approvals and Claude Code asks the user
     Then the question says the command, that it was held, the time it was held in the user's zone, and that the agent was told no
     And it says the agent may run this exact command 1 time in its next turn if the user approves
-    # internal/hooks/handler.go replyMargin: the server stops waiting 5 seconds before the hook's deadline
+    # internal/domain/policy/hooks/handler.go replyMargin: the server stops waiting 5 seconds before the hook's deadline
     # internal/turns/turns.go environment: the deadline is GateTimeoutSeconds - 10 = 1790 seconds (internal/platform/engines/engine.go GateTimeoutSeconds = 1800)
     # internal/mcp/server_test.go TestAHeldApprovalSaysWhenItWasHeld: the question says once, which is 1 time
 

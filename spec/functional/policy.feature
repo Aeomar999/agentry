@@ -1,8 +1,8 @@
 Feature: Policy
   The policy profiles each agent runs under, the gate that judges every action,
   and the Policy page.
-  # Sources: cmd/agentry/hook.go, cmd/agentry/policy.go, internal/policy,
-  # internal/hooks, internal/domain/agents/agent.go, internal/web/policy_api.go,
+  # Sources: cmd/agentry/hook.go, cmd/agentry/policy.go, internal/domain/policy,
+  # internal/domain/policy/hooks, internal/domain/agents/agent.go, internal/web/policy_api.go,
   # ui/src/pages/PolicyPage.tsx, ui/src/components/organisms/TryPolicyCall.tsx,
   # ui/src/components/organisms/DefaultProfiles.tsx,
   # ui/src/components/organisms/PolicyHistory.tsx and their tests.
@@ -12,7 +12,7 @@ Feature: Policy
   @POLICY-01 @user @test
   Scenario: The Policy page: the 6 default profiles, who uses which, and what is in force
     # internal/web/policy_api_test.go TestThePolicyShowsItsDefaultsUsersAndWhatIsInForce
-    # the 6 profiles Agentry ships, developer, read-only, read-mostly, network-diagnosis, autonomous and allow-everything: internal/policy/default.toml lines 82, 198, 333, 473, 658 and 683; use_for_everyone as shipped: line 79
+    # the 6 profiles Agentry ships, developer, read-only, read-mostly, network-diagnosis, autonomous and allow-everything: internal/domain/policy/default.toml lines 82, 198, 333, 473, 658 and 683; use_for_everyone as shipped: line 79
     # the Software team's profiles, tech-lead and reviewer read-only, the rest developer: README.md, The policy, "Profiles"
     Given a policy file without read-mostly, with use_for_everyone set to allow-everything
     When the policy is read
@@ -22,8 +22,8 @@ Feature: Policy
 
   @POLICY-02 @user @test
   Scenario: A missing default profile is added from the page, logged with its diff and a backup
-    # internal/web/policy_api_test.go TestAMissingProfileIsAddedFromThePageAndLogged; internal/policy/live_test.go TestAgentryKeepsItsNewestBackups
-    # the 20 newest backups are kept: internal/policy/live.go line 57; the row "missing" with "Add this profile": ui/src/components/organisms/DefaultProfiles.tsx lines 82 to 89 and 124
+    # internal/web/policy_api_test.go TestAMissingProfileIsAddedFromThePageAndLogged; internal/domain/policy/live_test.go TestAgentryKeepsItsNewestBackups
+    # the 20 newest backups are kept: internal/domain/policy/live.go line 57; the row "missing" with "Add this profile": ui/src/components/organisms/DefaultProfiles.tsx lines 82 to 89 and 124
     Given a policy file without read-mostly, whose row reads "Your file doesn't have it. Adding it appends the <version> default, under a comment naming the version."
     When "Add this profile" is sent without the file's hash, or with a stale one
     Then it is refused with 409 "changed since the page loaded it: try again"
@@ -66,7 +66,7 @@ Feature: Policy
   Scenario: Try a call against a profile: the rule that decides, the verdict and who decides today
     # internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt, TestATriedCallSaysWhichRuleDecidedByItsPlace, TestATriedCallSaysWhoDecidesOnlyWhenAnotherProfileDoes, TestTryingACallChangesNothing and TestATriedCallIsRefusedWhenItCantBeJudged
     # the form "Try a call against <profile>" with Tool, 7 suggested tools, "Command or path" and Try: ui/src/components/organisms/TryPolicyCall.tsx lines 10 and 55 to 80; the lines under it: lines 93 to 104
-    # a verdict no profile rule made has Order 0, no rule place: internal/policy/verdict.go line 28; none of the named tests asserts it
+    # a verdict no profile rule made has Order 0, no rule place: internal/domain/policy/verdict.go line 28; none of the named tests asserts it
     # the page's words "as if run in <workspace>" and "But today allow-everything decides for every agent:" are TryPolicyCall.tsx's; the tests assert the reply they are drawn from
     Given the policy as shipped and the developer profile's panel
     When the user tries Bash "go test ./..."
@@ -143,13 +143,13 @@ Feature: Policy
 
   @POLICY-10 @agent @test
   Scenario: As shipped, every agent allows everything until the user turns that line off
-    # internal/policy/default_test.go TestAllowEverything
+    # internal/domain/policy/default_test.go TestAllowEverything
     Given the shipped policy, with use_for_everyone = "allow-everything"
     When an agent under developer, read-only or autonomous runs git push origin HEAD:dev or npm install left-pad, or writes a file outside the workspace
     Then each is allowed, judged by the profile "allow-everything"
     And an edit of Agentry's own policy file is still denied
     And with that line commented out, each agent is judged by its own profile, as every scenario below assumes
-    # use_for_everyone: internal/policy/default.toml line 79; the tests load the policy with it commented out: internal/policy/default_test.go loadDefault
+    # use_for_everyone: internal/domain/policy/default.toml line 79; the tests load the policy with it commented out: internal/domain/policy/default_test.go loadDefault
 
   @POLICY-11 @agent @test
   Scenario: The tester runs under developer, so it can commit tests
@@ -174,14 +174,14 @@ Feature: Policy
 
   @POLICY-13 @coordinator @test
   Scenario: The gate judges each action by the working agent's own profile
-    # internal/hooks/handler_test.go TestTheGateUsesTheWorkingAgentsProfile
+    # internal/domain/policy/hooks/handler_test.go TestTheGateUsesTheWorkingAgentsProfile
     Given the engineer, whose profile is developer, is the agent working on the task
     When it asks to run a command
     Then the policy is asked with exactly the profile "developer", not the coordinator's
 
   @POLICY-14 @agent @test
   Scenario: Only the agent working on the task passes the gate
-    # internal/hooks/handler_test.go TestOnlyTheWorkingAgentPassesTheGate
+    # internal/domain/policy/hooks/handler_test.go TestOnlyTheWorkingAgentPassesTheGate
     Given the engineer's turn is open on the task
     When a gate call arrives from the reviewer
     Then it is denied
@@ -190,12 +190,12 @@ Feature: Policy
 
   @POLICY-15 @agent @test
   Scenario: A denial or an ask tells the agent which rule decided
-    # internal/policy/default_test.go TestAVerdictNamesItsRule
+    # internal/domain/policy/default_test.go TestAVerdictNamesItsRule
     Given an agent whose profile is "", so the default profile developer applies
     When it runs git push origin HEAD:dev
     Then the verdict names the profile developer and the rule "every push leaves this machine: you approve it", with its why
-    # not under test, checked by hand: the agent is told "Agentry: developer: every push leaves this machine: you approve it" (internal/hooks/handler.go line 367)
-    # default_profile = "developer": internal/policy/default.toml line 75; the reason reaches the agent: internal/hooks/handler.go decide
+    # not under test, checked by hand: the agent is told "Agentry: developer: every push leaves this machine: you approve it" (internal/domain/policy/hooks/handler.go line 367)
+    # default_profile = "developer": internal/domain/policy/default.toml line 75; the reason reaches the agent: internal/domain/policy/hooks/handler.go decide
 
   @POLICY-16 @worker @test
   Scenario: An agent's hook call needs the hook token, and only the working agent passes the gate
@@ -206,7 +206,7 @@ Feature: Policy
     Then it is answered with status 200
     When a gate call names an agent that is not the one working
     Then the action is denied: yes
-    # internal/hooks/handler_test.go TestTheHTTPEndpointNeedsTheHookToken, TestOnlyTheWorkingAgentPassesTheGate
+    # internal/domain/policy/hooks/handler_test.go TestTheHTTPEndpointNeedsTheHookToken, TestOnlyTheWorkingAgentPassesTheGate
 
   @POLICY-17 @worker @test
   Scenario: The gate fails closed when the server cannot answer
@@ -222,50 +222,50 @@ Feature: Policy
 
   @POLICY-18 @agent @test
   Scenario: The developer profile allows what stays inside the workspace
-    # internal/policy/default_test.go TestTheDeveloperProfile
+    # internal/domain/policy/default_test.go TestTheDeveloperProfile
     Given the engineer under developer
     When it runs ls -la, npm test, git add -A && git commit -m 'remove TODO', echo hi > notes.md, mkdir -p src/refunds && touch src/refunds/index.ts, rm notes.md, or git fetch origin && git merge origin/dev
     Then each is allowed
     And Edit on src/billing.ts in the workspace is allowed by "edit inside the workspace, the diff is reviewed", and Read is allowed anywhere
     # the rule name, for Edit on main.go in the workspace: internal/web/policy_api_test.go TestATriedCallRunsInAStandInWorktreeThatIsntAgentrys
     And go test ./... is allowed by "stays inside the workspace"
-    # the rule name, for go test ./...: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt; the rules: internal/policy/default.toml line 171 and line 158
-    # the rules: internal/policy/default.toml lines 151 to 195
+    # the rule name, for go test ./...: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt; the rules: internal/domain/policy/default.toml line 171 and line 158
+    # the rules: internal/domain/policy/default.toml lines 151 to 195
 
   @POLICY-19 @agent @test
   Scenario: What may reach outside the workspace asks the user
-    # internal/policy/default_test.go TestTheDeveloperProfile
+    # internal/domain/policy/default_test.go TestTheDeveloperProfile
     Given the engineer under developer
     When it runs sed -i '555d' src/billing.ts, echo hi > /tmp/notes.md, cp src/a.ts /tmp/a.ts, cd /etc && ls, npm install left-pad, python deploy.py, echo $(whoami), or WebFetch
     Then each is asked, and none runs before the user answers
     And a tool the policy does not name, and a command it cannot read, are asked too
-    # otherwise = "ask" and unreadable = "ask": internal/policy/default.toml lines 84 to 86; WebFetch: line 146
-    # none runs before the answer: internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser
+    # otherwise = "ask" and unreadable = "ask": internal/domain/policy/default.toml lines 84 to 86; WebFetch: line 146
+    # none runs before the answer: internal/domain/policy/hooks/handler_test.go TestAnAskedActionWaitsForTheUser
 
   @POLICY-20 @agent @test
   Scenario: A setting or an upper-case variable before a command asks, a plain toolchain setting does not
-    # internal/policy/default_test.go TestTheDeveloperProfile
+    # internal/domain/policy/default_test.go TestTheDeveloperProfile
     Given the engineer under developer
     When it runs git -c k=v commit -m x, GIT_EXTERNAL_DIFF=./x.sh git diff, GOFLAGS=-toolexec=./x.sh go test ./..., or export PAGER=./x.sh; git log
     Then each is asked, since the setting can make the program run a command
     And GOTOOLCHAIN=local GOPROXY=off go test ./... and git -C . commit -m x are allowed
-    # variables: internal/policy/default.toml lines 51 to 57; git's own options are left out before matching: lines 47 to 50
+    # variables: internal/domain/policy/default.toml lines 51 to 57; git's own options are left out before matching: lines 47 to 50
 
   @POLICY-21 @agent @test
   Scenario: The deployer reads the pushed commit's pipeline without asking
-    # internal/policy/default_test.go TestTheDeveloperReadsAPipeline
+    # internal/domain/policy/default_test.go TestTheDeveloperReadsAPipeline
     Given the deployer under developer, after its push
     When it runs glab ci list --sha <hash> -F json, or gh run list --commit <hash> --json status,conclusion,url
     Then each is allowed
     And gh run view 123 -w, glab ci get -p 123 --with-variables, gh run rerun 123 and gh run watch 123 are asked
     # not under test, checked by hand: the prompt says to report the pipeline once, with 0 waiting or polling: internal/domain/agents/defaults/deployer.md line 9
-    # the rules: internal/policy/default.toml lines 164 to 168 and 192 to 193; the prompt: internal/domain/agents/defaults/deployer.md
+    # the rules: internal/domain/policy/default.toml lines 164 to 168 and 192 to 193; the prompt: internal/domain/agents/defaults/deployer.md
 
   # ---- The judging profiles --------------------------------------------------
 
   @POLICY-22 @agent @test
   Scenario: The read-only profile lets the reviewer read and test, keep its notes, and change nothing else
-    # internal/policy/default_test.go TestTheReadOnlyProfile
+    # internal/domain/policy/default_test.go TestTheReadOnlyProfile
     Given the reviewer under read-only
     When it calls Edit on main.go, or runs git commit -am 'x' or git push origin HEAD:dev
     Then each is denied, and Edit on main.go is denied by "this agent changes nothing"
@@ -273,7 +273,7 @@ Feature: Policy
     And Edit on .agentry/knowledge.md in the workspace is allowed, and Write on the same file in another folder is denied
     # not under test, checked by hand: the rules "never commits or changes branches" and "keeps its own notes", at the lines below
     And Read on main.go, git diff c1169f1..HEAD and go test -v ./... && gofmt -l . are allowed
-    # [profiles.read-only]: internal/policy/default.toml line 198; "keeps its own notes" line 211; "this agent changes nothing" line 219; "never commits or changes branches" line 322
+    # [profiles.read-only]: internal/domain/policy/default.toml line 198; "keeps its own notes" line 211; "this agent changes nothing" line 219; "never commits or changes branches" line 322
 
   @POLICY-23 @agent @test
   Scenario: The Visionaries read the board and change no code
@@ -292,122 +292,122 @@ Feature: Policy
     When a checker runs ping -c 3 -W 2 <host>, dig +short <name>, ss -tlnp, ip route show, docker network inspect <network>, ufw status, nft list ruleset, iptables -S or wg show
     Then each is allowed, with 0 asked
     And ufw allow 443, an ip route add and systemctl restart nginx are asked for every agent of the team
-    # "diagnoses the network": internal/policy/default.toml line 544; "changes live network state": line 515; the engineer's are asked by developer's otherwise = "ask", line 84
+    # "diagnoses the network": internal/domain/policy/default.toml line 544; "changes live network state": line 515; the engineer's are asked by developer's otherwise = "ask", line 84
 
   @POLICY-25 @agent @test
   Scenario: The network-diagnosis profile prints no private key and takes no extra option
-    # internal/policy/default_test.go TestTheNetworkDiagnosisProfile
+    # internal/domain/policy/default_test.go TestTheNetworkDiagnosisProfile
     Given a checker under network-diagnosis
     When it runs wg show wg0 dump, sudo wg show wg0 dump, wg show wg0 private-key, wg genkey, or reads a WireGuard config, acme.json or a privkey.pem
     Then each is denied
     And ping -c 1 -W 1 --extra <host> and ss -tlnp --extra are asked
     # not under test, checked by hand: the rules, "never prints a private key" or "never touch secrets" for the denials, "network commands take no other options" for ping, and the profile's otherwise = "ask" for ss, since ss is not in that rule
-    # the rules: internal/policy/default.toml lines 480 to 486, 509 to 512 and 532 to 541; otherwise = "ask": line 475
+    # the rules: internal/domain/policy/default.toml lines 480 to 486, 509 to 512 and 532 to 541; otherwise = "ask": line 475
 
   @POLICY-26 @agent @test
   Scenario: The judging profiles write no file from the shell
-    # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
+    # internal/domain/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
     When it runs echo hi > notes.md, echo hi >> notes.md, cat > notes.md <<'EOF', go test ./... &> out.txt, or echo hi > /tmp/notes.md
     Then each is denied
     # not under test, checked by hand: the rule that denies them, "writes no files from the shell"
     And go test ./... > /dev/null and a redirect into Claude's scratch folder are allowed
-    # the rule: internal/policy/default.toml lines 225, 360 and 503; the allowed forms: TestTheJudgingProfilesStillReadAndTest
+    # the rule: internal/domain/policy/default.toml lines 225, 360 and 503; the allowed forms: TestTheJudgingProfilesStillReadAndTest
 
   @POLICY-27 @agent @test
   Scenario: The judging profiles run nothing that changes files
-    # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
+    # internal/domain/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
     When it runs sed -i 's/a/b/' main.go, sed --in-place 's/a/b/' main.go, perl -pi -e 's/a/b/' main.go, rm main.go, mv a.go b.go, cp a.go b.go, touch new.go, mkdir -p docs, chmod +x test.sh, ln -s a b, sort -o out.txt in.txt, find . -name '*.log' -delete, git log --output=log.txt, echo hi | tee notes.md, go test ./... | tee out.txt, or gofmt -w .
     Then each is denied
     # not under test, checked by hand: the rule that denies them, "runs nothing that changes files"
     And cat, head, sed -n '1,5p' main.go, grep -r foo . and find . -name x are allowed
-    # the rule, with tee and gofmt -w in it: internal/policy/default.toml lines 231, 366 and 557; gofmt -w: TestTheJudgingProfilesCloseWhatTheReviewFound; the allowed forms: TestTheJudgingProfilesStillReadAndTest; cat: TestTheJudgingProfilesFollowCd (cd <scratch> && cat out.txt)
+    # the rule, with tee and gofmt -w in it: internal/domain/policy/default.toml lines 231, 366 and 557; gofmt -w: TestTheJudgingProfilesCloseWhatTheReviewFound; the allowed forms: TestTheJudgingProfilesStillReadAndTest; cat: TestTheJudgingProfilesFollowCd (cd <scratch> && cat out.txt)
 
   @POLICY-28 @agent @test
   Scenario: The judging profiles never commit or change branches
-    # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
+    # internal/domain/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
     When it runs git commit -m x, git add -A && git commit -m x, git -c user.name=x commit -m x, git -C . commit -m x, git push origin HEAD:dev, git add -A, git reset --hard HEAD~1, git checkout -- main.go, git stash, git merge origin/dev, git rebase dev, git tag v1, git worktree add ../x, git config user.name x, git branch -D old, or git branch new
     Then each is denied
     # not under test, checked by hand: the rule that denies them, "never commits or changes branches"
     And git branch, git branch -a, git branch --show-current, git tag and git config --get user.name are allowed, as listing forms
-    # the rule: internal/policy/default.toml lines 322, 463 and 648; the listing forms: lines 311 to 314; they are allowed in TestTheJudgingProfilesStillReadAndTest
+    # the rule: internal/domain/policy/default.toml lines 322, 463 and 648; the listing forms: lines 311 to 314; they are allowed in TestTheJudgingProfilesStillReadAndTest
 
   @POLICY-29 @agent @test
   Scenario: Under the judging profiles, go and the test and lint tools write no files
-    # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
+    # internal/domain/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
-    When it runs go build ./..., go install ./cmd/agentry, go test -c ./internal/policy, go test -coverprofile=c.out ./..., go test -mod=mod ./..., or go vet -vettool=./x ./...
+    When it runs go build ./..., go install ./cmd/agentry, go test -c ./internal/domain/policy, go test -coverprofile=c.out ./..., go test -mod=mod ./..., or go vet -vettool=./x ./...
     Then each is denied
     And npx eslint --fix ., npx vitest run -u, npx jest --coverage, pytest --junitxml=report.xml and cargo clippy --fix are denied
     # not under test, checked by hand: the rules, "go writes no files" and "test and lint tools write no files"
-    And go test ./..., go test -count=1 -cover -run TestX -v ./internal/policy, go vet ./..., gofmt -l ., npx eslint ., npx jest --ci and pytest are allowed
-    # the rules: internal/policy/default.toml lines 243 and 254; the test and lint flags: TestTheJudgingProfilesCloseWhatTheReviewFound
+    And go test ./..., go test -count=1 -cover -run TestX -v ./internal/domain/policy, go vet ./..., gofmt -l ., npx eslint ., npx jest --ci and pytest are allowed
+    # the rules: internal/domain/policy/default.toml lines 243 and 254; the test and lint flags: TestTheJudgingProfilesCloseWhatTheReviewFound
     # the allowed forms: TestTheJudgingProfilesStillReadAndTest (go test, go vet, gofmt -l, npx eslint); npx jest --ci and pytest: TestTheJudgingProfilesStillRunTheirTests and TestTheJudgingProfilesDenyEverySpellingOfAWritingFlag
 
   @POLICY-30 @agent @test
   Scenario: Every spelling of a writing flag is denied
-    # internal/policy/default_test.go TestTheJudgingProfilesDenyEverySpellingOfAWritingFlag
+    # internal/domain/policy/default_test.go TestTheJudgingProfilesDenyEverySpellingOfAWritingFlag
     Given an agent under read-only, read-mostly or network-diagnosis
     When it runs pytest -o cache_dir=src, pytest -ocache_dir=src, pytest -vo cache_dir=src, cargo -Zunstable-options test, npx jest -iu, npx vitest run -ru, npx eslint -fo out.txt ., or npx jest --config='{"collectCoverage":true}'
     Then each is denied, the flag found first, joined or in a short option cluster
     And python3 -m pytest -q -k 'not slow' tests, npx jest --ci and npx vitest run --reporter=verbose are allowed
-    # clusters matched one by one: internal/policy/default.toml lines 58 to 60
+    # clusters matched one by one: internal/domain/policy/default.toml lines 58 to 60
 
   @POLICY-31 @agent @test
   Scenario: The judging profiles run no tests from outside the workspace
-    # internal/policy/default_test.go TestTheJudgingProfilesRunNoTestsFromOutside
+    # internal/domain/policy/default_test.go TestTheJudgingProfilesRunNoTestsFromOutside
     Given an agent under read-only, read-mostly or network-diagnosis, and a folder in Claude's scratch place
     When it runs go test <scratch>/..., cd <scratch> && npm test, pytest <scratch>, npx jest --reporters <scratch>/r.js, npx vitest run --config <scratch>/v.ts, or cargo test --manifest-path <scratch>/Cargo.toml
     Then each is asked
     # not under test, checked by hand: the rule that asks, "runs no tests from outside the workspace"
     And npx jest --config <scratch>/j.js and npx vitest run --execArgv=<node options> are denied
-    And go test ./internal/policy/, npx jest --reporters=default,./tools/r.js and npx vitest run --config vitest.config.ts are allowed from the workspace, and the developer runs these from scratch too
-    # the rule: internal/policy/default.toml lines 292, 433 and 618; TestTheJudgingProfilesStillRunTheirTests, TestOnlyTheJudgingProfilesAskAboutRunnersOutside
+    And go test ./internal/domain/policy/, npx jest --reporters=default,./tools/r.js and npx vitest run --config vitest.config.ts are allowed from the workspace, and the developer runs these from scratch too
+    # the rule: internal/domain/policy/default.toml lines 292, 433 and 618; TestTheJudgingProfilesStillRunTheirTests, TestOnlyTheJudgingProfilesAskAboutRunnersOutside
 
   @POLICY-32 @agent @test
   Scenario: The gate follows cd, pushd and popd when it judges a test runner
-    # internal/policy/default_test.go TestTheJudgingProfilesFollowCd
+    # internal/domain/policy/default_test.go TestTheJudgingProfilesFollowCd
     Given an agent under read-only, read-mostly or network-diagnosis
     When it runs (cd <scratch> && npm test), pushd <scratch> && go test ./..., popd; go test ./..., cd internal && cd - && go test ./..., or cd .. && go test ./...
     Then each is asked
     And cd ~ && go test ./... and cd internal; cd ../..; go test ./... are denied, since those folders hold Agentry's own files
-    And cd internal/policy && go test . and (cd <scratch>); go test ./... are allowed
+    And cd internal/domain/policy && go test . and (cd <scratch>); go test ./... are allowed
     # a relative path is counted from every folder a cd may have reached: TestARelativePathIsCountedFromWhereCdWent
 
   @POLICY-33 @agent @test
   Scenario: A flag that names a command is denied, and sed -n beyond its plain form asks
-    # internal/policy/default_test.go TestTheJudgingProfilesCloseWhatTheReviewFound
+    # internal/domain/policy/default_test.go TestTheJudgingProfilesCloseWhatTheReviewFound
     Given an agent under read-only, read-mostly or network-diagnosis
     When it runs git grep -O'touch x' foo, rg --pre ./x.sh foo, sort --compress-program=./x.sh in.txt, or npx vitest run --execArgv=<node options>
     Then each is denied
     And sed -n 1p f -e 'w out', npx tsc --noEmit -p . --init, sed -n 'w out' f, sed -n '1e touch x' f, uniq in.txt out.txt and npx tsc are asked
     And sed -n '1,5p' main.go, sed -n 12p main.go and npx tsc --noEmit -p ui are allowed
     # not under test, checked by hand: the rules, "runs no command a flag names" for the denials, "beyond their plain forms, these ask" for the first 2 asks, and the profile's otherwise = "ask" for the other 4, which match no rule
-    # the rules: internal/policy/default.toml lines 274 and 286; the plain sed -n forms: line 307; otherwise = "ask": line 200
+    # the rules: internal/domain/policy/default.toml lines 274 and 286; the plain sed -n forms: line 307; otherwise = "ask": line 200
     # npx vitest run --execArgv: TestTheJudgingProfilesRunNoTestsFromOutside; the rest: TestTheJudgingProfilesCloseWhatTheReviewFound; the allowed forms: TestTheJudgingProfilesStillReadAndTest
 
   @POLICY-34 @agent @test
   Scenario: Every value a variable may hold is judged
-    # internal/policy/default_test.go TestEveryValueOfAVariableIsJudged
+    # internal/domain/policy/default_test.go TestEveryValueOfAVariableIsJudged
     Given an agent under read-only, read-mostly or network-diagnosis
     When it runs for c in status 'commit -qam x'; do git $c; done, or c=log; c=commit; git $c -m x
     Then each is denied, the commit found among the values
     And c=status; printf -v c commit; git $c -m x and c=$(echo commit); git $c are asked, since the value cannot be known
     And for f in a b; do cat $f; done is allowed, and under developer for c in status 'push -f origin main'; do git $c; done is denied
-    # a variable with several values is matched with each: internal/policy/default.toml lines 55 to 57; too many values: TestAVariableWithTooManyValuesIsUnknown
+    # a variable with several values is matched with each: internal/domain/policy/default.toml lines 55 to 57; too many values: TestAVariableWithTooManyValuesIsUnknown
 
   @POLICY-35 @agent @test
   Scenario: Read-mostly also reads the task board
-    # internal/policy/default_test.go TestTheReadMostlyProfile
+    # internal/domain/policy/default_test.go TestTheReadMostlyProfile
     Given an agent under read-mostly
     When it calls the board tools status, list_tasks or show_task
     Then each is allowed
     # not under test, checked by hand: the rule that allows them, "reads the task board"
     And create_task, answer_question and start are asked, since they write to the board
     And Edit on main.go, Write on ideas.md, git commit -am 'x' and cat .env are denied, and Edit on .agentry/knowledge.md is allowed
-    # the rule: internal/policy/default.toml line 421
+    # the rule: internal/domain/policy/default.toml line 421
 
   # ---- Rules every agent meets -----------------------------------------------
 
@@ -417,93 +417,93 @@ Feature: Policy
     When the agent runs git push origin HEAD:dev
     Then the user is asked before the push runs
     And a push to main, or a force push, is denied
-    # README.md, The policy; internal/policy/default_test.go
+    # README.md, The policy; internal/domain/policy/default_test.go
 
   @POLICY-37 @agent @test
   Scenario: Every push asks the user
-    # internal/policy/default_test.go TestTheDeveloperProfile
+    # internal/domain/policy/default_test.go TestTheDeveloperProfile
     Given the deployer under developer
     When it runs git push origin HEAD:dev, or a bare git push
     Then each is asked, and the verdict for git push origin HEAD:dev names the rule "every push leaves this machine: you approve it"
-    # the rule named: internal/policy/default_test.go TestAVerdictNamesItsRule; not under test, checked by hand: the same rule for the bare git push
+    # the rule named: internal/domain/policy/default_test.go TestAVerdictNamesItsRule; not under test, checked by hand: the same rule for the bare git push
     And the push runs only once the user approves, and the agent is told "you approved"
     And the deployer's prompt names no push that the policy would allow without asking
-    # the rule: internal/policy/default.toml line 134; the wait: internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser;
+    # the rule: internal/domain/policy/default.toml line 134; the wait: internal/domain/policy/hooks/handler_test.go TestAnAskedActionWaitsForTheUser;
     # the prompt check: internal/domain/agents/prompts_policy_test.go TestTheDefaultPromptsOnlyAskForCommandsThePolicyPermits
 
   @POLICY-38 @agent @test
   Scenario: Agentry's own files are off limits for every profile, and no policy file can change that
-    # internal/policy/default_test.go TestAgentrysOwnFilesAreAlwaysOffLimits
+    # internal/domain/policy/default_test.go TestAgentrysOwnFilesAreAlwaysOffLimits
     Given an agent under any of the 6 profiles, allow-everything included
     When it runs sqlite3 ~/.agentry/agentry.db 'delete from events', cat ~/.agentry/tls/ca.key, tar c ~/.agentry, cp -a ~ /tmp/x, grep -r BEGIN ~/.agentry, ls -R ~/.agentry, bash -c 'cat ~/.agentry/tls/ca.key', cat ~/.agentry/*/ca.key, or cat /proc/self/cwd/../../tls/ca.key, or calls Edit on ~/.agentry/policy.toml or Read on ~/.agentry/ui-token
     Then each is denied by the built-in rule for Agentry's own files
     And cat ~/.agentry/worktrees/task-1/*.go, ls ~, grep -rn TODO . and go test ./... are not refused as Agentry's own files
-    # built in and not in the policy file: internal/policy/default.toml lines 14 to 15; the protected files: the log, the policy, the sign-in token and the TLS folder
+    # built in and not in the policy file: internal/domain/policy/default.toml lines 14 to 15; the protected files: the log, the policy, the sign-in token and the TLS folder
 
   @POLICY-39 @agent @test
   Scenario: rm -rf is refused
-    # internal/policy/default_test.go TestTheDeveloperProfile
+    # internal/domain/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer
     When it runs rm -rf /tmp/x, or ls && rm -rf build
     Then each is denied
     And rm notes.md, 1 file in the workspace, is allowed
     And under read-only, read-mostly and network-diagnosis rm main.go is denied too
     # not under test, checked by hand: the rule "never rm -rf" and every spelling it lists, -rf, -fr, -Rf, -fR, -r -f, -f -r and --recursive --force; under the judging profiles the rule is "runs nothing that changes files", so rm -rf is refused there too; the autonomous and allow-everything profiles have no rule against it
-    # "never rm -rf": internal/policy/default.toml line 103; 'rm *' under the judging profiles: lines 234, 369 and 560; TestTheJudgingProfilesWriteNothingFromTheShell
+    # "never rm -rf": internal/domain/policy/default.toml line 103; 'rm *' under the judging profiles: lines 234, 369 and 560; TestTheJudgingProfilesWriteNothingFromTheShell
 
   @POLICY-40 @agent @test
   Scenario: No agent pushes to a branch named main
-    # internal/policy/default_test.go TestTheDeveloperProfile
+    # internal/domain/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer
     When it runs git push origin main, git push origin HEAD:main, git -C . push origin main, or for c in status 'push -f origin main'; do git $c; done
     Then each is denied
     And under the judging profiles git push origin HEAD:dev is denied, and under autonomous it is asked
-    # not under test, checked by hand: the rule "agents never push to main", which also names master (internal/policy/default.toml line 110); under the judging profiles every git push denied by "never commits or changes branches", and under autonomous every git push asked
-    # "agents never push to main": internal/policy/default.toml line 109; the loop: TestEveryValueOfAVariableIsJudged; autonomous: line 670
+    # not under test, checked by hand: the rule "agents never push to main", which also names master (internal/domain/policy/default.toml line 110); under the judging profiles every git push denied by "never commits or changes branches", and under autonomous every git push asked
+    # "agents never push to main": internal/domain/policy/default.toml line 109; the loop: TestEveryValueOfAVariableIsJudged; autonomous: line 670
 
   @POLICY-41 @agent @test
   Scenario: No force push
-    # internal/policy/default_test.go TestTheDeveloperProfile
+    # internal/domain/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer
     When it runs git push -f origin dev, git push origin dev --force, or git -c k=v push -f origin dev
     Then each is denied
     # not under test, checked by hand: the rule "never force push", which also matches a + before the ref, and the deployer's prompt saying never to force push or rewrite history (internal/domain/agents/defaults/deployer.md line 10)
-    # the rule: internal/policy/default.toml line 115; the prompt: internal/domain/agents/defaults/deployer.md
+    # the rule: internal/domain/policy/default.toml line 115; the prompt: internal/domain/agents/defaults/deployer.md
 
   @POLICY-42 @agent @test
   Scenario: The Edit and Write tools work only inside the workspace
-    # internal/policy/default_test.go TestTheDeveloperProfile
+    # internal/domain/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer
     When it calls Write on a file outside the worktree, or on <worktree>/../escape.txt
     Then each is denied
     And Edit on <worktree>/src/billing.ts is allowed, and a command in Claude's scratch folder counts as inside the workspace
     And under read-only and read-mostly Edit on main.go is denied, and Edit on .agentry/knowledge.md is allowed
-    # not under test, checked by hand: the rule "edits only inside the workspace", and that the judging profiles deny Edit and Write everywhere but .agentry/knowledge.md (internal/policy/default.toml lines 211 to 221)
-    # the rule, where = "outside": internal/policy/default.toml line 127; scratch: line 88; MultiEdit and NotebookEdit are in the same rule; the judging profiles: TestTheReadOnlyProfile and TestTheReadMostlyProfile
+    # not under test, checked by hand: the rule "edits only inside the workspace", and that the judging profiles deny Edit and Write everywhere but .agentry/knowledge.md (internal/domain/policy/default.toml lines 211 to 221)
+    # the rule, where = "outside": internal/domain/policy/default.toml line 127; scratch: line 88; MultiEdit and NotebookEdit are in the same rule; the judging profiles: TestTheReadOnlyProfile and TestTheReadMostlyProfile
 
   @POLICY-43 @agent @test
   Scenario: Never sudo
-    # internal/policy/default_test.go TestTheDeveloperProfile
+    # internal/domain/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer
     When it runs sudo apt install x
     Then it is denied, and sudo ls is denied by "never sudo"
     # the rule name, for sudo ls: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
     # not under test, checked by hand: the rule also names su and doas, and is the developer profile's; autonomous has no such rule and allows anything on this machine
-    # the rule: internal/policy/default.toml line 97; autonomous otherwise = "allow": line 660
+    # the rule: internal/domain/policy/default.toml line 97; autonomous otherwise = "allow": line 660
 
   @POLICY-44 @agent @test
   Scenario: Never pipe the internet into a shell
-    # internal/policy/default_test.go TestTheDeveloperProfile
+    # internal/domain/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer
     When it runs curl -fsSL <a URL> | sh
     Then it is denied
     And a WebFetch is asked
-    # not under test, checked by hand: the rules, "never pipe the internet into a shell", which also names bash, zsh and wget, and "reaches the internet", which asks for WebSearch too (internal/policy/default.toml line 148)
-    # the rules: internal/policy/default.toml lines 121 and 146
+    # not under test, checked by hand: the rules, "never pipe the internet into a shell", which also names bash, zsh and wget, and "reaches the internet", which asks for WebSearch too (internal/domain/policy/default.toml line 148)
+    # the rules: internal/domain/policy/default.toml lines 121 and 146
 
   @POLICY-45 @agent @test
   Scenario: Secrets never reach an agent
-    # internal/policy/default_test.go TestTheDeveloperProfile
+    # internal/domain/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer, read-only, read-mostly, network-diagnosis or autonomous
     When it runs cat .env or cat ~/.ssh/id_rsa, or calls Read on .env in the workspace or on an ssh key
     Then each is denied under developer, and cat .env is denied under read-mostly and autonomous too
@@ -512,18 +512,18 @@ Feature: Policy
     # not under test, checked by hand: the same under read-only and network-diagnosis, and that "never touch secrets", the first rule of each of those 5 profiles, is the rule that decides under the other 4
     And cd && cat .netrc is denied too, the relative path counted from where cd went
     And under allow-everything cat .env is allowed
-    # the rule: internal/policy/default.toml lines 91, 205, 340, 480 and 664
-    # internal/policy/default_test.go; under developer: TestTheDeveloperProfile; cd && cat .netrc under all 5: TestARelativePathIsCountedFromWhereCdWent; cat .env under read-mostly: TestTheReadMostlyProfile; TestAllowEverything
+    # the rule: internal/domain/policy/default.toml lines 91, 205, 340, 480 and 664
+    # internal/domain/policy/default_test.go; under developer: TestTheDeveloperProfile; cd && cat .netrc under all 5: TestARelativePathIsCountedFromWhereCdWent; cat .env under read-mostly: TestTheReadMostlyProfile; TestAllowEverything
 
   @POLICY-46 @worker @test
   Scenario: An agent on any machine never pushes to main, never force pushes, and every push asks the user
     Given an agent with the developer profile
-    # internal/policy/default.toml profiles.developer.rules
+    # internal/domain/policy/default.toml profiles.developer.rules
     When it runs git push to main, by name or by refspec, with or without -C
     Then the policy denies it: yes
-    # not under test, checked by hand: master the same (internal/policy/default.toml line 111)
+    # not under test, checked by hand: master the same (internal/domain/policy/default.toml line 111)
     When it runs git push with -f or --force, before or after the branch
     Then the policy denies it: yes
-    # not under test, checked by hand: a + refspec the same (internal/policy/default.toml line 117)
-    # internal/policy/default.toml "every push leaves this machine: you approve it": any other git push asks the user first
-    # internal/policy/default_test.go TestTheDeveloperProfile
+    # not under test, checked by hand: a + refspec the same (internal/domain/policy/default.toml line 117)
+    # internal/domain/policy/default.toml "every push leaves this machine: you approve it": any other git push asks the user first
+    # internal/domain/policy/default_test.go TestTheDeveloperProfile

@@ -475,13 +475,13 @@ func TestTheJudgingProfilesWriteNothingFromTheShell(t *testing.T) {
 			{"go build -o", bash("go build -o bin/agentry ./cmd/agentry"), Deny},
 			{"go build -o late", bash("go build ./cmd/agentry -o agentry"), Deny},
 			{"go install", bash("go install ./cmd/agentry"), Deny},
-			{"go test -o", bash("go test -o policy.test ./internal/policy"), Deny},
-			{"go test -o=", bash("go test -o=policy.test ./internal/policy"), Deny},
-			{"go test -c", bash("go test -c ./internal/policy"), Deny},
+			{"go test -o", bash("go test -o policy.test ./internal/domain/policy"), Deny},
+			{"go test -o=", bash("go test -o=policy.test ./internal/domain/policy"), Deny},
+			{"go test -c", bash("go test -c ./internal/domain/policy"), Deny},
 			{"go test -coverprofile", bash("go test -coverprofile=c.out ./..."), Deny},
-			{"go test -cpuprofile", bash("go test -cpuprofile cpu.out ./internal/policy"), Deny},
-			{"go test -trace", bash("go test -trace=t.out ./internal/policy"), Deny},
-			{"go test -fuzz", bash("go test -fuzz FuzzParse ./internal/policy"), Deny},
+			{"go test -cpuprofile", bash("go test -cpuprofile cpu.out ./internal/domain/policy"), Deny},
+			{"go test -trace", bash("go test -trace=t.out ./internal/domain/policy"), Deny},
+			{"go test -fuzz", bash("go test -fuzz FuzzParse ./internal/domain/policy"), Deny},
 			{"go test -exec", bash("go test -exec 'rm main.go' ./..."), Deny},
 			{"go test -mod=mod", bash("go test -mod=mod ./..."), Deny},
 			{"go vet -vettool", bash("go vet -vettool=./x ./..."), Deny},
@@ -597,9 +597,9 @@ func TestTheJudgingProfilesCloseWhatTheReviewFound(t *testing.T) {
 			{"tsc --build", bash("npx tsc --build --noEmit"), Ask},
 			{"npm test with npm settings", bash("npm test --script-shell=./x.sh"), Ask},
 			{"make test with a variable", bash("make test GO=./x.sh"), Ask},
-			{"go test -c=true", bash("go test -c=true ./internal/policy"), Deny},
+			{"go test -c=true", bash("go test -c=true ./internal/domain/policy"), Deny},
 			{"go test -ldflags can name a linker", bash("go test -ldflags=-linkmode=external -ldflags=-extld=./x.sh ./..."), Deny},
-			{"go test -test.testlogfile", bash("go test ./internal/policy -args -test.testlogfile=log.txt"), Deny},
+			{"go test -test.testlogfile", bash("go test ./internal/domain/policy -args -test.testlogfile=log.txt"), Deny},
 
 			// flags that run a command
 			{"git grep -O", bash("git grep -O'touch x' foo"), Deny},
@@ -811,7 +811,7 @@ func TestTheJudgingProfilesStillReadAndTest(t *testing.T) {
 			// go test writes only to Go's build cache, outside the repo: that
 			// changes no file anyone reviews, so it doesn't count as a write.
 			{"go test", bash("go test ./..."), Allow},
-			{"go test with flags that aren't -c or -o", bash("go test -count=1 -cover -run TestX -v ./internal/policy"), Allow},
+			{"go test with flags that aren't -c or -o", bash("go test -count=1 -cover -run TestX -v ./internal/domain/policy"), Allow},
 			{"go test with settings", bash("GOTOOLCHAIN=local GOPROXY=off go test ./..."), Allow},
 			{"go test with a toolchain", bash("GOTOOLCHAIN=local go test ./..."), Allow},
 			{"a lower-case variable", bash("for f in a.go b.go; do head -5 $f; done"), Allow},
@@ -1056,7 +1056,7 @@ func TestTheJudgingProfilesFollowCd(t *testing.T) {
 			{"command cd", bash("command cd " + scratch + " && go test ./..."), Ask},
 			{"cd up and out", bash("cd .. && go test ./..."), Ask},
 			{"cd up in steps", bash("cd internal; cd ../..; go test ./..."), Deny},
-			{"a cd that may fail", bash("cd internal/policy || true; go test ../../..."), Ask},
+			{"a cd that may fail", bash("cd internal/domain/policy || true; go test ../../..."), Ask},
 			{"a cd in a loop", bash("for i in 1 2; do go test ./...; cd " + scratch + "; done"), Ask},
 			{"a cd in a while loop", bash("while true; do go test ./...; cd ..; done"), Ask},
 			{"a cd in a loop beside a subshell", bash("for m in api web; do (cd $m && npm test); cd $m; done; npm test"), Ask},
@@ -1067,9 +1067,9 @@ func TestTheJudgingProfilesFollowCd(t *testing.T) {
 
 			// a cd that doesn't leak, or stays in the workspace
 			{"cd in a subshell doesn't leak", bash("(cd " + scratch + "); go test ./..."), Allow},
-			{"cd into the workspace", bash("cd internal/policy && go test ."), Allow},
+			{"cd into the workspace", bash("cd internal/domain/policy && go test ."), Allow},
 			// cd may fail, so ../.. may be counted from the workspace too
-			{"cd back up into the workspace, and above it", bash("cd internal/policy && cd ../.. && go test ./..."), Deny}, // ../.. of the workspace holds Agentry's files
+			{"cd back up into the workspace, and above it", bash("cd internal/domain/policy && cd ../.. && go test ./..."), Deny}, // ../.. of the workspace holds Agentry's files
 			{"cd to the workspace by its path", bash("cd " + workspace + " && go test ./..."), Allow},
 			{"cd into scratch only to read", bash("cd " + scratch + " && cat out.txt"), Allow},
 			// a subshell's cd ends with it, in a loop too
@@ -1112,7 +1112,7 @@ func TestTheJudgingProfilesReadWordsAsBashDoes(t *testing.T) {
 
 			// a brace bash expands
 			{"cd a brace", bash("cd {/tmp,/tmp}/claude-1000/x/s && npm test"), Ask},
-			{"go test a brace", bash("go test {./internal/policy," + scratch + "}/"), Ask},
+			{"go test a brace", bash("go test {./internal/domain/policy," + scratch + "}/"), Ask},
 			{"vitest --exec-arg{v,v}", bash("npx vitest run --exec-arg{v,v}=--import=data:text/javascript,1"), Deny},
 			{"vitest --exec-argv{,}", bash("npx vitest run --exec-argv{,}=1"), Deny},
 			{"a brace in a loop list", bash("for d in {internal," + scratch + "}; do cd $d; done; go test ./..."), Ask},
@@ -1166,8 +1166,8 @@ func TestTheJudgingProfilesStillRunTheirTests(t *testing.T) {
 		check(t, p, profile, []decisionCase{
 			{"go test", bash("go test ./..."), Allow},
 			{"go test with settings", bash("GOTOOLCHAIN=local GOPROXY=off go test ./..."), Allow},
-			{"go test a package", bash("go test ./internal/policy/"), Allow},
-			{"go test with flags", bash("go test -count=1 -run 'TestX/a' -timeout 10m ./internal/policy"), Allow},
+			{"go test a package", bash("go test ./internal/domain/policy/"), Allow},
+			{"go test with flags", bash("go test -count=1 -run 'TestX/a' -timeout 10m ./internal/domain/policy"), Allow},
 			{"go test by absolute path", bash("go test " + workspace + "/internal/..."), Allow},
 			{"npm test", bash("npm test"), Allow},
 			{"jest --ci", bash("npx jest --ci"), Allow},
@@ -1179,7 +1179,7 @@ func TestTheJudgingProfilesStillRunTheirTests(t *testing.T) {
 			{"cargo test", bash("cargo test"), Allow},
 			{"jest JSON in the workspace", bash(`npx jest --moduleNameMapper='{"^@/(.*)$":"<rootDir>\u002fsrc\u002f$1"}'`), Allow},
 			{"jest JSON with a regex key", bash(`npx jest --transform='{"^.+\\.tsx?$":"ts-jest"}'`), Allow},
-			{"cd into the workspace", bash("cd internal/policy && go test ."), Allow},
+			{"cd into the workspace", bash("cd internal/domain/policy && go test ."), Allow},
 			{"output to scratch", bash("go test ./... > " + scratch + "/out.txt"), Allow},
 		})
 	}

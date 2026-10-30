@@ -564,7 +564,7 @@ func TestAProposalCarriesAPropID(t *testing.T) {
 }
 
 func TestAProposalCitesNoLineNumber(t *testing.T) {
-	text := strings.Replace(goodProposal, "# internal/web/api_test.go", "# internal/policy/rules.go, line 12", 1)
+	text := strings.Replace(goodProposal, "# internal/web/api_test.go", "# internal/domain/policy/rules.go, line 12", 1)
 	expectProblems(t, problemsOf(t, map[string]string{"proposals/board.feature": text}),
 		"proposals/board.feature:10: a line number goes stale")
 }

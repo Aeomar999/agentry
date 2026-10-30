@@ -97,7 +97,7 @@ Feature: Review from the command line
   Scenario: No agent reviews its own work from the command line
     # an agent can never approve its own request (@SEC-46); Agentry's own files are off limits for every profile (@POLICY-38)
     # the command rule for agentry review is new: today's rule for Agentry's own files matches paths, and agentry review names none
-    # test: internal/policy/default_test.go (to write)
+    # test: internal/domain/policy/default_test.go (to write)
     Given an agent under any of the 6 profiles, allow-everything included
     When it runs agentry review approve task-5, agentry review send-back task-5 "x" or agentry review discard task-5 --yes
     Then each is denied by a new built-in command rule for agentry review, beside the rule for Agentry's own files, and nothing is sent

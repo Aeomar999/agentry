@@ -13,7 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
-	"gitlab.com/dev.chempa/agentry/internal/policy"
+	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 )
 
 // The Policy page: what is in force, the default profiles against yours,

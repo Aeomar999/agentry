@@ -31,7 +31,7 @@ func TestEveryShippedProfileIsKept(t *testing.T) {
 	current, _ := decode(Default())
 	if !reflect.DeepEqual(all[len(all)-1].profiles, current.Profiles) {
 		t.Errorf("default.toml's profiles aren't the ones in shipped/%s: copy it to the next one, "+
-			"as in cp internal/policy/default.toml internal/policy/shipped/NN-vX.Y.Z.toml, with the version that ships it", newest)
+			"as in cp internal/domain/policy/default.toml internal/domain/policy/shipped/NN-vX.Y.Z.toml, with the version that ships it", newest)
 	}
 	for i, entry := range entries {
 		if want := fmt.Sprintf("%02d-", i+1); !strings.HasPrefix(entry.Name(), want) {

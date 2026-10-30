@@ -51,7 +51,7 @@ Feature: Security
     Then with a deadline of 20 seconds the server waits at most 15 seconds, 5 seconds less
     And with a deadline of 1 second the server waits at most 750 ms, a quarter less
     And with a deadline of 1790 seconds, as a real turn sends, the server waits at most 1785 seconds
-    # internal/hooks/handler_test.go TestTheServerAnswersBeforeTheHooksDeadline
+    # internal/domain/policy/hooks/handler_test.go TestTheServerAnswersBeforeTheHooksDeadline
 
   @SEC-07 @test
   Scenario: An ask that gets no answer in time is held for the user
@@ -60,7 +60,7 @@ Feature: Security
     Then an action.held event is recorded exactly once
     And the agent is told no, with the words that the command is held for the user's approval
     And the action is kept in Needs you for the user to approve or deny
-    # README.md, What happens to one action; internal/hooks/handler_test.go TestAnAskThatTimesOutIsHeldForTheUser; once: internal/core/rules/rules_test.go TestOnlyYouDecideAHeldAction refuses a second action.held
+    # README.md, What happens to one action; internal/domain/policy/hooks/handler_test.go TestAnAskThatTimesOutIsHeldForTheUser; once: internal/core/rules/rules_test.go TestOnlyYouDecideAHeldAction refuses a second action.held
 
   @SEC-08 @test
   Scenario: Only the agent whose turn is running passes the gate
@@ -68,7 +68,7 @@ Feature: Security
     When a gate call arrives naming the reviewer as its agent
     Then the call is denied
     And the engineer's own calls are judged with the engineer's profile, not the reviewer's
-    # internal/hooks/handler_test.go TestOnlyTheWorkingAgentPassesTheGate, TestTheGateUsesTheWorkingAgentsProfile
+    # internal/domain/policy/hooks/handler_test.go TestOnlyTheWorkingAgentPassesTheGate, TestTheGateUsesTheWorkingAgentsProfile
 
   @SEC-09 @test
   Scenario: The gate needs the hook token
@@ -76,8 +76,8 @@ Feature: Security
     When a call arrives with the wrong hook token
     Then the answer is HTTP 401
     And with the right token the answer is HTTP 200: yes
-    # not under test, checked by hand: the compare takes the same time whatever the token, so no token is guessed byte by byte (internal/hooks/http.go line 16 subtle.ConstantTimeCompare)
-    # internal/hooks/handler_test.go TestTheHTTPEndpointNeedsTheHookToken
+    # not under test, checked by hand: the compare takes the same time whatever the token, so no token is guessed byte by byte (internal/domain/policy/hooks/http.go line 16 subtle.ConstantTimeCompare)
+    # internal/domain/policy/hooks/handler_test.go TestTheHTTPEndpointNeedsTheHookToken
 
   @SEC-10 @test
   Scenario: Rules are read top to bottom and a tool with no rule gets the profile's otherwise
@@ -85,21 +85,21 @@ Feature: Security
     When the agent calls a tool Agentry has no rule for
     Then the call is asked, by the profile's otherwise
     And every verdict names its profile, its rule and the rule's place, rules counted from 1, 0 for otherwise and Agentry's own files
-    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile, TestAVerdictNamesItsRule; internal/policy/effective_test.go TestAVerdictSaysWhichRuleDecidedByItsPlace
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile, TestAVerdictNamesItsRule; internal/domain/policy/effective_test.go TestAVerdictSaysWhichRuleDecidedByItsPlace
 
   @SEC-11 @test
   Scenario: A shell command Agentry cannot parse gets the profile's unreadable
-    # internal/policy/decide_test.go TestAnUnreadableCommandGetsTheProfilesUnreadable
+    # internal/domain/policy/decide_test.go TestAnUnreadableCommandGetsTheProfilesUnreadable
     Given a profile with unreadable = "deny" and otherwise = "ask"
     When the agent runs a shell command with an unterminated quote
     Then the call is denied, by "Agentry couldn't read this shell command"
     And a readable command no rule matches is still asked, by otherwise
     And with unreadable = "ask", the same unterminated command is asked by "Agentry couldn't read this shell command"
-    # README.md, The policy; internal/policy/decide.go line 89
+    # README.md, The policy; internal/domain/policy/decide.go line 89
 
   @SEC-67 @test
   Scenario: The gate judges only the shell's code: quoted text and a heredoc's body are data
-    # internal/policy/default_test.go TestTheDeveloperProfile
+    # internal/domain/policy/default_test.go TestTheDeveloperProfile
     Given the shipped policy with use_for_everyone turned off, and an agent with the developer profile
     When it runs git commit -m 'fix: a; b | c && d > e', and cat > greet.go with a heredoc whose body holds "a > b"
     Then both are allowed: the separators and the redirect inside the quotes, and the heredoc's body, are not read as commands
@@ -126,7 +126,7 @@ Feature: Security
     Then the call is allowed
     And every verdict's profile is allow-everything, whatever the agent's own
     And the allow-everything profile allows a force push to main and reading .env too: yes
-    # README.md, The policy; internal/policy/default_test.go TestAllowEverything
+    # README.md, The policy; internal/domain/policy/default_test.go TestAllowEverything
 
   @SEC-13 @test
   Scenario: Agentry's own files are off limits under all six profiles
@@ -138,7 +138,7 @@ Feature: Security
     And a command whose text names the hook token's environment variable is denied too
     And features.toml, read or shown with cat under developer, is denied: yes
     # not under test, checked by hand: the hook, desk and helper token files are protected the same way (cmd/agentry/policy.go line 29)
-    # README.md, The policy; internal/policy/default_test.go TestAgentrysOwnFilesAreAlwaysOffLimits; internal/policy/effective_test.go TestDecideAsSkipsUseForEveryone; cmd/agentry/jobs_test.go TestTheSettingsFileIsProtected
+    # README.md, The policy; internal/domain/policy/default_test.go TestAgentrysOwnFilesAreAlwaysOffLimits; internal/domain/policy/effective_test.go TestDecideAsSkipsUseForEveryone; cmd/agentry/jobs_test.go TestTheSettingsFileIsProtected
 
   @SEC-14 @test
   Scenario: Under developer, shell work inside the workspace is allowed
@@ -146,8 +146,8 @@ Feature: Security
     When it runs ls, npm test, go test, a local git add and commit, a redirect into the worktree, rm of one file in the worktree, go test with GOTOOLCHAIN and GOPROXY set, or a glab or gh command that lists a pipeline
     Then every call is allowed
     And go test is allowed by the rule "stays inside the workspace": yes
-    # not under test, checked by hand: the others are allowed by that rule too (internal/policy/default.toml line 171)
-    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile, TestTheDeveloperReadsAPipeline; the rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # not under test, checked by hand: the others are allowed by that rule too (internal/domain/policy/default.toml line 171)
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile, TestTheDeveloperReadsAPipeline; the rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
 
   @SEC-15 @test
   Scenario: Under developer, reading anywhere and editing inside the worktree are allowed
@@ -155,9 +155,9 @@ Feature: Security
     When it reads a file outside the worktree that is not a secret, and edits a file inside the worktree
     Then the read and the edit are allowed: yes
     And a read of a file in the worktree is allowed by the rule "reading is always allowed": yes
-    # not under test, checked by hand: a read outside it is allowed by that rule too (internal/policy/default.toml line 152)
+    # not under test, checked by hand: a read outside it is allowed by that rule too (internal/domain/policy/default.toml line 152)
     And the edit is allowed by the rule "edit inside the workspace, the diff is reviewed"
-    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile; the rules: internal/web/policy_api_test.go TestATriedCallRunsInAStandInWorktreeThatIsntAgentrys
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile; the rules: internal/web/policy_api_test.go TestATriedCallRunsInAStandInWorktreeThatIsntAgentrys
 
   @SEC-16 @test
   Scenario: Under developer, what may reach outside the machine asks the user
@@ -166,24 +166,24 @@ Feature: Security
     Then every call is asked
     And the push is asked by the rule "every push leaves this machine: you approve it"
     And a command no rule names is asked by the profile's otherwise: yes
-    # not under test, checked by hand: find -exec is asked by "commands that run other commands", the web page by "reaches the internet", the pipeline by "pipeline commands that open a browser or show CI variables" (internal/policy/default.toml lines 140, 146 and 165), and the rest by otherwise
-    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile, TestTheDeveloperReadsAPipeline, TestAVerdictNamesItsRule; otherwise: internal/policy/effective_test.go TestAVerdictSaysWhichRuleDecidedByItsPlace
+    # not under test, checked by hand: find -exec is asked by "commands that run other commands", the web page by "reaches the internet", the pipeline by "pipeline commands that open a browser or show CI variables" (internal/domain/policy/default.toml lines 140, 146 and 165), and the rest by otherwise
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile, TestTheDeveloperReadsAPipeline, TestAVerdictNamesItsRule; otherwise: internal/domain/policy/effective_test.go TestAVerdictSaysWhichRuleDecidedByItsPlace
 
   @SEC-17 @test
   Scenario: Under developer, rm -rf is denied in every spelling
     Given the shipped policy with use_for_everyone turned off, and an agent with the developer profile
     When it runs rm -rf alone, or hidden in a chain after another command
     Then the call is denied
-    # not under test, checked by hand: the rule is "never rm -rf", whose 7 spellings are listed in internal/policy/default.toml line 103
-    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile asserts the 2 forms
+    # not under test, checked by hand: the rule is "never rm -rf", whose 7 spellings are listed in internal/domain/policy/default.toml line 103
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile asserts the 2 forms
 
   @SEC-18 @test
   Scenario: Under developer, a push to main is denied
     Given the shipped policy with use_for_everyone turned off, and an agent with the developer profile
     When it pushes to main by branch name, by refspec, through git -C, or hidden in a shell variable's later value
     Then the call is denied
-    # not under test, checked by hand: the rule is "agents never push to main", and it names master too (internal/policy/default.toml line 109); the test's shell loop also force pushes, so "never force push" would deny it too
-    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile; the variable: TestEveryValueOfAVariableIsJudged
+    # not under test, checked by hand: the rule is "agents never push to main", and it names master too (internal/domain/policy/default.toml line 109); the test's shell loop also force pushes, so "never force push" would deny it too
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile; the variable: TestEveryValueOfAVariableIsJudged
 
   @SEC-19 @test
   Scenario: Under developer, force pushes, sudo and piping the internet into a shell are denied
@@ -191,8 +191,8 @@ Feature: Security
     When it force pushes, as to dev, runs sudo, or pipes a download into sh
     Then every call is denied
     And sudo is denied by the rule "never sudo"
-    # not under test, checked by hand: the force push is denied by "never force push" and the download by "never pipe the internet into a shell" (internal/policy/default.toml lines 115 and 121)
-    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile; the sudo rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # not under test, checked by hand: the force push is denied by "never force push" and the download by "never pipe the internet into a shell" (internal/domain/policy/default.toml lines 115 and 121)
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile; the sudo rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
 
   @SEC-20 @test
   Scenario: Under developer, secrets are denied
@@ -200,24 +200,24 @@ Feature: Security
     When it reads .env with cat or the Read tool, or a key under ~/.ssh
     Then every call is denied
     And the key under ~/.ssh is denied by the rule "never touch secrets": yes
-    # not under test, checked by hand: .env is denied by that rule too (internal/policy/default.toml line 91)
-    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile; the rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # not under test, checked by hand: .env is denied by that rule too (internal/domain/policy/default.toml line 91)
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile; the rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
 
   @SEC-21 @test
   Scenario: Under developer, a write outside the worktree is denied
     Given the shipped policy with use_for_everyone turned off, and an agent with the developer profile
     When it writes a file under /etc, or a file reached by a .. path that leaves the worktree
     Then every call is denied
-    # not under test, checked by hand: the rule is "edits only inside the workspace" (internal/policy/default.toml line 127)
-    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile
+    # not under test, checked by hand: the rule is "edits only inside the workspace" (internal/domain/policy/default.toml line 127)
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile
 
   @SEC-22 @test
   Scenario: Under read-only, the agent reads, runs the tests and keeps its own notes
     Given the shipped policy with use_for_everyone turned off, and an agent with the read-only profile, as the reviewer and every coordinator but the Visionaries' have
     When it reads a file, runs go test and gofmt -l, or edits its own knowledge file in the worktree
     Then every call is allowed
-    # not under test, checked by hand: the tests are allowed by the rule "reads and runs the tests" and the knowledge file by "keeps its own notes" (internal/policy/default.toml lines 298 and 211)
-    # README.md, The policy; internal/policy/default_test.go TestTheReadOnlyProfile; the profiles: internal/domain/agents/agents_test.go TestEachDefaultAgentHasAProfile, TestTheVisionariesTeam, TestTheNetworkingTeam
+    # not under test, checked by hand: the tests are allowed by the rule "reads and runs the tests" and the knowledge file by "keeps its own notes" (internal/domain/policy/default.toml lines 298 and 211)
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheReadOnlyProfile; the profiles: internal/domain/agents/agents_test.go TestEachDefaultAgentHasAProfile, TestTheVisionariesTeam, TestTheNetworkingTeam
 
   @SEC-23 @test
   Scenario: Under read-only, every change is denied
@@ -225,87 +225,87 @@ Feature: Security
     When it edits any other file, commits, pushes, redirects into a file, pipes into tee, runs sort -o, find -delete, gofmt -w, eslint --fix, or jest --coverage
     Then every call is denied
     And the edit is denied by the rule "this agent changes nothing"
-    # not under test, checked by hand: the commit and the push are denied by "never commits or changes branches", the redirect by "writes no files from the shell", tee, sort -o, find -delete and gofmt -w by "runs nothing that changes files", and eslint --fix and jest --coverage by "test and lint tools write no files" (internal/policy/default.toml lines 322, 225, 231 and 254)
-    # README.md, The policy; internal/policy/default_test.go TestTheReadOnlyProfile, TestTheJudgingProfilesWriteNothingFromTheShell, TestTheJudgingProfilesCloseWhatTheReviewFound; the edit's rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # not under test, checked by hand: the commit and the push are denied by "never commits or changes branches", the redirect by "writes no files from the shell", tee, sort -o, find -delete and gofmt -w by "runs nothing that changes files", and eslint --fix and jest --coverage by "test and lint tools write no files" (internal/domain/policy/default.toml lines 322, 225, 231 and 254)
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheReadOnlyProfile, TestTheJudgingProfilesWriteNothingFromTheShell, TestTheJudgingProfilesCloseWhatTheReviewFound; the edit's rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
 
   @SEC-24 @test
   Scenario: Under read-only, read-mostly and network-diagnosis, a flag that names a program to run is denied
     Given the shipped policy with use_for_everyone turned off, and an agent with the read-only, read-mostly or network-diagnosis profile
     When it runs git grep -O, rg --pre or sort --compress-program
     Then every call is denied
-    # not under test, checked by hand: the rule is "runs no command a flag names" (internal/policy/default.toml lines 274, 409 and 600)
-    # README.md, The policy; internal/policy/default_test.go TestTheJudgingProfilesCloseWhatTheReviewFound
+    # not under test, checked by hand: the rule is "runs no command a flag names" (internal/domain/policy/default.toml lines 274, 409 and 600)
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheJudgingProfilesCloseWhatTheReviewFound
 
   @SEC-25 @test
   Scenario: Under read-mostly, the Visionaries read the task board
     Given the shipped policy with use_for_everyone turned off, and an agent with the read-mostly profile, as the Visionaries have
     When it calls the board's status, list_tasks or show_task tool
     Then every call is allowed
-    # not under test, checked by hand: each is allowed by the rule "reads the task board" (internal/policy/default.toml line 421)
-    # README.md, Ideas; internal/policy/default_test.go TestTheReadMostlyProfile
+    # not under test, checked by hand: each is allowed by the rule "reads the task board" (internal/domain/policy/default.toml line 421)
+    # README.md, Ideas; internal/domain/policy/default_test.go TestTheReadMostlyProfile
 
   @SEC-26 @test
   Scenario: Under read-mostly, changing the board asks the user
     Given the shipped policy with use_for_everyone turned off, and an agent with the read-mostly profile
     When it calls create_task, answer_question or start
     Then every call is asked
-    # not under test, checked by hand: each is asked by the profile's otherwise, which is ask (internal/policy/default.toml line 335)
-    # README.md, Ideas; internal/policy/default_test.go TestTheReadMostlyProfile
+    # not under test, checked by hand: each is asked by the profile's otherwise, which is ask (internal/domain/policy/default.toml line 335)
+    # README.md, Ideas; internal/domain/policy/default_test.go TestTheReadMostlyProfile
 
   @SEC-27 @test
   Scenario: Under read-mostly, files and secrets are denied
     Given the shipped policy with use_for_everyone turned off, and an agent with the read-mostly profile
     When it edits a file, commits, redirects into a file, or reads .env
     Then every call is denied
-    # README.md, Ideas; internal/policy/default_test.go TestTheReadMostlyProfile; the redirect: TestTheJudgingProfilesWriteNothingFromTheShell
+    # README.md, Ideas; internal/domain/policy/default_test.go TestTheReadMostlyProfile; the redirect: TestTheJudgingProfilesWriteNothingFromTheShell
 
   @SEC-28 @test
   Scenario: Under network-diagnosis, the fixed read forms run
     Given the shipped policy with use_for_everyone turned off, and an agent with the network-diagnosis profile
     When it runs ping -c with -W, dig +short, ss -tlnp, ip route show, docker network inspect, iptables -L -n -v, or wg show
     Then every call is allowed
-    # not under test, checked by hand: each is allowed by the rule "diagnoses the network" (internal/policy/default.toml line 544)
-    # README.md, The policy; internal/policy/default_test.go TestTheNetworkDiagnosisProfile
+    # not under test, checked by hand: each is allowed by the rule "diagnoses the network" (internal/domain/policy/default.toml line 544)
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheNetworkDiagnosisProfile
 
   @SEC-29 @test
   Scenario: Under network-diagnosis, any other option and any live change asks the user
     Given the shipped policy with use_for_everyone turned off, and an agent with the network-diagnosis profile
     When it runs one of the fixed read forms with any other option, opens a firewall port, adds a route or restarts a service
     Then every call is asked
-    # not under test, checked by hand: the firewall, the route and the service are asked by the rule "changes live network state" (internal/policy/default.toml line 515)
-    # README.md, The policy; internal/policy/default_test.go TestTheNetworkDiagnosisProfile
+    # not under test, checked by hand: the firewall, the route and the service are asked by the rule "changes live network state" (internal/domain/policy/default.toml line 515)
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheNetworkDiagnosisProfile
 
   @SEC-30 @test
   Scenario: Under network-diagnosis, keys and tunnel dumps are denied
     Given the shipped policy with use_for_everyone turned off, and an agent with the network-diagnosis profile
     When it dumps a tunnel with wg show dump, makes a key with wg genkey, or reads a WireGuard config, an ACME store or a certificate's private key
     Then every call is denied
-    # not under test, checked by hand: the dump and the key are denied by the rule "never prints a private key", and the config, the store and the certificate's key by "never touch secrets" (internal/policy/default.toml lines 509 and 480)
-    # README.md, The policy; internal/policy/default_test.go TestTheNetworkDiagnosisProfile
+    # not under test, checked by hand: the dump and the key are denied by the rule "never prints a private key", and the config, the store and the certificate's key by "never touch secrets" (internal/domain/policy/default.toml lines 509 and 480)
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheNetworkDiagnosisProfile
 
   @SEC-31 @test
   Scenario: Under autonomous, anything on this machine runs
     Given the shipped policy with use_for_everyone turned off, and an agent with the autonomous profile
     When it installs a package or runs a script
     Then every call is allowed
-    # not under test, checked by hand: each is allowed by the profile's otherwise, which is allow (internal/policy/default.toml line 660)
-    # README.md, The policy; internal/policy/default_test.go TestTheAutonomousProfile
+    # not under test, checked by hand: each is allowed by the profile's otherwise, which is allow (internal/domain/policy/default.toml line 660)
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheAutonomousProfile
 
   @SEC-32 @test
   Scenario: Under autonomous, acting outside this machine asks the user
     Given the shipped policy with use_for_everyone turned off, and an agent with the autonomous profile
     When it pushes to a branch, creates a repo on a forge, or runs curl
     Then every call is asked
-    # not under test, checked by hand: each is asked by the rule "acts outside this machine: you approve it" (internal/policy/default.toml line 670)
-    # README.md, The policy; internal/policy/default_test.go TestTheAutonomousProfile
+    # not under test, checked by hand: each is asked by the rule "acts outside this machine: you approve it" (internal/domain/policy/default.toml line 670)
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheAutonomousProfile
 
   @SEC-33 @test
   Scenario: Under autonomous, secrets are denied
     Given the shipped policy with use_for_everyone turned off, and an agent with the autonomous profile
     When it reads .env
     Then the call is denied
-    # not under test, checked by hand: the rule is "never touch secrets" (internal/policy/default.toml line 664)
-    # README.md, The policy; internal/policy/default_test.go TestTheAutonomousProfile
+    # not under test, checked by hand: the rule is "never touch secrets" (internal/domain/policy/default.toml line 664)
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheAutonomousProfile
 
   @SEC-34 @test
   Scenario: An asked action puts the task in Needs you
@@ -313,17 +313,17 @@ Feature: Security
     When the gate judges it
     Then the task is shown in Needs you
     And the command does not run until the user answers
-    # not under test, checked by hand: one action.asked event is recorded, with the verdict's profile, rule and why (internal/hooks/handler.go lines 352 and 393)
-    # README.md, What happens to one action; internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser
+    # not under test, checked by hand: one action.asked event is recorded, with the verdict's profile, rule and why (internal/domain/policy/hooks/handler.go lines 352 and 393)
+    # README.md, What happens to one action; internal/domain/policy/hooks/handler_test.go TestAnAskedActionWaitsForTheUser
 
   @SEC-35 @test
   Scenario: The user's approval lets the asked command run
     Given an asked action waiting in Needs you while the hook waits
     When the user approves it
     Then the agent is told "you approved": yes
-    # not under test, checked by hand: the words are "Agentry: you approved: " and the user's reason (internal/hooks/handler.go line 412)
+    # not under test, checked by hand: the words are "Agentry: you approved: " and the user's reason (internal/domain/policy/hooks/handler.go line 412)
     And the command is allowed
-    # README.md, What happens to one action; internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser
+    # README.md, What happens to one action; internal/domain/policy/hooks/handler_test.go TestAnAskedActionWaitsForTheUser
 
   @SEC-36 @manual
   Scenario: The user's denial stops the asked command
@@ -331,7 +331,7 @@ Feature: Security
     When the user opens Needs you, writes a reason and denies the action
     Then the agent's terminal shows "Agentry: you denied: " followed by the user's reason, exactly once
     And the command does not run, so the branch is not pushed
-    # README.md, What happens to one action; the text is internal/hooks/handler.go's reply on action.denied; no test asserts it while the hook waits
+    # README.md, What happens to one action; the text is internal/domain/policy/hooks/handler.go's reply on action.denied; no test asserts it while the hook waits
 
   @SEC-37 @test
   Scenario: A late approval lets the same command through once, for the agent that asked
@@ -341,7 +341,7 @@ Feature: Security
     And the same command from another agent is not passed
     And the pass ends with the agent's next turn, so a later call is judged again, not passed
     And a pass never overrides a denial
-    # README.md, What happens to one action; internal/hooks/handler_test.go TestALateApprovalLetsTheSameCommandThroughOnce, TestAPassIsOnlyForTheAgentThatAsked, TestAPassEndsWithTheAgentsNextTurn, TestAPassDoesntOverrideADenial
+    # README.md, What happens to one action; internal/domain/policy/hooks/handler_test.go TestALateApprovalLetsTheSameCommandThroughOnce, TestAPassIsOnlyForTheAgentThatAsked, TestAPassEndsWithTheAgentsNextTurn, TestAPassDoesntOverrideADenial
 
   @SEC-38 @test
   Scenario: A broken policy file never replaces a working one
@@ -350,7 +350,7 @@ Feature: Security
     Then the file is refused with a message that names the unknown word
     And the policy before it stays in force, with no rule changed
     And the same broken file is reported exactly once, not on every watch
-    # README.md, The policy; internal/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne; the reasons: TestABadPolicyIsRefusedWithTheReason
+    # README.md, The policy; internal/domain/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne; the reasons: TestABadPolicyIsRefusedWithTheReason
 
   @SEC-39 @test
   Scenario: A fixed policy file takes over from a refused one
@@ -358,7 +358,7 @@ Feature: Security
     When the file is saved with the mistake fixed
     Then the fixed policy is loaded: yes
     And no refusal is shown any more
-    # README.md, The policy; internal/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne
+    # README.md, The policy; internal/domain/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne
 
   @SEC-40 @test
   Scenario: A broken policy file at start is refused
@@ -367,7 +367,7 @@ Feature: Security
     Then opening the policy fails: yes
     And its error names the file, the line and the newest backup to copy back, exactly one
     # not under test, checked by hand: serve returns that error before it serves (cmd/agentry/serve.go lines 203 to 206)
-    # README.md, The policy; internal/policy/file_test.go TestABrokenFileStopsTheFirstStart, TestABrokenFileAtStartNamesTheLineAndTheNewestBackup
+    # README.md, The policy; internal/domain/policy/file_test.go TestABrokenFileStopsTheFirstStart, TestABrokenFileAtStartNamesTheLineAndTheNewestBackup
 
   @SEC-41 @manual
   Scenario: A saved policy change takes effect within two seconds
@@ -383,8 +383,8 @@ Feature: Security
     When Agentry writes the file
     Then a copy of the file as it was is kept beside it, named by its time
     And at most 20 backups are kept, the newest
-    # internal/policy/live.go line 57 keepBackups = 20; the test uses the constant
-    # README.md, The policy; internal/policy/live_test.go TestAChangeIsWrittenBackedUpAndPutInForce, TestAgentryKeepsItsNewestBackups
+    # internal/domain/policy/live.go line 57 keepBackups = 20; the test uses the constant
+    # README.md, The policy; internal/domain/policy/live_test.go TestAChangeIsWrittenBackedUpAndPutInForce, TestAgentryKeepsItsNewestBackups
 
   @SEC-43 @test
   Scenario: Every policy version is in the log and can be restored
@@ -393,7 +393,7 @@ Feature: Security
     Then every version loaded is listed with who made it, and a change made on the page with its diff: yes
     And every file refused is listed with its reason
     And only a version whose text the log holds can be reverted
-    # README.md, The policy; internal/policy/log_test.go TestHistoryShowsEveryVersionAndRestoresOnlyThoseWithText
+    # README.md, The policy; internal/domain/policy/log_test.go TestHistoryShowsEveryVersionAndRestoresOnlyThoseWithText
 
   @SEC-44 @manual
   Scenario: Four tokens are made once and kept across restarts
@@ -555,8 +555,8 @@ Feature: Security
     Then every row holding it is rewritten to "[redacted]"
     And the log records which rows changed, never the secret nor its hash
     And a turn that was running keeps the secret out of what it writes back: yes
-    # not under test, checked by hand: the held secrets are in memory only, gone when the server restarts and kept nowhere on disk (internal/hooks/redactions.go line 17)
-    # README.md, Archiving, erasing and redacting; internal/core/store/redact_test.go TestRedactRewritesOnlyTheSecret; internal/hooks/redactions_test.go TestASecretIsLetGoOnceEveryTurnRunningThenHasEnded
+    # not under test, checked by hand: the held secrets are in memory only, gone when the server restarts and kept nowhere on disk (internal/domain/policy/hooks/redactions.go line 17)
+    # README.md, Archiving, erasing and redacting; internal/core/store/redact_test.go TestRedactRewritesOnlyTheSecret; internal/domain/policy/hooks/redactions_test.go TestASecretIsLetGoOnceEveryTurnRunningThenHasEnded
 
   @SEC-62 @test
   Scenario: Agentry's own CA signs a server certificate that is renewed in time

@@ -2,13 +2,13 @@ Feature: The agents' turns
   The engineer, reviewer, tester, deployer and the other teams' agents, each in its own
   worktree and session: what each one's turn does.
   # Sources: internal/turns, internal/domain/agents, internal/coordinator/brief.go,
-  # internal/coordinator/checks.go, internal/hooks/handler.go and their tests.
+  # internal/coordinator/checks.go, internal/domain/policy/hooks/handler.go and their tests.
 
   # ---- Every agent's turn ----------------------------------------------------
 
   @TURN-01 @agent @test
   Scenario: The agent's plan for the turn is kept as it last wrote it
-    # internal/hooks/handler_test.go TestThePlanFollowsTheFile
+    # internal/domain/policy/hooks/handler_test.go TestThePlanFollowsTheFile
     Given a turn whose brief asked for a plan in .agentry/turn-N-plan.md before anything else, as a Markdown checklist
     When the agent writes the file and then ticks steps in it
     Then the plan kept on the turn is the same as the file's last content
@@ -55,7 +55,7 @@ Feature: The agents' turns
 
   @TURN-06 @agent @test
   Scenario: An agent writes the plan file its brief asks for, and the plan follows the file
-    # internal/hooks/handler_test.go TestThePlanFollowsTheFile
+    # internal/domain/policy/hooks/handler_test.go TestThePlanFollowsTheFile
     Given a brief whose "Your plan" section asks for a Markdown checklist in .agentry/turn-N-plan.md before anything else
     When the agent writes 2 unticked steps, then ticks both before its turn ends
     Then the plan kept on the turn is the same as the file's last content, with both steps ticked
@@ -64,7 +64,7 @@ Feature: The agents' turns
 
   @TURN-07 @agent @test
   Scenario: An agent keeps its notes across tasks in .agentry/knowledge.md
-    # internal/hooks/handler_test.go TestWhatTheAgentLearnedIsKept
+    # internal/domain/policy/hooks/handler_test.go TestWhatTheAgentLearnedIsKept
     Given the brief's "What you know from earlier tasks" shows the agent's notes and asks it to update .agentry/knowledge.md before it finishes
     When the engineer's turn ends with "This repo formats with gofmt -s." in that file
     Then the engineer's knowledge is exactly that text, recorded once, by the engineer

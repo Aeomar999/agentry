@@ -17,7 +17,7 @@ import (
 // When a change to default.toml changes a profile, copy the new
 // default.toml to the next NN with the version that will ship it:
 //
-//	cp internal/policy/default.toml internal/policy/shipped/06-v0.9.3.toml
+//	cp internal/domain/policy/default.toml internal/domain/policy/shipped/06-v0.9.3.toml
 //
 // TestEveryShippedProfileIsKept fails until you do.
 //

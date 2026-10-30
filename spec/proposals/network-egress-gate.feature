@@ -26,8 +26,8 @@ Feature: Network egress gate
 
   @PROP-79 @agent @test @to-policy
   Scenario: A connection to an allowlisted host passes without asking
-    # the old build plan, "allowlisted hosts pass"; the allowlist is part of the profile in policy.toml, as its rules are (internal/policy)
-    # test: internal/policy/network_test.go and internal/egress/proxy_test.go (to write)
+    # the old build plan, "allowlisted hosts pass"; the allowlist is part of the profile in policy.toml, as its rules are (internal/domain/policy)
+    # test: internal/domain/policy/network_test.go and internal/egress/proxy_test.go (to write)
     Given the developer profile with an allowlisted host, written as a pattern that covers its subdomains
     When the engineer's go mod download opens 3 connections to that host and 1 to a subdomain of it
     Then all 4 pass with no wait, and 0 asks are made
@@ -45,8 +45,8 @@ Feature: Network egress gate
 
   @PROP-81 @user @test @to-approvals-and-questions
   Scenario: The user's answer: once lets this connection through, always adds the host to the list, and Deny refuses it
-    # the locked write path for policy.toml, backed up, checked to load and logged with its diff (internal/policy/live.go Live.Change); @PROP-01 writes a rule the same way
-    # test: internal/web/api_test.go and internal/policy/network_test.go (to write)
+    # the locked write path for policy.toml, backed up, checked to load and logged with its diff (internal/domain/policy/live.go Live.Change); @PROP-01 writes a rule the same way
+    # test: internal/web/api_test.go and internal/domain/policy/network_test.go (to write)
     Given a connection to a host not on the list, held for the user
     When the user clicks Allow once
     Then that connection passes, and the next connection to the host is asked again: yes
@@ -87,7 +87,7 @@ Feature: Network egress gate
 
   @PROP-85 @user @test @to-policy
   Scenario: Where the system does not allow the block, Agentry says so plainly
-    # the Policy page shows each profile (@POLICY-01); the autonomous profile's why names the gap today (internal/policy/default.toml profiles.autonomous)
+    # the Policy page shows each profile (@POLICY-01); the autonomous profile's why names the gap today (internal/domain/policy/default.toml profiles.autonomous)
     # test: ui/src/pages/PolicyPage.test.tsx and internal/egress/block_test.go (to write)
     Given a machine whose system Agentry cannot block traffic on, or a worker without the permission to block it
     When the Policy page shows a profile with a network allowlist
@@ -99,8 +99,8 @@ Feature: Network egress gate
 
   @PROP-86 @test @to-security
   Scenario: Under autonomous, a script that reaches out is asked about, though its command is allowed
-    # the old build plan says the egress gate is needed for the autonomous profile to be trustworthy; builds on @SEC-31 and @SEC-32 (internal/policy/default_test.go TestTheAutonomousProfile)
-    # test: internal/policy/default_test.go and internal/egress/proxy_test.go (to write)
+    # the old build plan says the egress gate is needed for the autonomous profile to be trustworthy; builds on @SEC-31 and @SEC-32 (internal/domain/policy/default_test.go TestTheAutonomousProfile)
+    # test: internal/domain/policy/default_test.go and internal/egress/proxy_test.go (to write)
     Given the shipped policy with use_for_everyone turned off, an agent with the autonomous profile, and the block in force on its machine
     When it runs python deploy.py, which the profile allows, and the script opens a connection to a host not on the list
     Then the command runs and the connection is asked: yes
@@ -109,8 +109,8 @@ Feature: Network egress gate
 
   @PROP-87 @test @to-compatibility
   Scenario: Profiles with no allowlist work as today
-    # the shipped profiles other than autonomous keep reaching the network as they do (internal/policy/default.toml)
-    # test: internal/policy/default_test.go (to write)
+    # the shipped profiles other than autonomous keep reaching the network as they do (internal/domain/policy/default.toml)
+    # test: internal/domain/policy/default_test.go (to write)
     Given the shipped policy, and a policy.toml written before the egress gate was built
     When every agent but those on autonomous works
     Then 0 connections are asked about, and their sessions' environments are the same as today: yes

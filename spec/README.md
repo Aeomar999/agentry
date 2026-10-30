@@ -84,7 +84,7 @@ Every scenario, with no exceptions:
 
 1. Is tagged with a unique ID, as above.
 2. Is tagged with exactly one of `@test`, `@benchmark` and `@manual`:
-   - `@test`: an automated test exists for it, named in a comment line directly under the scenario, such as `# internal/policy/default_test.go`.
+   - `@test`: an automated test exists for it, named in a comment line directly under the scenario, such as `# internal/domain/policy/default_test.go`.
    - `@benchmark`: a measured number, with where and when it was measured.
    - `@manual`: a person checks it, and the steps they take are the Given, When and Then.
 3. Has a Given that states the conditions or the load.

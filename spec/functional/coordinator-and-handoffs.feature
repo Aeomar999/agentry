@@ -192,7 +192,7 @@ Feature: The coordinator and its handoffs
     When the coordinator's next brief is written
     Then the command and the reason are shown under "Actions Agentry refused"
     # not under test, checked by hand: no issue is raised for the denial
-    # the gate writes action.denied, no issue: internal/hooks/handler.go decide; the brief section: internal/coordinator/brief.go refusedActions
+    # the gate writes action.denied, no issue: internal/domain/policy/hooks/handler.go decide; the brief section: internal/coordinator/brief.go refusedActions
 
   @HANDOFF-21 @coordinator @test
   Scenario: A resumed session that did not start is retried fresh once
@@ -211,7 +211,7 @@ Feature: The coordinator and its handoffs
     When the loop reads the task after those 24 turns
     Then the 12 reports raised 0 issues, and the stop is the "turns" limit, with the words "24 of its 24 turns"
     And the issues limit is reached only by 3 issues raised with no turn ending between them
-    # an issue is raised only for a failed turn or a usage limit that lasts: internal/hooks/handler.go, the UsageLimited and TurnFailed cases
+    # an issue is raised only for a failed turn or a usage limit that lasts: internal/domain/policy/hooks/handler.go, the UsageLimited and TurnFailed cases
     # a turn that ends with a report sets IssuesInARow to 0: internal/domain/tasks/apply.go turn.ended
     # the stop on "turns" alone: internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou, which writes the reports to the log and runs no hook
     # Steps: on a task with Max turns 24, have the coordinator assign the engineer and the engineer end each turn with
@@ -404,15 +404,15 @@ Feature: The coordinator and its handoffs
 
   @HANDOFF-40 @coordinator @test
   Scenario: The coordinator never edits code
-    # internal/policy/default_test.go TestTheReadOnlyProfile
+    # internal/domain/policy/default_test.go TestTheReadOnlyProfile
     Given the coordinator runs under the read-only profile
     When it calls the Edit tool on main.go in the workspace, or runs git commit -am 'x', or git push origin HEAD:dev
     Then each is denied
-    # not under test, checked by hand: the rule that denies it, "this agent changes nothing" or the rule for its command: internal/policy/default.toml line 219
+    # not under test, checked by hand: the rule that denies it, "this agent changes nothing" or the rule for its command: internal/domain/policy/default.toml line 219
     And reading a file, git diff, and go test ./... are allowed
     And writing its own notes in .agentry/knowledge.md is allowed
     # tech-lead and every template's coordinator: Profile "read-only", internal/domain/agents/defaults.go and internal/domain/agents/teams.go (the Visionaries' lead is read-mostly)
-    # the profile: internal/policy/default.toml, [profiles.read-only], line 198
+    # the profile: internal/domain/policy/default.toml, [profiles.read-only], line 198
 
   @HANDOFF-41 @coordinator @test
   Scenario: The coordinator cannot assign the task to itself

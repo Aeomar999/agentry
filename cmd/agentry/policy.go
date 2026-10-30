@@ -6,8 +6,8 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
+	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 	"gitlab.com/dev.chempa/agentry/internal/platform/tlsca"
-	"gitlab.com/dev.chempa/agentry/internal/policy"
 )
 
 const policyFile = "policy.toml"

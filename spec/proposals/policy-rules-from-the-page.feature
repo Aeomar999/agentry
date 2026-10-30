@@ -11,7 +11,7 @@ Feature: Policy rules from the page
 
   @PROP-01 @user @test @to-policy
   Scenario: A rule added from a profile's panel is written with its why and logged
-    # builds on @POLICY-02 and the policy's one locked write path (internal/policy/live.go Live.Change)
+    # builds on @POLICY-02 and the policy's one locked write path (internal/domain/policy/live.go Live.Change)
     # test: internal/web/policy_api_test.go (to write)
     Given the developer profile's panel, its rules as loaded, and the hash the page saw
     When the user adds the rule "never curl to a pipe" as rule 3, decision deny, runs_any "curl * | sh", why "A script from the internet never runs unread."
@@ -22,8 +22,8 @@ Feature: Policy rules from the page
 
   @PROP-02 @user @test @to-policy
   Scenario: A rule changed from the page changes only its own lines
-    # the edits Agentry makes touch nothing outside the part they change (internal/policy/edit.go)
-    # test: internal/policy/edit_test.go (to write)
+    # the edits Agentry makes touch nothing outside the part they change (internal/domain/policy/edit.go)
+    # test: internal/domain/policy/edit_test.go (to write)
     Given a policy file with comments between its rules and 6 profiles
     When the user changes the decision of developer's rule "never sudo" from deny to ask and its why
     Then every line of the file outside that rule is the same, comments included
@@ -53,7 +53,7 @@ Feature: Policy rules from the page
 
   @PROP-05 @user @test @to-policy
   Scenario: A rule without its why, or one that would not load, is refused and nothing is written
-    # the old build plan, "keeping each rule's why"; the checks a file must pass to load: internal/policy/file.go
+    # the old build plan, "keeping each rule's why"; the checks a file must pass to load: internal/domain/policy/file.go
     # a change that would not load is a policy.Refusal, which applyPolicy answers with 409 (internal/web/policy_api.go); a missing why and a repeated name are checks the page makes before the edit, so they get 400
     # test: internal/web/policy_api_test.go (to write)
     Given the developer profile's panel
@@ -67,7 +67,7 @@ Feature: Policy rules from the page
 
   @PROP-06 @user @test @to-policy
   Scenario: Changing a rule of a default profile makes it yours
-    # the rows "outdated" and "yours" of @POLICY-03 (internal/policy/edit.go ErrProfileEdited)
+    # the rows "outdated" and "yours" of @POLICY-03 (internal/domain/policy/edit.go ErrProfileEdited)
     # test: internal/web/policy_api_test.go (to write)
     Given read-only as Agentry ships it, marked current
     When the user changes the why of one of its rules from the page
@@ -88,15 +88,15 @@ Feature: Policy rules from the page
   @PROP-08 @test @to-security
   Scenario: A rule added from the page cannot open Agentry's own files
     # Agentry's own files are off limits for every profile, and no policy file can change that (@POLICY-38)
-    # test: internal/policy/default_test.go (to write)
+    # test: internal/domain/policy/default_test.go (to write)
     Given the user adds to developer, as rule 1, an allow rule for every path under the data folder
     When an agent under developer reads the sign-in token or edits policy.toml
     Then each is denied by the built-in rule for Agentry's own files, not allowed by the new rule
 
   @PROP-09 @test @to-reliability
   Scenario: A rule change made against an older version, or while the file does not load, is refused
-    # Live.Change refuses a stale version with ErrStale and a file that does not load (internal/policy/live.go)
-    # test: internal/policy/live_test.go (to write)
+    # Live.Change refuses a stale version with ErrStale and a file that does not load (internal/domain/policy/live.go)
+    # test: internal/domain/policy/live_test.go (to write)
     Given the page loaded the version with hash A, and the file was then saved by hand as version B
     When a rule change is sent with hash A
     Then it is refused with 409 "changed since the page loaded it: try again", and version B is kept
@@ -106,7 +106,7 @@ Feature: Policy rules from the page
 
   @PROP-10 @test @to-reliability
   Scenario: A rule change to a policy file that is a link is refused, and the policy in force is kept
-    # WriteFile refuses a symbolic link before it backs anything up (internal/policy/write.go)
+    # WriteFile refuses a symbolic link before it backs anything up (internal/domain/policy/write.go)
     # test: internal/web/policy_api_test.go (to write)
     Given a policy.toml that is a symbolic link to a file elsewhere
     When a rule is added from the page

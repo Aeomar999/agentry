@@ -115,8 +115,8 @@ Feature: Supervisor agents
 
   @PROP-62 @test @to-security
   Scenario: The permission gives no other right
-    # docs/design/extensions.md section 3: a supervisor is an ordinary agent; every tool call is judged with the agent's own profile (internal/policy)
-    # test: internal/policy/default_test.go and internal/core/rules/rules_test.go (to write)
+    # docs/design/extensions.md section 3: a supervisor is an ordinary agent; every tool call is judged with the agent's own profile (internal/domain/policy)
+    # test: internal/domain/policy/default_test.go and internal/core/rules/rules_test.go (to write)
     Given the reviewer, under read-only, may assign
     When it edits a file or pushes
     Then each is judged by read-only and denied, exactly as for a reviewer that may not assign: yes

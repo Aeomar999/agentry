@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/policy"
+	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 )
 
 // The default prompts tell agents to run commands. None of them may be one

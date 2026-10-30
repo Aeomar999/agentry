@@ -23,7 +23,7 @@ import (
 // as a multiple of its own length (target <= 2.5).
 //
 //	D=$(mktemp -d); sqlite3 "file:$HOME/.agentry/agentry.db?mode=ro" "VACUUM INTO '$D/agentry.db'"
-//	AGENTRY_BENCH_DB=$D/agentry.db go test ./internal/hooks -run TestKnowledgeAsPatchesOnARealLog -v -count=1
+//	AGENTRY_BENCH_DB=$D/agentry.db go test ./internal/domain/policy/hooks -run TestKnowledgeAsPatchesOnARealLog -v -count=1
 func TestKnowledgeAsPatchesOnARealLog(t *testing.T) {
 	source := os.Getenv("AGENTRY_BENCH_DB")
 	if source == "" {

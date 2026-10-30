@@ -16,8 +16,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
+	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
-	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
 
@@ -165,7 +165,7 @@ func TestAMissingProfileIsAddedFromThePageAndLogged(t *testing.T) {
 // profile is outdated now.
 func beforeV010(t *testing.T) string {
 	t.Helper()
-	text, err := os.ReadFile("../policy/shipped/01-v0.1.0-dev.toml")
+	text, err := os.ReadFile("../domain/policy/shipped/01-v0.1.0-dev.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
