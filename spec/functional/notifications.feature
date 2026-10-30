@@ -1,6 +1,6 @@
 Feature: Notifications
   Pushes to the user's devices when something newly waits for them.
-  # Sources: cmd/agentry/push.go, internal/domain/notifications/webpush, internal/web/push_api.go,
+  # Sources: cmd/agentry/push.go, internal/domain/notifications/webpush, internal/domain/notifications/notificationsapi,
   # ui/src/components/organisms/NotifyDeviceDialog.tsx, ui/src/lib/push.ts,
   # ui/public/sw.js and their tests.
 
@@ -8,7 +8,7 @@ Feature: Notifications
 
   @NOTIFY-01 @user @test
   Scenario: Notifications on this device need an https public address and a browser that takes pushes
-    # internal/web/push_api_test.go TestPushNeedsAnHTTPSPublicURL
+    # internal/domain/notifications/notificationsapi/notificationsapi_test.go TestPushNeedsAnHTTPSPublicURL
     # ui/src/components/organisms/NotifyDeviceDialog.test.tsx "with push off at the server, its reason shows and there is no button", "with push on, the button shows" and "with push on but a browser without it, the browser's reason shows and there is no button"
     # the reasons: internal/domain/notifications/webpush/webpush.go lines 234 to 236 and ui/src/lib/push.ts lines 14 and 17
     Given a server started without -public-url
@@ -23,7 +23,7 @@ Feature: Notifications
 
   @NOTIFY-02 @user @manual
   Scenario: Turning notifications on and off for this device
-    # the server half: internal/web/push_api_test.go TestSubscribingTwiceAndUnsubscribing and TestAMalformedPushSubscriptionIsABadRequest
+    # the server half: internal/domain/notifications/notificationsapi/notificationsapi_test.go TestSubscribingTwiceAndUnsubscribing and TestAMalformedPushSubscriptionIsABadRequest
     # the dialog's half when it opens: ui/src/components/organisms/NotifyDeviceDialog.test.tsx "a subscription made with the server's key is sent again and shows as notified" and "a subscription made with another key is dropped in the browser and the button shows"; no test clicks either button
     # the dialog "Notifications on this device", from the Signing in menu: ui/src/components/organisms/AccountMenu.tsx line 41; its buttons: ui/src/components/organisms/NotifyDeviceDialog.tsx lines 52 to 77
     # "Notifications weren't allowed." when the browser refuses permission, in the banner "Couldn't change notifications": ui/src/lib/push.ts line 43; ui/src/components/organisms/NotifyDeviceDialog.tsx line 45

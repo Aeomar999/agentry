@@ -133,7 +133,7 @@ Feature: Observability
     And both get the session's state saying 2 viewers: yes
     And what the session prints after that reaches both: yes
     But a task with no running session answers HTTP 404, with no terminal to watch
-    # not under test, checked by hand: the state, with who is in control and which viewer each is, comes first, then the screen, then the live output (internal/platform/terminal/hub.go lines 129 and 130); the page's route is GET /api/tasks/{task}/terminal (internal/web/server.go line 179)
+    # not under test, checked by hand: the state, with who is in control and which viewer each is, comes first, then the screen, then the live output (internal/platform/terminal/hub.go lines 129 and 130); the page's route is GET /api/tasks/{task}/terminal (internal/web/server.go line 177)
     # README.md, Use it, A task; internal/platform/terminal/terminal_test.go TestOnlyTheViewerInControlCanType and TestNoSessionNoWatch
 
   @OBS-14 @test
@@ -238,7 +238,7 @@ Feature: Observability
     And the other two say why, "Start Agentry with -public-url https://" or "-public-url is http://...", and the subscription is refused with that reason
     And subscribing and unsubscribing write 0 events, and no event holds a subscription's address
     # not under test, checked by hand: serve sets it from -public-url (cmd/agentry/serve.go lines 98 and 328)
-    # README.md, Install, Push; internal/web/push_api_test.go TestPushNeedsAnHTTPSPublicURL and TestPushDataStaysOutOfTheLog
+    # README.md, Install, Push; internal/domain/notifications/notificationsapi/notificationsapi_test.go TestPushNeedsAnHTTPSPublicURL and TestPushDataStaysOutOfTheLog
 
   @OBS-25 @test
   Scenario: A turn's tokens are counted from the engine's transcript, this turn's part only

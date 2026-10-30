@@ -1,10 +1,11 @@
-package web
+package notificationsapi_test
 
 import (
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,7 +16,13 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/notifications/webpush"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
+	"gitlab.com/dev.chempa/agentry/internal/web"
 )
+
+// The push routes, tested over HTTP through the server serve runs, as web
+// mounts them: that is where their token check is.
+
+const token = "ui-secret"
 
 // newPushServer is a server on the data folder dir, its log and its push
 // subscriptions, served at publicURL.
@@ -26,7 +33,7 @@ func newPushServer(t *testing.T, dir, publicURL string) (*httptest.Server, *stor
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, PublicURL: publicURL, Push: push}, http.NotFoundHandler(), nil).Handler())
+	server := httptest.NewServer(web.NewServer(s, state, web.Config{UIToken: token, PublicURL: publicURL, Push: push}, http.NotFoundHandler(), nil).Handler())
 	t.Cleanup(server.Close)
 	return server, s
 }
@@ -43,6 +50,27 @@ func subscriptionJSON(t *testing.T, endpoint string) string {
 	body, _ := json.Marshal(map[string]any{"endpoint": endpoint, "expirationTime": nil, "keys": map[string]string{
 		"p256dh": base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()), "auth": base64.RawURLEncoding.EncodeToString(secret)}})
 	return string(body)
+}
+
+func call(t *testing.T, server *httptest.Server, method, path, body string) (int, string) {
+	t.Helper()
+	request, _ := http.NewRequest(method, server.URL+path, strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	content, _ := io.ReadAll(response.Body)
+	return response.StatusCode, string(content)
+}
+
+// pushView is GET /api/push's answer, as the page reads it.
+type pushView struct {
+	Available  bool   `json:"available"`
+	Reason     string `json:"reason"`
+	PublicKey  string `json:"publicKey"`
+	Subscribed int    `json:"subscribed"`
 }
 
 func readPush(t *testing.T, server *httptest.Server) pushView {

@@ -11,7 +11,7 @@ Feature: Approvals and questions
   Scenario: Needs you: approve or deny an action the policy held
     # internal/web/api_test.go TestApproveOnlyWhatWasAsked
     # the panel "Needs you", reading "engineer asks to run Bash:" with the command, Approve and Deny: ui/src/components/organisms/NeedsYouPanel.tsx lines 77 to 99
-    # the routes: internal/web/server.go lines 123 and 124
+    # the routes: internal/web/server.go lines 124 and 125
     Given the engineer asked to run "git push origin HEAD:dev" and the policy asked the user
     When the task is read
     Then its needsYou reads exactly "Waiting for you to approve the push to dev" and the action is shown in its approvals

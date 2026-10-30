@@ -424,7 +424,7 @@ export interface SigninCode {
   address: string; // the address this page came from, the one to show first
 }
 
-// Whether this server can push to a device (internal/web/push_api.go).
+// Whether this server can push to a device (internal/domain/notifications/notificationsapi/notificationsapi.go).
 export interface PushStatus {
   available: boolean;
   reason?: string; // why not, when not

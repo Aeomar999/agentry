@@ -341,29 +341,29 @@ Feature: Operations
     When the same endpoint subscribes twice and then unsubscribes
     Then 1 subscription is kept, then 0
     # not under test, checked by hand: serve sets the public address from -public-url (cmd/agentry/serve.go lines 98 and 328) and keeps push.json in the data folder, beside the log (line 207)
-    # README.md, From the source; internal/web/push_api_test.go TestAPushSubscriptionSurvivesARestart, TestPushDataStaysOutOfTheLog and TestSubscribingTwiceAndUnsubscribing; push.json and its keys: internal/domain/notifications/webpush/webpush_test.go TestASubscriptionAndTheKeysSurviveARestart
+    # README.md, From the source; internal/domain/notifications/notificationsapi/notificationsapi_test.go TestAPushSubscriptionSurvivesARestart, TestPushDataStaysOutOfTheLog and TestSubscribingTwiceAndUnsubscribing; push.json and its keys: internal/domain/notifications/webpush/webpush_test.go TestASubscriptionAndTheKeysSurviveARestart
 
   @OPS-38 @test
   Scenario: A malformed push subscription, or one whose endpoint is not https, is refused with 400
     # internal/domain/notifications/webpush/webpush.go Check: no endpoint, an endpoint that is not https, or keys that are not a P-256 key and 16 bytes is ErrMalformed, and nothing changes
-    # internal/web/push_api.go: 400 with the reason when the subscription is malformed
-    # internal/web/push_api_test.go TestAMalformedPushSubscriptionIsABadRequest
+    # internal/domain/notifications/notificationsapi/notificationsapi.go: 400 with the reason when the subscription is malformed
+    # internal/domain/notifications/notificationsapi/notificationsapi_test.go TestAMalformedPushSubscriptionIsABadRequest
     Given a server with an https -public-url
     When a malformed subscription, or one whose endpoint is not https, is posted
     Then it is answered 400 with a reason: yes
     And 0 subscriptions are kept from it
-    # README.md, From the source; internal/web/push_api_test.go
+    # README.md, From the source; internal/domain/notifications/notificationsapi/notificationsapi_test.go
 
   @OPS-33 @test
   Scenario: Push is off, and subscribing is refused, without an https public address
     # internal/domain/notifications/webpush/webpush.go Available: -public-url must be an https address
-    # internal/web/push_api.go: subscribing is refused while push is off
+    # internal/domain/notifications/notificationsapi/notificationsapi.go: subscribing is refused while push is off
     Given a server whose public address is unset, or not https
     When the page asks whether push is available and a browser posts a subscription
     Then GET /api/push says push is available: no, with the reason
     And POST /api/push/subscriptions is refused: yes
     # not under test, checked by hand: serve sets the public address from -public-url (cmd/agentry/serve.go lines 98 and 328)
-    # README.md, From the source; internal/web/push_api_test.go TestPushNeedsAnHTTPSPublicURL
+    # README.md, From the source; internal/domain/notifications/notificationsapi/notificationsapi_test.go TestPushNeedsAnHTTPSPublicURL
 
   @OPS-20 @test
   Scenario: What newly needs the user is pushed once to each subscribed device

@@ -16,6 +16,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/connections/connectionsapi"
+	"gitlab.com/dev.chempa/agentry/internal/domain/notifications/notificationsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/notifications/webpush"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/hooks"
@@ -167,9 +168,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /integrations/agentry", s.integrationBinary)
 	mux.HandleFunc("POST /api/integrations/connect", s.connect)
 	api("POST /api/theme", s.setTheme)
-	api("GET /api/push", s.showPush)
-	api("POST /api/push/subscriptions", s.subscribePush)
-	api("DELETE /api/push/subscriptions", s.unsubscribePush)
 	// Signing in: a device without the token swaps a one-time code, or the
 	// token pasted in, for the cookie and the token.
 	mux.Handle("POST /api/signin/codes", s.requireRealUIToken(s.issueSigninCode))
@@ -206,6 +204,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	s.mount("the settings domain", settingsapi.API{Log: s.store, State: s.state}.Routes(), mux)
 	s.mount("the connections domain", connectionsapi.API{Log: s.store, State: s.state, InstallCommands: s.installCommands}.Routes(), mux)
+	s.mount("the notifications domain", notificationsapi.API{Push: s.config.Push, PublicURL: s.config.PublicURL}.Routes(), mux)
 	// Last, so an extension's route that clashes with any core or domain
 	// route is the one that fails, naming its extension.
 	for _, f := range s.config.Extensions {
