@@ -561,7 +561,7 @@ Feature: Operations
 
   @OPS-46 @test
   Scenario: A server built without the UI says how to build it, and its API still answers
-    # internal/web/page.go embeds internal/web/static; the built page in internal/web/static/dist is git-ignored, and internal/web/static/notbuilt.html is committed
+    # internal/web/page.go embeds internal/web/static; the built page, which make ui writes to a dist folder there, is git-ignored, and internal/web/static/notbuilt.html is committed
     # internal/web/page_test.go TestServesTheNotBuiltPageWithoutTheUI serves from a tree with no dist; TestTheNotBuiltPageSaysHowToBuildIt reads the committed page
     Given a binary built with go build from a clone where make ui has not run
     When the browser opens /, /tasks or any other page path
@@ -604,7 +604,7 @@ Feature: Operations
 
   @OPS-47 @test
   Scenario: Packaging refuses a page that isn't HEAD's, so a stale page can't ship
-    # tools/packaging/main.go checkRoot, checkPageCommit and checkUICommitted run before make package and make desktop build anything; make ui writes internal/web/static/dist/built-from
+    # tools/packaging/main.go checkRoot, checkPageCommit and checkUICommitted run before make package and make desktop build anything; make ui writes the page's built-from file beside its index.html
     # tools/packaging/root_test.go TestCheckRootRefusesAPageBuiltFromAnotherCommit, TestCheckRootRefusesAPageThatDoesntSayItsCommit, TestCheckRootRefusesUIChangesThatArentCommitted, TestCheckRootLeavesChangesOutsideUIAlone and TestCheckRootTakesAPageBuiltFromACleanHEAD
     Given a git checkout whose page in internal/web/static/dist names in built-from the commit it was built from
     When the page was built from another commit than HEAD, and go run ./tools/packaging or its desktop mode runs
