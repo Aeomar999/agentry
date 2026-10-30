@@ -248,11 +248,11 @@ Feature: Compatibility
   Scenario: The UI's toolchain is pinned to exact versions, with no Node version pinned
     Given ui/package.json on the branch
     When the user reads its dependencies and looks for an engines field, a .nvmrc or a .tool-versions at the root and in ui
-    Then every one of the 26 dependencies is an exact version: react 19.3.1, react-dom 19.3.1, typescript 5.9.3, vite 8.3.4, vitest 5.0.5, tailwindcss 4.3.3, @xterm/xterm 5.5.0 and monaco-editor 0.52.2 among them
+    Then every one of the 28 dependencies is an exact version: react 19.3.1, react-dom 19.3.1, typescript 5.9.3, vite 8.3.4, vitest 5.0.5, tailwindcss 4.3.3, @xterm/xterm 5.5.0 and monaco-editor 0.52.2 among them
     And 0 of them carries a range marker such as ^ or ~
     And there is no engines field and no .nvmrc or .tool-versions: the Node version is not pinned for the UI build
-    And npm run lint is exactly tsc --noEmit and prettier --check src, and make test runs it after go vet and go test
-    # README.md, Work on it; measured 2026-10-25 at commit 5ecec34a with grep -c of a version starting in ^ or ~ in ui/package.json (0 of 26 version lines), grep "engines" in it (none) and ls -a of the root and ui (no .nvmrc, no .tool-versions); ui/package.json; Makefile lines 25-26
+    And npm run lint is exactly tsc --noEmit, prettier --check src and eslint src, and make test runs it after go vet and go test
+    # README.md, Work on it; measured 2026-10-25 at commit 5ecec34a with grep -c of a version starting in ^ or ~ in ui/package.json (0 of 26 version lines), grep "engines" in it (none) and ls -a of the root and ui (no .nvmrc, no .tool-versions); eslint and @typescript-eslint/parser added 2026-10-30, 0 of 28 then; ui/package.json, ui/eslint.config.js; Makefile lines 25-26
 
   # --- HTTPS across devices ---
   # The certificate's lifetimes, names and the key's modes are security.feature's; here only what each system installs and checks.
