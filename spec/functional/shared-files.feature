@@ -65,7 +65,7 @@ Feature: Shared files
     Then the story's .agentry/files/epic holds exactly that file, and the brief says changes there aren't kept
     And a file written under .agentry/files/epic during the turn is not shared when the turn ends
     # the delivery under epic/: internal/runtime/coordinator/files.go filesFor; the folder, left out of what a turn shares: internal/domain/sharedfiles/folder.go EpicFolder, Manifest
-    # the folder left out of the manifest: internal/domain/sharedfiles/sharedfiles_test.go TestFilesGoRoundBetweenWorktrees; the brief's words: internal/runtime/coordinator/brief.go sharedText
+    # the folder left out of the manifest: internal/domain/sharedfiles/sharedfiles_test.go TestFilesGoRoundBetweenWorktrees; the brief's words: internal/runtime/coordinator/brief_shared_files.go sharedText
     # Steps: drop a file on an epic's Files tab, start one of its stories, and in the story's worktree read
     # .agentry/files/epic/<the file>; write a new file beside it and end the turn; the story's Files tab shows no such
     # file (with no other shared file it says No shared files).

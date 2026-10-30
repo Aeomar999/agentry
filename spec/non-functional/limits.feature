@@ -232,7 +232,7 @@ Feature: Limits
     And the story's summary quoted to its epic is at most 1,500 bytes
     And the epic's description quoted to a story is at most 2,000 bytes
     And an epic's closing summary quoted to a follow-up is at most 4,000 bytes
-    # README.md, How a task moves; the sizes are set in internal/runtime/coordinator/brief.go, epics.go and followups.go
+    # README.md, How a task moves; the sizes are set in internal/runtime/coordinator/brief_trail.go, brief_decision.go, epics.go and followups.go
 
   @LIM-27 @manual
   Scenario: A task has at most 12 labels of at most 32 bytes
@@ -316,5 +316,5 @@ Feature: Limits
     When the coordinator briefs a checking agent with the handoff
     Then for the 41 files the handoff does not list them one by one: it says "It touches <n> files; list them with `git diff --stat <base>..HEAD`.", n being 41
     And for the 40 files they are listed one by one, the 40th by name: yes
-    # not under test, checked by hand: each file is one line (internal/runtime/coordinator/brief.go line 325)
-    # README.md, How it works, How a task moves; the cap is mostFilesListed in internal/runtime/coordinator/brief.go; internal/runtime/coordinator/handoff_brief_test.go TestAHandoffCapsALongFileList
+    # not under test, checked by hand: each file is one line (internal/runtime/coordinator/brief_handoff.go line 119)
+    # README.md, How it works, How a task moves; the cap is mostFilesListed in internal/runtime/coordinator/brief_handoff.go; internal/runtime/coordinator/handoff_brief_test.go TestAHandoffCapsALongFileList

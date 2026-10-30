@@ -38,7 +38,7 @@ Feature: The coordinator and its handoffs
     When the agent's next turn on the task starts
     Then that plan is the one the next turn carries on, kept as it was, with the turn it came from
     And a plan with every step ticked is not carried over
-    # not under test, checked by hand: the plan is already in the new turn's plan file and the brief says which turn it came from: internal/runtime/turns/turns.go line 136, internal/runtime/coordinator/brief.go lines 452 and 453
+    # not under test, checked by hand: the plan is already in the new turn's plan file and the brief says which turn it came from: internal/runtime/turns/turns.go line 136, internal/runtime/coordinator/brief_plan.go lines 19 and 20
 
   @HANDOFF-05 @coordinator @test
   Scenario: Any decision may retitle the task
@@ -192,7 +192,7 @@ Feature: The coordinator and its handoffs
     When the coordinator's next brief is written
     Then the command and the reason are shown under "Actions Agentry refused"
     # not under test, checked by hand: no issue is raised for the denial
-    # the gate writes action.denied, no issue: internal/domain/policy/hooks/handler.go decide; the brief section: internal/runtime/coordinator/brief.go refusedActions
+    # the gate writes action.denied, no issue: internal/domain/policy/hooks/handler.go decide; the brief section: internal/runtime/coordinator/brief_decision.go refusedActions
 
   @HANDOFF-21 @coordinator @test
   Scenario: A resumed session that did not start is retried fresh once

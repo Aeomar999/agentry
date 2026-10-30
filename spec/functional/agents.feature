@@ -2,6 +2,8 @@ Feature: The agents' turns
   The engineer, reviewer, tester, deployer and the other teams' agents, each in its own
   worktree and session: what each one's turn does.
   # Sources: internal/runtime/turns, internal/domain/agents, internal/runtime/coordinator/brief.go,
+  # internal/runtime/coordinator/brief_finish.go, internal/runtime/coordinator/brief_notes.go, internal/runtime/coordinator/brief_plan.go,
+  # internal/runtime/coordinator/brief_task.go,
   # internal/runtime/coordinator/checks.go, internal/domain/policy/hooks/handler.go and their tests.
 
   # ---- Every agent's turn ----------------------------------------------------
@@ -13,7 +15,7 @@ Feature: The agents' turns
     When the agent writes the file and then ticks steps in it
     Then the plan kept on the turn is the same as the file's last content
     And the plan is kept when the turn ends
-    # the plan file name: internal/runtime/machines/local.go PlanFile; the brief's wording: internal/runtime/coordinator/brief.go plan
+    # the plan file name: internal/runtime/machines/local.go PlanFile; the brief's wording: internal/runtime/coordinator/brief_plan.go plan
 
   @TURN-02 @agent @test
   Scenario: An agent starts fresh with only its brief and the repository
@@ -39,8 +41,8 @@ Feature: The agents' turns
     When the engineer ends its turn with the report "Removed 3 TODOs and committed."
     Then the next turn is the coordinator's, and no other agent's turn starts first
     And the report is shown in the coordinator's brief as the step "engineer → tech-lead: Removed 3 TODOs and committed."
-    # not under test, checked by hand: the step is shown once, and the brief tells the agent not to stop to ask questions and to put them in the report: internal/runtime/coordinator/brief.go line 394
-    # finish: internal/runtime/coordinator/brief.go
+    # not under test, checked by hand: the step is shown once, and the brief tells the agent not to stop to ask questions and to put them in the report: internal/runtime/coordinator/brief_finish.go line 13
+    # finish: internal/runtime/coordinator/brief_finish.go
 
   @TURN-05 @agent @test
   Scenario: An agent works only in the task's worktree, on branch agentry/<task>
@@ -51,7 +53,7 @@ Feature: The agents' turns
     Then the brief's "Where the work is" names that worktree and branch, and says never to create or change repos or folders outside it
     And the worktree's port is in the PORT environment variable of the turn: yes
     # not under test, checked by hand: the port is task-3's own 7903; the turns test checks PORT=7901 for its own worktree
-    # whereText: internal/runtime/coordinator/brief.go; PORT: internal/runtime/turns/turns.go environment; the branch: internal/platform/worktrees/worktree_test.go TestCreateSetsTheWorktreeUp
+    # whereText: internal/runtime/coordinator/brief_task.go; PORT: internal/runtime/turns/turns.go environment; the branch: internal/platform/worktrees/worktree_test.go TestCreateSetsTheWorktreeUp
 
   @TURN-06 @agent @test
   Scenario: An agent writes the plan file its brief asks for, and the plan follows the file
@@ -60,7 +62,7 @@ Feature: The agents' turns
     When the agent writes 2 unticked steps, then ticks both before its turn ends
     Then the plan kept on the turn is the same as the file's last content, with both steps ticked
     And an unchanged plan is recorded 0 more times
-    # PlanFile: internal/runtime/machines/local.go; the section's words: internal/runtime/coordinator/brief.go plan
+    # PlanFile: internal/runtime/machines/local.go; the section's words: internal/runtime/coordinator/brief_plan.go plan
 
   @TURN-07 @agent @test
   Scenario: An agent keeps its notes across tasks in .agentry/knowledge.md
@@ -68,8 +70,8 @@ Feature: The agents' turns
     Given the brief's "What you know from earlier tasks" shows the agent's notes and asks it to update .agentry/knowledge.md before it finishes
     When the engineer's turn ends with "This repo formats with gofmt -s." in that file
     Then the engineer's knowledge is exactly that text, recorded once, by the engineer
-    # not under test, checked by hand: its next brief shows the same notes under "What you know from earlier tasks": internal/runtime/coordinator/brief.go knowledge, line 432
-    # KnowledgeFile: internal/runtime/machines/local.go; knowledge: internal/runtime/coordinator/brief.go
+    # not under test, checked by hand: its next brief shows the same notes under "What you know from earlier tasks": internal/runtime/coordinator/brief_notes.go knowledge, line 18
+    # KnowledgeFile: internal/runtime/machines/local.go; knowledge: internal/runtime/coordinator/brief_notes.go
 
   # ---- The engineer, the reviewer and the tester -----------------------------
 
@@ -113,7 +115,7 @@ Feature: The agents' turns
     When its brief is written, fresh or for a resumed session
     Then the brief ends with exactly the 2 lines it may use, "Verdict: approved" and "Verdict: changes needed", and says to approve only work it would ship as it is
     # not under test, checked by hand: an agent whose work counts as building gets no verdict section
-    # VerdictFormat: internal/runtime/coordinator/checks.go; finish: internal/runtime/coordinator/brief.go
+    # VerdictFormat: internal/runtime/coordinator/checks.go; finish: internal/runtime/coordinator/brief_finish.go
 
   @TURN-12 @agent @manual
   Scenario: The tester runs the tests, adds missing ones and tries the change for real
@@ -160,7 +162,7 @@ Feature: The agents' turns
     Then its brief adds "The user chose to ship this as it is, so no earlier review or test is needed", and that failing checks after the merge mean no push
     And once an approved push finished in that turn, done is allowed with 0 reviews
     And after a push that was denied, hung, or stopped by failed tests, done is refused with "the work isn't checked yet", and a change after the ship needs checking again
-    # YouChoseToShip: internal/runtime/coordinator/brief.go; TestYourShipTellsTheShipperToShipItAsItIs in the same file
+    # YouChoseToShip: internal/runtime/coordinator/brief.go; internal/runtime/coordinator/next_test.go TestYourShipTellsTheShipperToShipItAsItIs
 
   # ---- The other teams -------------------------------------------------------
 
