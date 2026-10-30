@@ -6,12 +6,12 @@ const plans = { streams: { prefix: "plan-", to: (stream: string) => `/plans/${st
 const noStreams = {};
 
 describe("extensionLink", () => {
-  test("links a stream to the feature whose prefix starts it", () => {
+  test("links a stream to the extension whose prefix starts it", () => {
     expect(extensionLink("idea-7", [ideas, plans])).toBe("/ideas#idea-7");
     expect(extensionLink("plan-2", [ideas, plans])).toBe("/plans/plan-2");
   });
 
-  test("gives no link for a stream no feature owns", () => {
+  test("gives no link for a stream no extension owns", () => {
     expect(extensionLink("task-3", [ideas, plans])).toBeUndefined();
     expect(extensionLink("idea-7", [])).toBeUndefined();
   });
@@ -27,7 +27,7 @@ describe("extensionLink", () => {
     expect(extensionLink("", [ideas])).toBeUndefined();
   });
 
-  test("skips a feature that owns no streams", () => {
+  test("skips an extension that owns no streams", () => {
     expect(extensionLink("idea-7", [noStreams, ideas])).toBe("/ideas#idea-7");
     expect(extensionLink("idea-7", [noStreams])).toBeUndefined();
   });

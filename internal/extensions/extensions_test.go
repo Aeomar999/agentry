@@ -40,7 +40,7 @@ func TestAPanickingManifestCostsOnlyItsOwnLine(t *testing.T) {
 		t.Errorf("lines:\n got %+v\nwant %+v", lines, want)
 	}
 	logged := strings.Split(strings.TrimSpace(said.String()), "\n")
-	if len(logged) != 2 || !strings.Contains(logged[0], "feature=\"nil reader\"") || !strings.Contains(logged[1], "feature=panics panic=\"a bad manifest\"") {
+	if len(logged) != 2 || !strings.Contains(logged[0], "extension=\"nil reader\"") || !strings.Contains(logged[1], "extension=panics panic=\"a bad manifest\"") {
 		t.Errorf("want one line for each panicking manifest, got:\n%s", said.String())
 	}
 }

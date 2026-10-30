@@ -21,7 +21,7 @@ func StartJobs(ctx context.Context, list []Extension, coreOf func(Extension) Cor
 func runJob(ctx context.Context, f Extension, c Core) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("agentry: a feature's job panicked and stopped", "feature", f.Name, "panic", r,
+			slog.Error("agentry: an extension's job panicked and stopped", "extension", f.Name, "panic", r,
 				"stack", string(debug.Stack()))
 		}
 	}()

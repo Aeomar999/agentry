@@ -77,7 +77,7 @@ func TestAnUndeclaredTypeIsRefusedBeforeTheLog(t *testing.T) {
 			t.Fatalf("%s: got %+v %+v %v, want a features rejection", name, got, rejection, err)
 		}
 		if !strings.Contains(rejection.Reason, "votes") || !strings.Contains(rejection.Reason, string(events.TaskDone)) {
-			t.Errorf("%s: the reason should name the feature and the type: %q", name, rejection.Reason)
+			t.Errorf("%s: the reason should name the extension and the type: %q", name, rejection.Reason)
 		}
 	}
 	if len(inner.proposed) != 0 {

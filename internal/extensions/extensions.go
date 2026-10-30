@@ -196,7 +196,7 @@ var (
 // verify panics: a signed route that checks nothing would let anyone write.
 func Signed(verify func(r *http.Request, body []byte) error) Auth {
 	if verify == nil {
-		panic("features.Signed needs a verify: a signed route that checks nothing would let anyone in")
+		panic("extensions.Signed needs a verify: a signed route that checks nothing would let anyone in")
 	}
 	return Auth{verify: verify}
 }
@@ -244,7 +244,7 @@ func Manifest(list []Extension, state Reader) []Line {
 func entryOf(f Extension, state Reader) (entry Entry) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			slog.Warn("features: a feature's manifest panicked", "feature", f.Name, "panic", recovered)
+			slog.Warn("extensions: an extension's manifest panicked", "extension", f.Name, "panic", recovered)
 			entry = Entry{Why: fmt.Sprintf("its manifest failed: %v", recovered)}
 		}
 	}()

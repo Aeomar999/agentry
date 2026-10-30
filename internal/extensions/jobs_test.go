@@ -32,7 +32,7 @@ func TestAPanickingJobStopsAloneAndSaysWhose(t *testing.T) {
 		}},
 	}
 	StartJobs(ctx, list, func(Extension) Core { return Core{} })
-	for deadline := time.Now().Add(5 * time.Second); !strings.Contains(logged.String(), "feature=breaks"); time.Sleep(10 * time.Millisecond) {
+	for deadline := time.Now().Add(5 * time.Second); !strings.Contains(logged.String(), "extension=breaks"); time.Sleep(10 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatalf("the panic wasn't logged:\n%s", logged.String())
 		}

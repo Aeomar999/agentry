@@ -11,7 +11,7 @@ describe("boardColumns", () => {
     expect(boardColumns({ features: [], board: { columns: [...ALL] as never } })).toEqual(ALL);
   });
 
-  test("leave out Shipping while the manifest loads, as any feature waits", () => {
+  test("leave out Shipping while the manifest loads, as any extension waits", () => {
     expect(boardColumns(undefined)).toEqual(NO_SHIPPING);
   });
 
@@ -43,13 +43,13 @@ describe("withTheirCards", () => {
 });
 
 describe("hiddenExtensions", () => {
-  test("is the features the manifest lists but doesn't show", () => {
+  test("is the extensions the manifest lists but doesn't show", () => {
     const off = extensionsOf({ features: [{ name: "ideas", enabled: false, visible: false }], unknown: null });
     expect(hiddenExtensions(off).map((extension) => extension.name)).toEqual(["ideas"]);
     expect(visibleExtensions(off)).toEqual([]);
   });
 
-  test("leaves out a visible feature, and one the manifest doesn't list", () => {
+  test("leaves out a visible extension, and one the manifest doesn't list", () => {
     expect(hiddenExtensions(extensionsOf({ features: [{ name: "ideas", enabled: false, visible: true }], unknown: [] }))).toEqual([]);
     expect(hiddenExtensions(extensionsOf({ features: [], unknown: [] }))).toEqual([]);
     expect(hiddenExtensions(extensionsOf(undefined))).toEqual([]);
