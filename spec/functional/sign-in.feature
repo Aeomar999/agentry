@@ -1,6 +1,6 @@
 Feature: Signing in
   Signing devices in with one-time codes, trusting Agentry's CA, installing the app, and the desktop app.
-  # Sources: cmd/agentry/trust.go, cmd/agentry-desktop, internal/web/signin.go,
+  # Sources: cmd/agentry/trust.go, cmd/agentry-desktop, internal/web/signin.go, internal/web/signin_codes.go,
   # internal/platform/tlsca, internal/platform/launch, tools/packaging/desktop.go, tools/packaging/files,
   # ui/src/shell/signin/SignInPage.tsx,
   # ui/src/shell/signin/SignInDeviceDialog.tsx, ui/src/shell/signin/signin.ts,
@@ -12,7 +12,7 @@ Feature: Signing in
   @SIGNIN-01 @user @test
   Scenario: A one-time code signs another device in once, within 5 minutes
     # internal/web/signin_test.go TestASigninCodeSignsInOnce, TestASigninCodeExpires and TestIssuingPastTheCapDropsTheOldestCode
-    # 8 characters from 31 letters and digits, no 0, O, 1, I or L, shown as XXXX-XXXX, 5 minutes, at most 20 live: internal/web/signin.go lines 25 to 28 and 74
+    # 8 characters from 31 letters and digits, no 0, O, 1, I or L, shown as XXXX-XXXX, 5 minutes, at most 20 live: internal/web/signin_codes.go lines 13 to 16 and 59
     # the cookie lasts 365 days: internal/web/server.go line 271
     # README.md, Signing in the installed app, or another device
     Given a device that is signed in asked for a code
@@ -29,7 +29,7 @@ Feature: Signing in
   @SIGNIN-02 @user @test
   Scenario: Wrong codes are limited: 5 a minute from one address, 30 a minute from everyone
     # internal/web/signin_test.go TestFailedSigninsAreLimited, TestFailedSigninsSentAtOnceAreLimited, TestSigningInDoesNotCountAsAFailure and TestThePastedTokenSignsIn
-    # 5 failures a minute per client, 30 failed codes a minute in all: internal/web/signin.go lines 30 to 35; the refusals' words: lines 37 and 38, and "send a code or the token": line 226; the tests assert the codes, not the words
+    # 5 failures a minute per client, 30 failed codes a minute in all: internal/web/signin_codes.go lines 18 to 23; the refusals' words: internal/web/signin.go lines 21 and 22, and "send a code or the token": line 59; the tests assert the codes, not the words
     Given a live code
     When one address sends 5 wrong codes within a minute
     Then its next try, with a good code or the token, is refused with 429 and Retry-After 60

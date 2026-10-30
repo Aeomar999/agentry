@@ -7,7 +7,7 @@ Feature: Security
     When 5 wrong codes come from one address within a minute
     Then the next sign-in from that address is refused with 429 and a Retry-After of 60 seconds
     And a sign-in from another address is allowed
-    # internal/web/signin.go failuresPerClient: 5 failures per address; the test uses the constant
+    # internal/web/signin_codes.go failuresPerClient: 5 failures per address; the test uses the constant
     # README.md, Signing in the installed app, or another device; internal/web/signin_test.go TestFailedSigninsAreLimited
 
   @SEC-02 @test
@@ -487,7 +487,7 @@ Feature: Security
     When a device types it
     Then the answer is HTTP 401
     And a code 1 second short of 5 minutes still signs in: yes
-    # not under test, checked by hand: the codes are kept in memory only, never in the log (internal/web/signin.go line 46)
+    # not under test, checked by hand: the codes are kept in memory only, never in the log (internal/web/signin_codes.go line 31)
     # README.md, Signing in the installed app, or another device; internal/web/signin_test.go TestASigninCodeExpires, TestASigninCodeSignsInOnce
 
   @SEC-55 @test
@@ -496,7 +496,7 @@ Feature: Security
     When a 21st code is issued
     Then the oldest code no longer works
     And the next oldest and the newest codes still work: yes
-    # internal/web/signin.go line 28 maxLiveCodes = 20; the test uses the constant
+    # internal/web/signin_codes.go line 16 maxLiveCodes = 20; the test uses the constant
     # README.md, Signing in the installed app, or another device; internal/web/signin_test.go TestIssuingPastTheCapDropsTheOldestCode
 
   @SEC-56 @test
@@ -506,7 +506,7 @@ Feature: Security
     Then the answer is HTTP 429
     And the page token still signs in past that cap, so the printed link works: yes
     And a code 1 minute later signs in again: yes
-    # not under test, checked by hand: wrong tokens do not count toward the cap of 30 (internal/web/signin.go lines 33 and 138)
+    # not under test, checked by hand: wrong tokens do not count toward the cap of 30 (internal/web/signin_codes.go lines 21 and 123)
     # README.md, Signing in the installed app, or another device; internal/web/signin_test.go TestFailedSigninsAreLimited
 
   @SEC-57 @test
@@ -523,7 +523,7 @@ Feature: Security
     Given a signed-in device
     When the user signs out
     Then the cookie is cleared, empty with a MaxAge below 0 and path /: yes
-    # not under test, checked by hand: the page keeps no stored token (ui/src/api/client.ts lines 150 and 151), and sign out only clears the cookie, so the server's page token is not rotated and other devices stay signed in (internal/web/signin.go line 251)
+    # not under test, checked by hand: the page keeps no stored token (ui/src/api/client.ts lines 150 and 151), and sign out only clears the cookie, so the server's page token is not rotated and other devices stay signed in (internal/web/signin.go line 84)
     # README.md, Signing in the installed app, or another device; internal/web/signin_test.go TestSigningOutClearsTheCookie
 
   @SEC-59 @test

@@ -3,7 +3,7 @@
 // one-time code, typed with or without its dash. A link may come with the
 // words around it, such as the whole line the server printed.
 
-const codeLength = 8; // as internal/web/signin.go makes them; the token is far longer
+const codeLength = 8; // as internal/web/signin_codes.go makes them; the token is far longer
 
 // Punctuation a pasted sentence leaves on the end, as in "(open http://…)." —
 // no token or code holds any of it, and the server would count it as a wrong try.
