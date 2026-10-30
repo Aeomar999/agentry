@@ -4,7 +4,7 @@ Feature: Agentry from Claude Code
   # internal/extensions/ideas/tools.go, internal/domain/tasks/tasksapi/tools.go,
   # internal/domain/tasks/tasksapi/tools_approvals.go, internal/domain/connections,
   # internal/domain/connections/connectionsapi, internal/web/integrations_api.go,
-  # internal/domain/sharedfiles/sharedfilesapi/tools.go and their tests.
+  # internal/domain/sharedfiles/sharedfilesapi/tools.go, internal/platform/client/client.go and their tests.
 
   # ---- Installing the integration --------------------------------------------
 

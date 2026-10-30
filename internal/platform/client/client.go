@@ -156,6 +156,26 @@ func (c Client) CallContext(ctx context.Context, method, path string, body, into
 	return json.Unmarshal(content, into)
 }
 
+// Raw calls the server with a body that isn't JSON, such as a file, and
+// errs on any status but 200, with the server's reason.
+func (c Client) Raw(method, path string, body io.Reader) (*http.Response, error) {
+	request, err := http.NewRequest(method, strings.TrimSuffix(c.URL, "/")+path, body)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Authorization", "Bearer "+c.Token)
+	response, err := c.HTTP(0).Do(request)
+	if err != nil {
+		return nil, err
+	}
+	if response.StatusCode != http.StatusOK {
+		said, _ := io.ReadAll(response.Body)
+		response.Body.Close()
+		return nil, fmt.Errorf("%s", strings.TrimSpace(string(said)))
+	}
+	return response, nil
+}
+
 // StatusError is the server's answer to a call it didn't answer 200: its
 // status code and its body as written. Its text is the body, trimmed.
 type StatusError struct {

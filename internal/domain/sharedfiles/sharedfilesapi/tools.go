@@ -12,16 +12,16 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
+	"gitlab.com/dev.chempa/agentry/internal/platform/client"
 	"gitlab.com/dev.chempa/agentry/internal/platform/schema"
 )
 
-// Client is what the tools need of agentry mcp, which fills it: Raw calls
-// the server with a body that isn't JSON, such as a file, and errs on any
-// status but 200; Shown is a task's id as the answers name it, epic-N for
-// an epic.
+// Client is what the tools need of agentry mcp, which fills it: Agentry is
+// the server the files go to and come from; Shown is a task's id as the
+// answers name it, epic-N for an epic.
 type Client struct {
-	Raw   func(method, path string, body io.Reader) (*http.Response, error)
-	Shown func(id string) string
+	Agentry client.Client
+	Shown   func(id string) string
 }
 
 // Tools share files between this machine and a task, from Claude Code.
@@ -50,7 +50,7 @@ func (c Client) attachFile(_ context.Context, arguments json.RawMessage) (string
 	if name == "" {
 		name = filepath.Base(a.Path)
 	}
-	response, err := c.Raw(http.MethodPost, "/api/tasks/"+a.Task+"/shared?name="+url.QueryEscape(name), file)
+	response, err := c.Agentry.Raw(http.MethodPost, "/api/tasks/"+a.Task+"/shared?name="+url.QueryEscape(name), file)
 	if err != nil {
 		return "", err
 	}
@@ -62,7 +62,7 @@ func (c Client) getFile(_ context.Context, arguments json.RawMessage) (string, e
 	var a struct{ Task, Name, To string }
 	json.Unmarshal(arguments, &a)
 	a.Task = tasks.StoredID(a.Task)
-	response, err := c.Raw(http.MethodGet, "/api/tasks/"+a.Task+"/shared/file?name="+url.QueryEscape(a.Name), nil)
+	response, err := c.Agentry.Raw(http.MethodGet, "/api/tasks/"+a.Task+"/shared/file?name="+url.QueryEscape(a.Name), nil)
 	if err != nil {
 		return "", err
 	}
