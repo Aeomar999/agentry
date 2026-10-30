@@ -125,7 +125,7 @@ Feature: Teams and templates
   Scenario: Rename a team, and remove a team or an agent once no unfinished task needs it
     # internal/domain/agents/agentsapi/agentsapi_test.go TestATeamIsRenamedWithItsTasks, TestATeamIsRemovedWithItsAgents and TestAgentsAreEditedFromThePage
     # ui/src/components/organisms/TeamPanel.test.tsx "Remove team asks in the footer, focus on Keep; Keep puts the footer back and focus on Remove team" and "Remove removes the team, closes the panel going back over its entry, says so and shows the page without it"
-    # the refusals: internal/domain/agents/agentsapi/agents_api.go lines 78, 387 and 399; the page's dialog "Remove the <team> team?": ui/src/pages/AgentsPage.tsx lines 431 to 437
+    # the refusals: internal/domain/agents/agentsapi/agents_api.go line 70; internal/domain/agents/agentsapi/teams_api.go lines 60 and 72; the page's dialog "Remove the <team> team?": ui/src/pages/AgentsPage.tsx lines 431 to 437
     Given the Data team with task-1 open
     When the user renames it " Analytics "
     Then the reply is exactly team Data, to Analytics; its coordinator and 2 agents are in Analytics and no team is called Data
