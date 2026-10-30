@@ -173,6 +173,6 @@ The last line is `go run` reporting the exit code.
 
 ## Code with no spec yet
 
-The packages under `internal/domain` and `internal/extensions` that no feature file's Sources names yet, one per line as a path from the repo root in backquotes. The list may only shrink: when a feature file's Sources names an entry, the entry comes off in the same change. The check fails on an entry a Sources names, on one that is no such package, and on one that was not on the list when this rule came in (`noSpecYet` in `tools/speccheck/specified.go`).
+The packages under `internal/domain` and `internal/extensions` that no feature file's Sources names yet, one per line as a path from the repo root in backquotes. The list may only shrink: when a feature file's Sources names an entry, the entry comes off in the same change. The check fails on an entry a Sources names, on one that is no such package, and on one that was not on the list when this rule came in (`noSpecYet` in `tools/speccheck/specified.go`), and on a package `noSpecYet` holds that the list no longer does, so `noSpecYet` shrinks with the list.
 
 - `internal/extensions/schedules`: comes off when someone writes `schedules.feature`.
