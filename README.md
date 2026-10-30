@@ -378,18 +378,14 @@ make desktop    # the desktop app, in release/: Linux and Windows on Linux, the 
 make release-check  # before publishing: checks release/ against the tag, writes SHA256SUMS
 ```
 
-The UI lives in `ui/`: React, TypeScript, Vite and Tailwind, built by `make ui` into `internal/web/static/dist`, which is not committed. `cd ui && npm run dev` serves it with live reload against a running `agentry serve`. Its components go `atoms` (spend the design tokens in `src/styles/globals.css`), `molecules`, `organisms` (own state) and one template, `AdminShell`, that every page renders in. The figures in `docs/diagrams` are drawn by `docs/diagrams/source/figures.py`.
+The UI lives in `ui/`: React, TypeScript, Vite and Tailwind, built by `make ui` into `internal/web/static/dist`, which is not committed. `cd ui && npm run dev` serves it with live reload against a running `agentry serve`. `ui/src/shell` is the frame every page sits in: `AdminShell`, the sidebar, the top bar, Ctrl K, sign-in and the toasts. `ui/src/domains/<area>` holds each domain's pages, panels and hooks, one folder for each of the eight areas, and `ui/src/extensions/<name>` each extension's UI. `ui/src/components` holds what has no domain: `atoms` (spend the design tokens in `src/styles/globals.css`), `molecules` and `organisms` (own state). It imports neither `domains/` nor `extensions/`; ESLint checks that. The figures in `docs/diagrams` are drawn by `docs/diagrams/source/figures.py`.
 
-Each folder in `internal/` does one job, and folders only depend on the ones below them:
-- `events` lists what can happen.
-- `store` keeps the log.
-- `tasks`, `agents`, `workers` and `connections` compute state from the log.
-- `rules` checks each event before it's written.
-- `policy`, `hooks`, `engines`, `worktrees`, `sessions`, `sharedfiles` and `turns` run the agents.
-- `coordinator` and `watchdog` move tasks along.
-- `machines` and `workerlink` reach this machine and the workers.
-- `terminal` and `web` serve the UI and its live terminals.
-- `desk` runs the Claude you talk to; `mcp` is Agentry for Claude Code in any repo.
+Where new code goes, with the layers and their import rules in [internal/README.md](internal/README.md):
+- A domain's state goes in `internal/domain/<area>`, its routes and MCP tools in `internal/domain/<area>/<area>api`.
+- An extension goes in `internal/extensions/<name>`.
+- A domain's UI goes in `ui/src/domains/<area>`, and an extension's in `ui/src/extensions/<name>`.
+- A component no domain owns goes in `ui/src/components`. Toasts sits in `ui/src/shell`, and components use it from there: `import { useToast } from "@/shell/Toasts"`.
+- A new package under `internal/domain` or `internal/extensions` goes in a feature file's `# Sources:` line in the same commit, or `spec/check` fails.
 
 ### Make a release
 

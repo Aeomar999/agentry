@@ -389,7 +389,8 @@ a page about something that isn't a domain goes where its Go code goes.
 | Today | Target |
 |---|---|
 | `components/atoms`, `molecules` | stay: shared, no domain |
-| `components/organisms` used by one domain (`TaskBoard`, `HandoffTimeline`, `TeamPanel`, `AgentForm`, `AddWorkerDialog`, `SharedFiles`, `PolicyHistory`, `RedactText`, ...) | `domains/<area>/` |
+| `components/organisms` used by one domain (`TaskBoard`, `HandoffTimeline`, `TeamPanel`, `AgentForm`, `AddWorkerDialog`, `SharedFiles`, `PolicyHistory`, ...) | `domains/<area>/` |
+| `components/organisms` used by more than one domain (`RedactText`, `UseForEveryoneNotice`) | stay |
 | `components/organisms` shared across domains (`Toasts`, `CommandPalette`, `Sidebar`, `TopBar`, `StatusBar`, `ShortcutOverlay`, `AccountMenu`) and `components/templates` | `shell/` |
 | `pages/TasksPage`, `TaskPage`, `PlanPage` | `domains/tasks/` |
 | `pages/AgentsPage`, `AgentPage`, `AgentEditPage` | `domains/agents/` |
@@ -400,7 +401,8 @@ a page about something that isn't a domain goes where its Go code goes.
 | `pages/WorkspacePage` with `WorkspaceDock`, `SourceControl` | `domains/tasks/workspace/`: a task's Workspace, served from `/api/tasks/{task}/files`, which moves to `tasksapi` |
 | `pages/SignInPage` with `SignInDeviceDialog`, `lib/signin.ts`, `lib/trust.ts` | `shell/signin/`: how you get into the shell, as sign-in is part of `web` in Go |
 | `pages/ErrorPage`, `NotFoundPage` | `shell/` |
-| `lib/*.ts` about one domain (`teams.ts`, `templates.ts`, `epics.ts`, `plan.ts`, `push.ts`, `shared.ts`, `profiles.ts`, ...) | that domain's folder |
+| `lib/*.ts` about one domain (`templates.ts`, `plan.ts`, `push.ts`, ...) | that domain's folder |
+| `lib/*.ts` used outside one domain (by another domain, `components/` or `api/`) (`teams.ts`, `epics.ts`, `shared.ts`, `profiles.ts`, ...) | stay |
 | `lib/*.ts` with no domain (`cn`, `time`, `rows`, `stored`, `drag`, `theme`, `monaco`, ...) | stay |
 | `api/`, `live/` | stay |
 | `features/` | `extensions/`: the registry and each extension, renamed in place in step 1a |
@@ -426,7 +428,7 @@ disable comment.
 | `Agentry/` | an unpacked release, untracked, 138 MB | moved out of the main checkout, by the user's decision |
 | `brag-output/` | the brag skill's videos, untracked, 15 MB | added to `.gitignore`, since the skill writes there by design (the user's decision) |
 | `packaging/` | a root folder | `tools/packaging` |
-| `docker-stack.dev.yml` | at the root | `deploy/`, beside `entrypoint.sh` (the `Dockerfile` stays at the root, where Docker looks) |
+| `docker-stack.dev.yml` | at the root | stays at the root, by the user's decision on 2026-10-30; moving it to `deploy/` later needs `STACK_FILE` changed on the VPS in the same step |
 | `ui/go.mod` | none, so `go ... ./...` reached the Go package that npm's `flatted` ships in `ui/node_modules` | an empty module that fences `ui/` off: Go doesn't descend into a nested module |
 
 ### The built page, no longer committed (step 10)
@@ -583,7 +585,7 @@ Every step but step 10 changes no behaviour, builds, passes `make test` and
 | 7 | `domain`, one area per commit: agents, tasks, workers, connections, policy, settings, sharedfiles, notifications | move |
 | 8 | `extensions/ideas`, `extensions/schedules` (from `internal/ideas`, `internal/schedules`) | move |
 | 9 | `runtime` | move |
-| 10 | The root: stop committing the built page (history kept), with a "not built" page in its place; CI, Docker and `make test` build the UI; the Mac build copies the page in, with the built-from check (section 5); `brag-output/` ignored; `docker-stack.dev.yml` to `deploy/` | **behaviour change**, agreed by the user; needs a scenario |
+| 10 | The root: stop committing the built page (history kept), with a "not built" page in its place; CI, Docker and `make test` build the UI; the Mac build copies the page in, with the built-from check (section 5); `brag-output/` ignored; `docker-stack.dev.yml` stays at the root (section 5) | **behaviour change**, agreed by the user; needs a scenario |
 | 11 | The import test reads layers from paths; `spec/check` fails on a `domain/` or `extensions/` package no Sources names; `spec/constraints.md` section 1 grouped by folder | test and spec |
 | 12 | One task per domain: its routes out of `web` and its tools out of `mcp` into `domain/<area>/<area>api`, mounted as extensions' are | refactor |
 | 13 | `coordinator` stops naming `ideas` (`extensions.Coordinator`), and the import test's known list is empty | refactor |
