@@ -101,7 +101,7 @@ func allowed(from, to string) bool {
 type edge struct{ from, to string }
 
 // known are the edges that break the rules today; one may be removed, never added.
-var known = []edge{{"internal/runtime/coordinator", "internal/extensions/ideas"}}
+var known []edge
 
 type pkg struct {
 	path    string

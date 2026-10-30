@@ -8,7 +8,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
-	"gitlab.com/dev.chempa/agentry/internal/extensions/ideas"
 )
 
 // When you close an epic, Agentry starts one Visionaries session about it:
@@ -42,7 +41,7 @@ func (l *Loop) followUp(id string, close int64) {
 	if err != nil || epic == nil || epic.Kind != tasks.Epic || !epic.IsDone || l.followedUp(id, close) {
 		return
 	}
-	teams := ideas.Visionaries(roster, agents.BasesIn(l.state))
+	teams := l.visionaries(roster)
 	if len(teams) == 0 {
 		l.skipFollowUp(epic, close, "Agentry started no Visionaries session about this epic, as no team comes from the Visionaries template or a template of yours based on it. "+
 			"To have one after the next epic you close, add one: on the Agents page, Add a team, Visionaries. "+
@@ -59,6 +58,19 @@ func (l *Loop) followUp(id string, close int64) {
 		slog.Warn("coordinator loop: starting the Visionaries after an epic", "epic", id, "refused", refused)
 		l.skipFollowUp(epic, close, "Agentry couldn't start the Visionaries session about this epic: "+refused)
 	}
+}
+
+// visionaries are the teams of roster, in its order, whose coordinator an
+// extension's coordinator hook is for: the teams that suggest ideas. The
+// session goes to the first.
+func (l *Loop) visionaries(roster agents.Roster) []string {
+	var teams []string
+	for _, team := range roster.Teams() {
+		if coordinator, found := roster.Coordinator(team); found && len(hooksFor(l.Extensions, coordinator, l.state)) > 0 {
+			teams = append(teams, team)
+		}
+	}
+	return teams
 }
 
 // followedUp says whether a task about the epic's close at position close

@@ -156,7 +156,9 @@ type Core struct {
 
 // Coordinator is an extension's part in the coordinator loop, for the
 // coordinators For says. For, Brief and OnDone run on the state of the
-// moment, so For and Brief are given the Reader to read it from.
+// moment, so For and Brief are given the Reader to read it from. The first
+// team, in roster order, whose coordinator For says yes to also gets the
+// follow-up session Agentry starts after you close an epic.
 type Coordinator struct {
 	For      func(coordinator agents.Agent, state Reader) bool            // a Visionaries coordinator
 	Brief    func(state Reader, task *tasks.Task) []Section               // more sections for its brief
