@@ -24,8 +24,9 @@ type State interface {
 
 // API holds what the connections' routes need: the log to write invites,
 // connections and revocations to, the state to list connections from, and
-// from web, the install commands and the server's address for the address
-// the request came in on, and what a connecting machine downloads.
+// from web: the install commands for the address the request came in on,
+// the server's address, agentry for the machine, and its install scripts
+// filled in.
 type API struct {
 	Log             extensions.Proposer
 	State           State
