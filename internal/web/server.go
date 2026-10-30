@@ -22,6 +22,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/hooks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/settings/settingsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles/sharedfilesapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
@@ -103,10 +104,6 @@ func (s *Server) Handler() http.Handler {
 	deskToo("POST /api/tasks/{task}/answer", s.answer)
 	deskToo("PUT /api/tasks/{task}/epic", s.setEpic)
 	deskToo("GET /api/questions", s.listQuestions)
-	deskToo("GET /api/tasks/{task}/shared", s.listShared)
-	deskToo("GET /api/tasks/{task}/shared/file", s.downloadShared)
-	deskToo("POST /api/tasks/{task}/shared", s.uploadShared)
-	api("DELETE /api/tasks/{task}/shared", s.removeShared)
 	api("PUT /api/tasks/{task}/labels", s.label)
 	api("PUT /api/tasks/{task}/budget", s.setBudget)
 	api("PUT /api/tasks/{task}/turns", s.setMaxTurns)
@@ -192,6 +189,8 @@ func (s *Server) Handler() http.Handler {
 		worker("POST "+workerlink.GitPath+"{task}/bundle", s.receiveBundle)
 		worker("GET "+workerlink.UpdatePath, s.updateBinary)
 		worker("POST "+workerlink.LeavePath, s.leave)
+		// The shared files a worker fetches and sends: these stay here, not
+		// in sharedfilesapi, as no extensions.Auth takes a worker's credential.
 		worker("HEAD "+sharedfiles.BlobsPath+"/{hash}", s.blobFor)
 		worker("GET "+sharedfiles.BlobsPath+"/{hash}", s.blobFor)
 		worker("POST "+sharedfiles.BlobsPath, s.blobFrom)
@@ -205,6 +204,7 @@ func (s *Server) Handler() http.Handler {
 	s.mount("the settings domain", settingsapi.API{Log: s.store, State: s.state}.Routes(), mux)
 	s.mount("the connections domain", connectionsapi.API{Log: s.store, State: s.state, InstallCommands: s.installCommands}.Routes(), mux)
 	s.mount("the notifications domain", notificationsapi.API{Push: s.config.Push, PublicURL: s.config.PublicURL}.Routes(), mux)
+	s.mount("the shared files domain", sharedfilesapi.API{Log: s.store, State: s.state, Blobs: s.config.Blobs}.Routes(), mux)
 	// Last, so an extension's route that clashes with any core or domain
 	// route is the one that fails, naming its extension.
 	for _, f := range s.config.Extensions {

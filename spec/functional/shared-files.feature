@@ -1,15 +1,16 @@
 Feature: Shared files
   Files that are not in git, shared with a task in .agentry/files, that follow it from machine to machine.
-  # Sources: internal/domain/sharedfiles, internal/domain/tasks/files.go,
-  # internal/runtime/coordinator/files.go, internal/web/shared_api.go,
-  # ui/src/components/organisms/SharedFiles.tsx and their tests.
+  # Sources: internal/domain/sharedfiles, internal/domain/sharedfiles/sharedfilesapi,
+  # internal/domain/tasks/files.go, internal/runtime/coordinator/files.go,
+  # internal/web/shared_api.go, ui/src/components/organisms/SharedFiles.tsx
+  # and their tests.
 
   # ---- Adding and downloading ------------------------------------------------
 
   @FILES-01 @user @test
   Scenario: Shared files: add one, download it, take it away
-    # internal/web/api_test.go TestYouShareFilesWithATask
-    # internal/web/shared_api.go lines 40 to 91
+    # internal/domain/sharedfiles/sharedfilesapi/sharedfilesapi_test.go TestYouShareFilesWithATask
+    # internal/domain/sharedfiles/sharedfilesapi/sharedfilesapi.go lines 77 to 128
     Given task-1 with no shared files
     When the user shares "data/sales.csv" holding 8 bytes
     Then the list shows the file "data/sales.csv", size 8, by "you"
@@ -42,7 +43,7 @@ Feature: Shared files
     When a file is uploaded under a name that leaves the folder, such as one starting with ..
     Then it is refused with status 400
     # internal/domain/sharedfiles/blobs.go MaxSize: a shared file is at most 2 GB; no test sends one that big
-    # internal/web/api_test.go TestYouShareFilesWithATask
+    # internal/domain/sharedfiles/sharedfilesapi/sharedfilesapi_test.go TestYouShareFilesWithATask
 
   # ---- Following the task ----------------------------------------------------
 

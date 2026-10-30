@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"slices"
 	"sort"
 	"strings"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles/sharedfilesapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks/waitlist"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
@@ -47,7 +50,7 @@ type question struct {
 	HeldAt       time.Time
 }
 
-// tools are the core's tools, then those of every extension shown.
+// tools are the core's tools, the domains', then those of every extension shown.
 func (s *Server) tools() []extensions.Tool {
 	tools := []extensions.Tool{
 		{Name: "status", Description: "What needs the user, what is running and what is planned, for this repo (or all repos). Use it when the user asks how things stand.",
@@ -83,11 +86,8 @@ func (s *Server) tools() []extensions.Tool {
 			Input: schema.Object(schema.Props{"tasks": schema.Texts("their ids, in the order wanted")}, "tasks"), Run: s.setPriority},
 		{Name: "start", Description: "Start tasks waiting in the user's Backlog or To do, such as an epic's stories, in the order given.",
 			Input: schema.Object(schema.Props{"tasks": schema.Texts("their ids")}, "tasks"), Run: s.start},
-		{Name: "attach_file", Description: "Share a file on this machine with a task: its agents find it in .agentry/files, on whichever machine works on it. For data, documents or builds that aren't in git.",
-			Input: schema.Object(schema.Props{"task": schema.Text("its id"), "path": schema.Text("the file's path here"), "as": schema.Text("optional: the name to share it by, such as data/sales.csv")}, "task", "path"), Run: s.attachFile},
-		{Name: "get_file", Description: "Download one of a task's shared files to this machine.",
-			Input: schema.Object(schema.Props{"task": schema.Text("its id"), "name": schema.Text("the shared file's name"), "to": schema.Text("optional: where to save it; this folder if left out")}, "task", "name"), Run: s.getFile},
 	}
+	tools = append(tools, sharedfilesapi.Client{Raw: s.raw, Shown: func(id string) string { return s.shownNow()(id) }}.Tools()...)
 	for _, f := range s.shownExtensions() {
 		if f.Tools != nil {
 			tools = append(tools, f.Tools(s.agentry, s.repo)...)
@@ -651,6 +651,25 @@ func (s *Server) shownNow() func(id string) string {
 	var all []task
 	s.agentry.Call("GET", "/api/tasks", nil, &all)
 	return shownIDs(all)
+}
+
+// raw calls the server with a body that isn't JSON, such as a file.
+func (s *Server) raw(method, path string, body io.Reader) (*http.Response, error) {
+	request, err := http.NewRequest(method, strings.TrimSuffix(s.agentry.URL, "/")+path, body)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Authorization", "Bearer "+s.agentry.Token)
+	response, err := s.agentry.HTTP(0).Do(request)
+	if err != nil {
+		return nil, err
+	}
+	if response.StatusCode != http.StatusOK {
+		said, _ := io.ReadAll(response.Body)
+		response.Body.Close()
+		return nil, fmt.Errorf("%s", strings.TrimSpace(string(said)))
+	}
+	return response, nil
 }
 
 // idsAs are the ids, each as id gives it, such as tasks.StoredID.

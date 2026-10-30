@@ -2290,35 +2290,3 @@ func TestInstallCommandsForWindows(t *testing.T) {
 		t.Errorf("quoted %q", got)
 	}
 }
-
-// You share files with a task, download them, and take them away.
-func TestYouShareFilesWithATask(t *testing.T) {
-	server, _ := newTestServer(t)
-	call(t, server, "POST", "/api/tasks", `{"title":"Crunch the numbers"}`)
-	request, _ := http.NewRequest("POST", server.URL+"/api/tasks/task-1/shared?name=data/sales.csv", strings.NewReader("a,b\n1,2\n"))
-	request.Header.Set("Authorization", "Bearer "+token)
-	if response, err := http.DefaultClient.Do(request); err != nil || response.StatusCode != 200 {
-		t.Fatalf("upload: %v %v", err, response.StatusCode)
-	}
-	_, body := call(t, server, "GET", "/api/tasks/task-1/shared", "")
-	if !strings.Contains(body, `"name":"data/sales.csv"`) || !strings.Contains(body, `"size":8`) || !strings.Contains(body, `"by":"you"`) {
-		t.Errorf("list: %s", body)
-	}
-	if _, body := call(t, server, "GET", "/api/tasks/task-1", ""); !strings.Contains(body, `"shared":[{"name":"data/sales.csv"`) {
-		t.Errorf("the task should show it: %s", body)
-	}
-	if code, body := call(t, server, "GET", "/api/tasks/task-1/shared/file?name=data/sales.csv", ""); code != 200 || body != "a,b\n1,2\n" {
-		t.Errorf("download: %d %q", code, body)
-	}
-	bad, _ := http.NewRequest("POST", server.URL+"/api/tasks/task-1/shared?name=../escape", strings.NewReader("x"))
-	bad.Header.Set("Authorization", "Bearer "+token)
-	if response, _ := http.DefaultClient.Do(bad); response.StatusCode != http.StatusBadRequest {
-		t.Errorf("a name outside the folder: %d", response.StatusCode)
-	}
-	if code, body := call(t, server, "DELETE", "/api/tasks/task-1/shared?name=data/sales.csv", ""); code != 200 {
-		t.Fatalf("remove: %d %s", code, body)
-	}
-	if _, body := call(t, server, "GET", "/api/tasks/task-1/shared", ""); strings.TrimSpace(body) != "[]" {
-		t.Errorf("after removing: %s", body)
-	}
-}

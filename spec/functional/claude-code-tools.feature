@@ -2,8 +2,8 @@ Feature: Agentry from Claude Code
   Plain claude in any repo hands work to Agentry through its MCP tools and hears back from it.
   # Sources: cmd/agentry/mcp.go, cmd/agentry/claudecode.go, internal/mcp,
   # internal/extensions/ideas/tools.go, internal/domain/connections,
-  # internal/domain/connections/connectionsapi, internal/web/integrations_api.go
-  # and their tests.
+  # internal/domain/connections/connectionsapi, internal/web/integrations_api.go,
+  # internal/domain/sharedfiles/sharedfilesapi/tools.go and their tests.
 
   # ---- Installing the integration --------------------------------------------
 
@@ -374,16 +374,16 @@ Feature: Agentry from Claude Code
     Then the file is uploaded to the task's shared files: yes
     And the reply says it was shared with task-N, as the file's own name: yes
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
-    # not under test, checked by hand: a name to share it by is used instead, the reply names the folder its agents find it in, .agentry/files (internal/mcp/files.go line 40),
-    # and a folder's path fails, saying it isn't a file and to share a folder's files one by one, with 0 uploads sent (line 29)
+    # not under test, checked by hand: a name to share it by is used instead, the reply names the folder its agents find it in, .agentry/files (internal/domain/sharedfiles/sharedfilesapi/tools.go line 58),
+    # and a folder's path fails, saying it isn't a file and to share a folder's files one by one, with 0 uploads sent (line 47)
 
   @TOOLS-36 @claude-code @test
   Scenario: get_file downloads one of a task's shared files
     Given a task with 1 shared file
     When Claude calls get_file with the task, the file's name and a folder to save in
     Then the file is asked for, and the reply says Saved, the file's name and from task-N: yes
-    # not under test, checked by hand: the file is in that folder under its own name, and the reply gives its path and its size in bytes (internal/mcp/files.go line 69)
-    # internal/mcp/files.go getFile: without a place to save, the file goes in the current folder under its own name
+    # not under test, checked by hand: the file is in that folder under its own name, and the reply gives its path and its size in bytes (internal/domain/sharedfiles/sharedfilesapi/tools.go line 87)
+    # internal/domain/sharedfiles/sharedfilesapi/tools.go getFile: without a place to save, the file goes in the current folder under its own name
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
 
   @TOOLS-37 @claude-code @test

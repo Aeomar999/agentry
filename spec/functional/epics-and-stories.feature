@@ -123,7 +123,7 @@ Feature: Epics and stories
   Scenario: A waiting story says what it waits for, and stays parked when that is done
     # ui/src/lib/epics.ts waitingLine; the ready count: ui/src/pages/PlanPage.tsx line 175
     # a parked story gets no turn: internal/runtime/coordinator/next.go line 55
-    # what blocks it empties when task-8 is done: internal/web/views.go lines 133 to 143
+    # what blocks it empties when task-8 is done: internal/web/views.go lines 134 to 144
     # "Not started" and Start: ui/src/pages/PlanPage.tsx lines 298 to 304 and 341
     Given epic-7 with task-8 not started and task-9 that builds on task-8, both in the Backlog
     When the Plan page is shown
