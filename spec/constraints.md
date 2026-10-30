@@ -31,7 +31,7 @@ The packages under `internal/`, by folder as in docs/design/repo-organization.md
 - `store`: the append-only event log, in SQLite; Propose is the way in for every event but the archive, erase and redact markers.
 - `current`: the state of every stream in memory, as of the last event the log committed; built from the log at every start, or from a snapshot that is only a cache.
 - `rules`: check 3 of every proposal: given what happened so far, may this happen now? Run by the store inside Propose, under its lock.
-- `httpapi`: how every handler of the HTTP API answers, the core's and an extension's alike; a leaf that imports only events and extensions.
+- `httpapi`: how every handler of the HTTP API answers, the core's and an extension's alike; a leaf that imports only events, extensions and the tasks domain.
 
 `internal/domain`, one folder per spec area, its root the model and its subfolders its routes, tools and background work:
 

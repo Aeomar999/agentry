@@ -605,7 +605,7 @@ Feature: Agentry from Claude Code
     Given an id no task, epic or idea has
     When Claude calls show_task, set_priority, close_epic or accept_idea with it
     Then each tool fails naming the id, and 0 changes are made
-    # internal/domain/tasks/tasksapi/tasksapi.go noTask: an unknown task is answered 404, an erased one 410 with its date
+    # internal/core/httpapi/httpapi.go NoTask (line 96): an unknown task is answered 404, an erased one 410 with its date
     # 1. Call show_task with an id no task has, such as task-9999: the tool fails with "no such task task-9999".
     # 2. Call set_priority with an id no task has: it fails with "no task task-9999" and changes 0 ranks.
     # 3. Call close_epic with a task that is no epic: it fails saying it isn't ready to close.

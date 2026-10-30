@@ -20,8 +20,8 @@ func (a API) decide(w http.ResponseWriter, r *http.Request, kind events.Type) {
 	if request.Reason == "" {
 		request.Reason = "no reason given"
 	}
-	if a.isNone(r.PathValue("task")) {
-		a.noTask(w, r.PathValue("task"))
+	if httpapi.IsNone(a.State, r.PathValue("task")) {
+		httpapi.NoTask(w, a.State, r.PathValue("task"))
 		return
 	}
 	httpapi.Propose(w, a.Log, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: kind,

@@ -168,7 +168,7 @@ Feature: Limits
     When a request's body is exactly 1,048,576 bytes, and another's is 1,048,577 bytes
     Then the body of 1,048,576 bytes is accepted
     And the body of 1,048,577 bytes is refused with HTTP 400
-    # not under test, checked by hand: a route that takes JSON has the same cap, MaxBody = 1 << 20 (internal/core/httpapi/httpapi.go lines 23 and 28)
+    # not under test, checked by hand: a route that takes JSON has the same cap, MaxBody = 1 << 20 (internal/core/httpapi/httpapi.go lines 25 and 30)
     # README.md, Features' settings and secrets; internal/web/extensions_api_test.go TestASignedRouteTakesABodyOfExactlyMaxBody and TestASignedRouteRefusesAnOversizedBody
 
   @LIM-20 @manual

@@ -6,14 +6,12 @@
 package sharedfilesapi
 
 import (
-	"errors"
 	"io"
 	"net/http"
 	"path"
 	"strconv"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/core/current"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
@@ -68,7 +66,7 @@ func FilesOf(t *tasks.Task) []File {
 func (a API) listShared(w http.ResponseWriter, r *http.Request) {
 	task, err := a.State.Task(r.PathValue("task"))
 	if err != nil || task == nil {
-		a.noTask(w, r.PathValue("task"))
+		httpapi.NoTask(w, a.State, r.PathValue("task"))
 		return
 	}
 	httpapi.Reply(w, FilesOf(task))
@@ -78,7 +76,7 @@ func (a API) listShared(w http.ResponseWriter, r *http.Request) {
 func (a API) uploadShared(w http.ResponseWriter, r *http.Request) {
 	task, err := a.State.Task(r.PathValue("task"))
 	if err != nil || task == nil {
-		a.noTask(w, r.PathValue("task"))
+		httpapi.NoTask(w, a.State, r.PathValue("task"))
 		return
 	}
 	name, err := sharedfiles.CleanName(r.URL.Query().Get("name"))
@@ -98,7 +96,7 @@ func (a API) uploadShared(w http.ResponseWriter, r *http.Request) {
 func (a API) downloadShared(w http.ResponseWriter, r *http.Request) {
 	task, err := a.State.Task(r.PathValue("task"))
 	if err != nil || task == nil {
-		a.noTask(w, r.PathValue("task"))
+		httpapi.NoTask(w, a.State, r.PathValue("task"))
 		return
 	}
 	f, ok := task.Files[r.URL.Query().Get("name")]
@@ -119,28 +117,10 @@ func (a API) downloadShared(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a API) removeShared(w http.ResponseWriter, r *http.Request) {
-	if a.isNone(r.PathValue("task")) {
-		a.noTask(w, r.PathValue("task"))
+	if httpapi.IsNone(a.State, r.PathValue("task")) {
+		httpapi.NoTask(w, a.State, r.PathValue("task"))
 		return
 	}
 	httpapi.Propose(w, a.Log, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.FileRemoved,
 		Data: map[string]any{"name": r.URL.Query().Get("name"), "by": "you"}})
-}
-
-// isNone is whether there is no task id, never made or erased, as web's
-// isNone says.
-func (a API) isNone(id string) bool {
-	task, err := a.State.Task(id)
-	return errors.Is(err, current.ErrErased) || err == nil && task == nil
-}
-
-// noTask answers as tasksapi's noTask does: that an erased task is gone for
-// good, and when it went, 410, rather than that there was never such a
-// task, 404.
-func (a API) noTask(w http.ResponseWriter, id string) {
-	if erasure, erased := a.State.Erased(id); erased {
-		http.Error(w, id+" was erased on "+erasure.At.Format("2 January 2006"), http.StatusGone)
-		return
-	}
-	http.Error(w, "no such task "+id, http.StatusNotFound)
 }

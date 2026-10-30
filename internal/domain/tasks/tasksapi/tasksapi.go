@@ -120,8 +120,8 @@ func (a API) rank(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	if a.isNone(r.PathValue("task")) {
-		a.noTask(w, r.PathValue("task"))
+	if httpapi.IsNone(a.State, r.PathValue("task")) {
+		httpapi.NoTask(w, a.State, r.PathValue("task"))
 		return
 	}
 	httpapi.Propose(w, a.Log, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.TaskRanked, Data: map[string]any{"rank": request.Rank}})
@@ -133,8 +133,8 @@ func (a API) label(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	if a.isNone(r.PathValue("task")) {
-		a.noTask(w, r.PathValue("task"))
+	if httpapi.IsNone(a.State, r.PathValue("task")) {
+		httpapi.NoTask(w, a.State, r.PathValue("task"))
 		return
 	}
 	httpapi.Propose(w, a.Log, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.TaskLabeled,
@@ -152,16 +152,4 @@ func CleanLabels(labels []string) []string {
 		}
 	}
 	return clean
-}
-
-// noTask answers that there is no task id to act on: that an erased one
-// is gone for good, and when it went, 410, rather than that there was
-// never such a task, 404. Each names id, as setEpic's may be the task's
-// or the epic's.
-func (a API) noTask(w http.ResponseWriter, id string) {
-	if erasure, erased := a.State.Erased(id); erased {
-		http.Error(w, id+" was erased on "+erasure.At.Format("2 January 2006"), http.StatusGone)
-		return
-	}
-	http.Error(w, "no such task "+id, http.StatusNotFound)
 }

@@ -27,7 +27,7 @@ func (a API) changeRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	task, err := a.State.Task(r.PathValue("task"))
 	if err != nil || task == nil {
-		a.noTask(w, r.PathValue("task"))
+		httpapi.NoTask(w, a.State, r.PathValue("task"))
 		return
 	}
 	moved := events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.RepoChanged, Data: map[string]any{"repo": repo}}

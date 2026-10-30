@@ -1,7 +1,8 @@
 // Package httpapi is how every handler of Agentry's HTTP API answers, the
 // core's in web and an extension's in its own package: JSON replies, request
-// bodies, and writes to the log turned into status codes. Like extensions, it
-// is a leaf: it imports only events and extensions.
+// bodies, writes to the log turned into status codes, and the reply for a
+// task there is none of. Like extensions, it is a leaf: it imports only
+// events, extensions and the tasks domain.
 package httpapi
 
 import (
@@ -9,6 +10,7 @@ import (
 	"net/http"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
+	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 )
 
@@ -71,6 +73,32 @@ func write(w http.ResponseWriter, log extensions.Proposer, p events.Proposal) (e
 		return events.Event{}, false
 	}
 	return event, true
+}
+
+// Tasks is what the replies about a task read: the task, and an erased
+// one's erasure.
+type Tasks interface {
+	Task(id string) (*tasks.Task, error)
+	Erased(id string) (tasks.Erasure, bool)
+}
+
+// IsNone is whether there is no task id, never made or erased.
+func IsNone(state Tasks, id string) bool {
+	task, err := state.Task(id)
+	_, erased := state.Erased(id)
+	return erased || err == nil && task == nil
+}
+
+// NoTask answers that there is no task id to act on: that an erased one
+// is gone for good, and when it went, 410, rather than that there was
+// never such a task, 404. It names id, as a route may ask about more than
+// one task.
+func NoTask(w http.ResponseWriter, state Tasks, id string) {
+	if erasure, erased := state.Erased(id); erased {
+		http.Error(w, id+" was erased on "+erasure.At.Format("2 January 2006"), http.StatusGone)
+		return
+	}
+	http.Error(w, "no such task "+id, http.StatusNotFound)
 }
 
 // NoLimit is what a request sends for no limit. At creation 0 takes the

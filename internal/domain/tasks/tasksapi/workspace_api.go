@@ -18,7 +18,7 @@ import (
 func (a API) workspaceOf(w http.ResponseWriter, r *http.Request) (workspace.Workspace, machines.Machine, bool) {
 	task, err := a.State.Task(r.PathValue("task"))
 	if err != nil || task == nil {
-		a.noTask(w, r.PathValue("task"))
+		httpapi.NoTask(w, a.State, r.PathValue("task"))
 		return workspace.Workspace{}, nil, false
 	}
 	if task.Worktree == nil {

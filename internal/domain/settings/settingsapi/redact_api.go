@@ -194,32 +194,20 @@ func askedOf(w http.ResponseWriter, text, why string) (redactionAsked, bool) {
 }
 
 // redactable is whether task id is archived, or false once it has answered
-// that there is no such task (noTask) or that it can't be read.
+// that there is no such task (httpapi.NoTask) or that it can't be read.
 func (a API) redactable(w http.ResponseWriter, id string) (archived, ok bool) {
 	task, err := a.State.Task(id)
 	switch {
 	case errors.Is(err, current.ErrArchived):
 		return true, true
 	case errors.Is(err, current.ErrErased), err == nil && task == nil:
-		a.noTask(w, id)
+		httpapi.NoTask(w, a.State, id)
 		return false, false
 	case err != nil:
 		httpapi.Failed(w, err)
 		return false, false
 	}
 	return false, true
-}
-
-// noTask answers as tasksapi's noTask does
-// (internal/domain/tasks/tasksapi/tasksapi.go): that an erased task is
-// gone for good, and when it went, 410, rather than that there was never
-// such a task, 404.
-func (a API) noTask(w http.ResponseWriter, id string) {
-	if erasure, erased := a.State.Erased(id); erased {
-		http.Error(w, id+" was erased on "+erasure.At.Format("2 January 2006"), http.StatusGone)
-		return
-	}
-	http.Error(w, "no such task "+id, http.StatusNotFound)
 }
 
 // summarise is what an archived task's marker keeps of it, as tasksapi's

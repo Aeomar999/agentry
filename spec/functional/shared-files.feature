@@ -10,7 +10,7 @@ Feature: Shared files
   @FILES-01 @user @test
   Scenario: Shared files: add one, download it, take it away
     # internal/domain/sharedfiles/sharedfilesapi/sharedfilesapi_test.go TestYouShareFilesWithATask
-    # internal/domain/sharedfiles/sharedfilesapi/sharedfilesapi.go lines 77 to 128
+    # internal/domain/sharedfiles/sharedfilesapi/sharedfilesapi.go lines 75 to 126
     Given task-1 with no shared files
     When the user shares "data/sales.csv" holding 8 bytes
     Then the list shows the file "data/sales.csv", size 8, by "you"

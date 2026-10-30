@@ -19,7 +19,7 @@ func (a API) setBudget(w http.ResponseWriter, r *http.Request) {
 	}
 	task, err := a.State.Task(r.PathValue("task"))
 	if err != nil || task == nil {
-		a.noTask(w, r.PathValue("task"))
+		httpapi.NoTask(w, a.State, r.PathValue("task"))
 		return
 	}
 	budget := httpapi.LimitOf(request.Budget, 0)
@@ -50,7 +50,7 @@ func (a API) setMaxTurns(w http.ResponseWriter, r *http.Request) {
 	}
 	task, err := a.State.Task(r.PathValue("task"))
 	if err != nil || task == nil {
-		a.noTask(w, r.PathValue("task"))
+		httpapi.NoTask(w, a.State, r.PathValue("task"))
 		return
 	}
 	maxTurns := httpapi.LimitOf(request.MaxTurns, 0)

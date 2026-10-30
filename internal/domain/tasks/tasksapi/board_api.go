@@ -71,7 +71,7 @@ func (a API) direct(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case err != nil || task == nil:
-		a.noTask(w, id)
+		httpapi.NoTask(w, a.State, id)
 		return
 	}
 	note := strings.TrimSpace(request.Note)

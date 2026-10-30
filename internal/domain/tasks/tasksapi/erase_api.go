@@ -51,7 +51,7 @@ func (a API) erase(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("task")
 	task, err := a.State.Task(id)
 	if err == nil && task == nil {
-		a.noTask(w, id)
+		httpapi.NoTask(w, a.State, id)
 		return
 	}
 	if errors.Is(err, current.ErrErased) {

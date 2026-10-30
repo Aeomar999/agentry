@@ -19,8 +19,8 @@ func (a API) answer(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	if a.isNone(r.PathValue("task")) {
-		a.noTask(w, r.PathValue("task"))
+	if httpapi.IsNone(a.State, r.PathValue("task")) {
+		httpapi.NoTask(w, a.State, r.PathValue("task"))
 		return
 	}
 	answer := strings.TrimSpace(request.Answer)

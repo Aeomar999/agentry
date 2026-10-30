@@ -146,7 +146,7 @@ func (a API) shownTask(w http.ResponseWriter, r *http.Request) (task *tasks.Task
 		return archived.task, archived
 	}
 	if err != nil || task == nil {
-		a.noTask(w, id)
+		httpapi.NoTask(w, a.State, id)
 		return nil, nil
 	}
 	return task, nil
@@ -166,7 +166,7 @@ func (a API) reopenable(w http.ResponseWriter, id string) *tasks.Task {
 		return a.unarchive(w, id)
 	}
 	if err != nil || task == nil {
-		a.noTask(w, id)
+		httpapi.NoTask(w, a.State, id)
 		return nil
 	}
 	return task

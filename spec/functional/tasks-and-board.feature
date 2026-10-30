@@ -581,7 +581,7 @@ Feature: Tasks and the board
   @TASK-48 @user @manual
   Scenario: Change repo moves the task between turns, and the Epic list files it
     # ui/src/pages/TaskPage.tsx lines 627 to 672, RepoEditor; internal/domain/tasks/tasksapi/repo_api.go lines 18 to 28
-    # ui/src/components/organisms/EpicPicker.tsx lines 12 to 14 and 27 to 35; internal/domain/tasks/tasksapi/epics_api.go lines 68 and 74
+    # ui/src/components/organisms/EpicPicker.tsx lines 12 to 14 and 27 to 35; internal/domain/tasks/tasksapi/epics_api.go lines 62 and 68
     Given a live task's Details tab
     When the user clicks Change on the Repo row
     Then a field with the current repo is shown, and "Move the task" is disabled until the path differs
@@ -614,7 +614,7 @@ Feature: Tasks and the board
   Scenario: An epic with stories is not erased, and an erased task is gone from every route
     # internal/domain/tasks/tasksapi/erase_test.go TestAnEpicWithStoriesIsntErased and TestTheRoutesOnAnErasedTaskSayItIsGone
     # ui/src/pages/TaskPage.test.tsx "read again, an erased task shows the server's 410 words, not that there is no such task"
-    # internal/domain/tasks/tasksapi/erase_api.go lines 110 to 137; internal/domain/tasks/tasksapi/tasksapi.go lines 158 to 164
+    # internal/domain/tasks/tasksapi/erase_api.go lines 110 to 137; internal/core/httpapi/httpapi.go NoTask (lines 96 to 102)
     Given epic task-3 with the live story task-2
     When the user erases task-3
     Then it is refused with 409 "task-3 has stories (task-2); erase or move them out of the epic first"
