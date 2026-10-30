@@ -354,13 +354,16 @@ func TestTheScriptsCarryTheCA(t *testing.T) {
 		}
 	}
 
+	// Served through web's mux with a real join code: a server with no CA
+	// has none to carry; one with a CA and a public URL names the public
+	// URL, which a proxy serves with its own certificate, so it carries none.
 	for _, c := range []struct {
 		name   string
 		config Config
 		server string // the address the script names; "" for the one it was fetched from
 	}{
 		{"no CA", Config{}, ""},
-		{"a public URL", Config{PublicURL: "https://agentry.example.com"}, "https://agentry.example.com"},
+		{"a public URL", Config{CA: string(ca.PEM()), PublicURL: "https://agentry.example.com"}, "https://agentry.example.com"},
 	} {
 		s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 		fleet := machines.NewFleet(&machines.Local{Label: workers.Local})

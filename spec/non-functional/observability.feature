@@ -298,7 +298,7 @@ Feature: Observability
     When it dials the server and says hello with its host and engines
     Then GET /api/workers lists it by name with "online": true: yes
     And GET /api/workers/{name} gives a host, a count of CPUs above 0, and a history whose first entry is "online"
-    # not under test, checked by hand: the hello is kept as a worker.connected event in the workers stream with its name, host, os, arch, version, engines and missing tools (internal/domain/workers/workers.go lines 186 to 188, written at internal/domain/workers/workerlink/server.go line 80), and the history is newest first (internal/domain/workers/workersapi/workersapi.go line 162)
+    # not under test, checked by hand: the hello is kept as a worker.connected event in the workers stream with its name, host, os, arch, version, engines and missing tools (internal/domain/workers/workers.go lines 186 to 188, written at internal/domain/workers/workerlink/server.go line 80), and the history is newest first (internal/domain/workers/workersapi/workersapi.go line 171)
     # README.md, Add machines; internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @OBS-30 @test
