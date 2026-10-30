@@ -9,7 +9,8 @@ import type { Fetch } from "./resource-cache";
 // has moved past what it holds, and never aborted. A list moves by pages, so
 // it can't be one path of the cache: each read asks for the page after (or
 // before) the events it holds. A server that restarts on a shorter log has
-// every list read again from its first page.
+// every list read again from its first page, and so does a redaction: it
+// rewrites events a list may hold, which reading on never reads again.
 
 // What a view shows of a task's events: those of some types (every type
 // when none are given), either all of them from the start, or the newest
@@ -28,6 +29,11 @@ export interface EventList {
   error: string;
 }
 
+// A redaction appends event.redacted to the task's stream. Every list asks
+// for it, to know when to read again, but shows it only when its types
+// would: the chat and the Activity tab don't list it.
+const redacted = "event.redacted";
+
 export const noEvents: EventList = { events: [], loading: true, earlier: false, loadingEarlier: false, error: "" };
 
 interface Page {
@@ -45,6 +51,7 @@ interface List {
   shown: EventList;
   position: number; // the log position it holds every event up to; -1 before the first read
   started: boolean; // its first page has come
+  firstReadAt: number; // the log position its first page was read at: a redaction after it may rewrite events it holds
   ahead: boolean; // the last page read forwards said more lie after it
   earlierAsked: boolean;
   reading: boolean;
@@ -77,6 +84,7 @@ export class EventPages {
         shown: noEvents,
         position: -1,
         started: false,
+        firstReadAt: -1,
         ahead: false,
         earlierAsked: false,
         reading: false,
@@ -132,29 +140,33 @@ export class EventPages {
   }
 
   // reset reads every list again from its first page, as of the shorter
-  // log's position: the events it holds may not be in the new log. It keeps
-  // showing them until the new ones are read, so the view doesn't flash
-  // empty. A newest page starts at the new position, not the old bound. An
-  // earlier page asked for is of the old log, so the ask is dropped.
+  // log's position: the events it holds may not be in the new log.
   private reset(position: number) {
     this.live = position;
-    this.lists.forEach((list, key) => {
-      if (list.wanted.newestBefore !== undefined) list.wanted = { ...list.wanted, newestBefore: position + 1 };
-      list.position = -1;
-      list.started = false;
-      list.ahead = false;
-      list.earlierAsked = false;
-      list.failed = null;
-      list.fresh = [];
-      this.show(list, { loadingEarlier: false });
-      this.readIfDue(key, list);
-    });
+    this.lists.forEach((list, key) => this.readAgain(key, list, position));
+  }
+
+  // readAgain reads a list again from its first page, as of position. It
+  // keeps showing the events it holds until the new ones are read, so the
+  // view doesn't flash empty. A newest page starts at position, not the
+  // old bound. An earlier page asked for may hold what the new read
+  // replaces, so the ask is dropped.
+  private readAgain(key: string, list: List, position: number) {
+    if (list.wanted.newestBefore !== undefined) list.wanted = { ...list.wanted, newestBefore: position + 1 };
+    list.position = -1;
+    list.started = false;
+    list.ahead = false;
+    list.earlierAsked = false;
+    list.failed = null;
+    list.fresh = [];
+    this.show(list, { loadingEarlier: false });
+    this.readIfDue(key, list);
   }
 
   // due is the page a list needs read now, and from which side, or null.
   private due(list: List): Due | null {
     const { task, types, newestBefore } = list.wanted;
-    const path = `/api/tasks/${encodeURIComponent(task)}/events${typesQuery(types)}`;
+    const path = `/api/tasks/${encodeURIComponent(task)}/events${typesQuery(typesRead(types))}`;
     const page = (bound: string) => `${path}${path.includes("?") ? "&" : "?"}${bound}`;
     const held = this.held(list);
     if (!list.started) {
@@ -191,9 +203,17 @@ export class EventPages {
         const page = read.data as Page;
         // As fresh as where it was asked when it doesn't say, as in the resource cache.
         const readAt = read.position ?? asked;
-        if (side === "first") this.first(list, page, readAt);
-        else if (side === "after") this.append(list, page, readAt);
-        else this.prepend(list, page);
+        const redaction = Math.max(-1, ...page.events.filter((e) => e.type === redacted).map((e) => e.position));
+        const shown = { ...page, events: page.events.filter((e) => e.type !== redacted || this.shows(list, e)) };
+        if (side === "first") this.first(list, shown, readAt);
+        else if (side === "after") this.append(list, shown, readAt);
+        else this.prepend(list, shown);
+        // A page read since the first may bring a redaction of events held.
+        // Pages read again after it hold them rewritten, and its own
+        // event.redacted is then before the first page's read: once only.
+        // A redaction of the whole log reads every open list of each task it
+        // changed again from the start, which is fine for so rare an act.
+        if (redaction > list.firstReadAt) this.readAgain(key, list, readAt);
       }
     } catch (failure) {
       if (!this.log.stale(sent)) this.showFailure(list, due, asked, failure as Error);
@@ -215,6 +235,7 @@ export class EventPages {
 
   private first(list: List, page: Page, readAt: number) {
     list.started = true;
+    list.firstReadAt = readAt;
     const { newestBefore } = list.wanted;
     if (newestBefore === undefined) {
       this.append(list, page, readAt);
@@ -239,6 +260,12 @@ export class EventPages {
     }
     list.fresh = null;
     this.show(list, { events, loading: list.shown.loading && page.more, error: "" });
+  }
+
+  // shows says whether a list's types take an event: every type when none are given.
+  private shows(list: List, event: LogEvent): boolean {
+    const { types } = list.wanted;
+    return !types?.length || types.includes(event.type);
   }
 
   // held is the events a list has read: after a reset, those read since.
@@ -267,4 +294,9 @@ export class EventPages {
 
 function typesQuery(types: readonly string[] = []): string {
   return types.length ? `?${types.map((type) => `type=${encodeURIComponent(type)}`).join("&")}` : "";
+}
+
+// typesRead is the types a list reads: its own and, when it has some, event.redacted.
+function typesRead(types: readonly string[] = []): readonly string[] {
+  return types.length && !types.includes(redacted) ? [...types, redacted] : types;
 }

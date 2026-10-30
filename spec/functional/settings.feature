@@ -6,7 +6,8 @@ Feature: Settings
   # internal/core/rules/redact_rules.go,
   # internal/domain/settings/settingsfile, internal/domain/settings/settingsapi,
   # ui/src/domains/settings/SettingsPage.tsx, ui/src/components/organisms/RedactText.tsx,
-  # ui/src/domains/settings/RedactLog.tsx and their tests.
+  # ui/src/domains/settings/RedactLog.tsx, ui/src/live/event-pages.ts and
+  # their tests.
 
   # ---- Features that are off -------------------------------------------------
 
@@ -66,3 +67,16 @@ Feature: Settings
     And its field's hint reads "Paste it. It is matched exactly, spaces and all, in every task, archived ones too, in the agents and what they learned, and in Agentry's other records, such as the policy, the workers and the ideas."
     When the user closes the dialog
     Then ?redact is no longer in the address and nothing was redacted
+
+  @SET-05 @user @test
+  Scenario: A redaction reaches every open view of the task without a reload
+    # ui/src/live/event-pages.test.ts "the chat reads every page again and shows the rewritten text, never the event.redacted, with no empty list between", "the Activity and Events tabs read their newest page again, as of the redaction, and list the event.redacted", "reads again once: the event.redacted in the pages read again doesn't read them again, and the log is followed on" and "an earlier page asked for before the redaction is dropped: it may hold the old text"
+    # each stream rewritten gets one event.redacted: internal/core/store/redact_commit.go redactionOf; internal/domain/settings/settingsapi/redact_log_api_test.go TestRedactingASecretAcrossTheLogLeavesNoTraceOnDisk
+    # a redaction of the whole log makes every open list of each task it changed read again from its start: accepted, as redacting is rare
+    Given task-1's chat open in one tab and its Activity tab in another, both showing "sk-live-0123456789"
+    When the text is redacted from task-1, from its page or from the Settings page
+    Then both show "[redacted]" in its place after the next move of the log, with no reload
+    And until each list is read again it keeps the old events, never an empty list
+    And the chat never lists the event.redacted, and the Events tab shows it
+    And each list reads itself again once only for one redaction
+    And an earlier page asked for before the redaction is not read

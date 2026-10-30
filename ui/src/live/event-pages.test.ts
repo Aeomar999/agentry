@@ -31,7 +31,14 @@ function fakeServer(positions: number[]) {
   const add = (...more: number[]) => log.push(...more.map(eventAt));
   // restart puts the server on another log: a restored or different database.
   const restart = (...on: number[]) => log.splice(0, log.length, ...on.map(eventAt));
-  return { fetch, reads, pending, answer, add, restart };
+  // redact rewrites the event at a position in place and appends the
+  // event.redacted naming it, as the store does.
+  const redact = (at: number, position: number) => {
+    const i = log.findIndex((e) => e.position === at);
+    log[i] = { ...log[i], data: { text: "[redacted]" } };
+    log.push({ position, at: "2026-10-19T10:00:00Z", type: "event.redacted", actor: "system:redactor", data: { positions: [at] } });
+  };
+  return { fetch, reads, pending, answer, add, restart, redact };
 }
 
 function eventAt(position: number): LogEvent {
@@ -308,9 +315,9 @@ describe("a task's events of some types, all of them (the chat)", () => {
     await server.answer(13);
     await server.answer(13);
     expect(server.reads).toEqual([
-      "/api/tasks/task-8/events?type=task.labeled&after=0",
-      "/api/tasks/task-8/events?type=task.labeled&after=5",
-      "/api/tasks/task-8/events?type=task.labeled&after=11",
+      "/api/tasks/task-8/events?type=task.labeled&type=event.redacted&after=0",
+      "/api/tasks/task-8/events?type=task.labeled&type=event.redacted&after=5",
+      "/api/tasks/task-8/events?type=task.labeled&type=event.redacted&after=11",
     ]);
     expect(positions(pages, chat)).toEqual([1, 3, 5, 7, 9, 11, 13]);
     expect(pages.snapshot(chat).loading).toBe(false);
@@ -322,7 +329,7 @@ describe("a task's events of some types, all of them (the chat)", () => {
     server.add(14, 15);
     pages.moved(15);
     await server.answer(15);
-    expect(server.reads.slice(3)).toEqual(["/api/tasks/task-8/events?type=task.labeled&after=13"]);
+    expect(server.reads.slice(3)).toEqual(["/api/tasks/task-8/events?type=task.labeled&type=event.redacted&after=13"]);
     expect(positions(pages, chat)).toEqual([1, 3, 5, 7, 9, 11, 13, 15]);
   });
 });
@@ -440,5 +447,112 @@ describe("a server on a shorter log", () => {
     await settle();
     expect(server.reads.slice(2)).toEqual(["/api/tasks/task-8/events?after=40"]);
     expect(positions(pages, newest)).toEqual([30, 35, 40, 41]);
+  });
+});
+
+// A redaction rewrites events a list may already hold, and appends
+// event.redacted: the list reads itself again from its first page.
+describe("a redaction", () => {
+  const chat: EventsWanted = { task: "task-8", types: ["task.labeled"] };
+  const newest: EventsWanted = { task: "task-8", newestBefore: 8 };
+  const texts = (pages: EventPages, wanted: EventsWanted) => pages.snapshot(wanted).events.map((e) => e.data?.text ?? e.position);
+
+  // watching shows a list and keeps the length of every list it was shown.
+  function watching(pages: EventPages, wanted: EventsWanted) {
+    const lengths: number[] = [];
+    pages.watch(wanted, () => lengths.push(pages.snapshot(wanted).events.length));
+    return lengths;
+  }
+
+  test("the chat reads every page again and shows the rewritten text, never the event.redacted, with no empty list between", async () => {
+    const server = fakeServer([1, 2, 3, 4, 5, 6, 7]);
+    const pages = new EventPages(server.fetch);
+    const lengths = watching(pages, chat);
+    pages.moved(7);
+    await server.answer(7);
+    await server.answer(7);
+    expect(positions(pages, chat)).toEqual([1, 3, 5, 7]);
+
+    server.redact(3, 8);
+    pages.moved(8);
+    await server.answer(8);
+    expect(server.reads.slice(2)).toEqual([
+      "/api/tasks/task-8/events?type=task.labeled&type=event.redacted&after=7",
+      "/api/tasks/task-8/events?type=task.labeled&type=event.redacted&after=0",
+    ]);
+    expect(texts(pages, chat)).toEqual([1, 3, 5, 7]); // the old events, until every page is read again
+    await server.answer(8);
+    await server.answer(8);
+    expect(server.reads.slice(4)).toEqual(["/api/tasks/task-8/events?type=task.labeled&type=event.redacted&after=5"]);
+    expect(texts(pages, chat)).toEqual([1, "[redacted]", 5, 7]);
+    expect(pages.snapshot(chat)).toMatchObject({ loading: false, error: "" });
+    expect(lengths.slice(lengths.indexOf(4))).not.toContain(0);
+  });
+
+  test("the Activity and Events tabs read their newest page again, as of the redaction, and list the event.redacted", async () => {
+    const server = fakeServer([1, 2, 3, 4, 5, 6, 7]);
+    const pages = new EventPages(server.fetch);
+    const lengths = watching(pages, newest);
+    pages.moved(7);
+    await server.answer(7);
+    expect(positions(pages, newest)).toEqual([5, 6, 7]);
+
+    server.redact(6, 8);
+    pages.moved(8);
+    await server.answer(8);
+    expect(server.reads.slice(1)).toEqual(["/api/tasks/task-8/events?after=7", "/api/tasks/task-8/events?before=9"]);
+    expect(positions(pages, newest)).toEqual([5, 6, 7, 8]); // until the newest page is read again
+    await server.answer(8);
+    expect(texts(pages, newest)).toEqual(["[redacted]", 7, 8]);
+    expect(pages.snapshot(newest).events[2].type).toBe("event.redacted");
+    expect(pages.snapshot(newest)).toMatchObject({ loading: false, earlier: true, error: "" });
+    expect(lengths.slice(lengths.indexOf(3))).not.toContain(0);
+  });
+
+  test("reads again once: the event.redacted in the pages read again doesn't read them again, and the log is followed on", async () => {
+    const server = fakeServer([1, 2, 3, 4, 5, 6, 7]);
+    const pages = new EventPages(server.fetch);
+    pages.watch(chat, ignore);
+    pages.watch(newest, ignore);
+    pages.moved(7);
+    await server.answer(7);
+    await server.answer(7);
+    server.redact(3, 8);
+    pages.moved(8);
+    await server.answer(8);
+    await server.answer(8);
+    await server.answer(8);
+    const read = server.reads.length;
+
+    pages.moved(8);
+    await settle();
+    expect(server.reads).toHaveLength(read);
+    expect(server.pending).toHaveLength(0);
+
+    server.add(9);
+    pages.moved(9);
+    await server.answer(9);
+    await settle();
+    // The chat reads on from the newest event it holds, 7, as it doesn't hold the event.redacted.
+    expect(server.reads.slice(read).sort()).toEqual([
+      "/api/tasks/task-8/events?after=8",
+      "/api/tasks/task-8/events?type=task.labeled&type=event.redacted&after=7",
+    ]);
+    expect(positions(pages, chat)).toEqual([1, 3, 5, 7, 9]);
+    expect(positions(pages, newest)).toEqual([6, 7, 8, 9]);
+  });
+
+  test("an earlier page asked for before the redaction is dropped: it may hold the old text", async () => {
+    const server = fakeServer([1, 2, 3, 4, 5, 6, 7]);
+    const pages = new EventPages(server.fetch);
+    pages.watch(newest, ignore);
+    pages.moved(7);
+    await server.answer(7);
+    server.redact(3, 8);
+    pages.moved(8);
+    pages.loadEarlier(newest); // asked while the read that brings the redaction is in flight
+    await server.answer(8);
+    expect(pages.snapshot(newest).loadingEarlier).toBe(false);
+    expect(server.pending.map((read) => read.path)).toEqual(["/api/tasks/task-8/events?before=9"]);
   });
 });
