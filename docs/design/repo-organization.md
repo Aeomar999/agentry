@@ -6,9 +6,9 @@ build file changes with this document. The moves it plans are later work.
 ## In short
 
 `internal/` becomes eight folders in place of 46 packages side by side:
-`platform`, `core`, `domain`, `features`, `runtime`, `web`, `mcp` and
+`platform`, `core`, `domain`, `extensions`, `runtime`, `web`, `mcp` and
 `testkit`. Each package sits on one layer, and imports only from the layers
-below it. A folder can span two: `core`, `domain` and `features` each hold a
+below it. A folder can span two: `core`, `domain` and `extensions` each hold a
 low root and higher packages. A test checks that on every `go test ./...`.
 
 The user's proposal is mostly kept. It departs from the proposal in five
@@ -27,11 +27,14 @@ places, all because of what the import graph really is:
    files: the read model is built from the domain models. The rule becomes
    "a domain model knows the log's words (`core/events`) and nothing else of
    core".
-3. **The feature framework is the parent of the features.** The proposal had
-   `core/features` and also `features/ideas`, two things called features. The
-   framework stays `internal/features`, and each feature nests under it
-   (`internal/features/ideas`), as `image/png` nests under `image`. The UI
-   already has this shape in `ui/src/features/`.
+3. **The extension framework is the parent of the extensions.** The
+   proposal had `core/features` and also `features/ideas`, two things called
+   features. The framework, `internal/features` today, becomes
+   `internal/extensions`, and each extension nests under it
+   (`internal/extensions/ideas`), as `image/png` nests under `image`. The UI
+   already has this shape in `ui/src/features/`, which becomes
+   `ui/src/extensions/`. It is named extensions, not features, by the user's
+   decision 5 (section 10).
 4. **Some packages change group.** `machines` goes to `runtime`, not
    `platform`, because it imports `agents`, `workers` and `worktrees`.
    `sessions` and `terminal` go to `platform`, not `domain` or `runtime`,
@@ -43,11 +46,12 @@ places, all because of what the import graph really is:
    and tools out of `mcp` changes code, so each domain does that in its own
    reviewed task, after the moves.
 
-The user decided four things (section 10): stop committing the built UI but
+The user decided five things (section 10): stop committing the built UI but
 keep the history; build the page on the publishing machine and copy it to
 the Mac, so the Mac app stays buildable with only Go; move `Agentry/` out of
-the checkout and ignore `brag-output/`; and land the moves one group per
-step, between tasks.
+the checkout and ignore `brag-output/`; land the moves one group per
+step, between tasks; and name the plug-in framework extensions, while
+`features.toml` and `/api/features` keep their names.
 
 ![The layers and what each may import](repo-organization/layers.svg)
 
@@ -66,10 +70,11 @@ Measured on `fc373495` (lines are Go, without tests / tests):
 - `internal/mcp` is `agentry mcp`, a separate process that reaches the server
   only through its HTTP API (`client`). Its tools for tasks, files and
   waiting live in `mcp`; the ideas tools already live in `internal/ideas`,
-  through `features.Tool`.
+  through `features.Tool` (`extensions.Tool` in the target).
 - `ideas` and `schedules` already work the way the proposal wants every
   domain to: one package with its events, state, rules, routes, tools and
-  waiting entry, registered through `internal/features`.
+  waiting entry, registered through the extension framework,
+  `internal/features` today.
 - The real graph has layers. From the bottom:
 
 | Layer | Packages today | Imports of Agentry's own |
@@ -77,16 +82,17 @@ Measured on `fc373495` (lines are Go, without tests / tests):
 | Know no Agentry concept | `exactgob`, `procs`, `hostaddrs`, `schema`, `engines`, `hookcall`, `sessions`, `terminal`, `worktrees`, `workspace`, `tlsca`, `pinned`, `client`, `launch` | only each other |
 | What the log holds | `events` | none |
 | Models: state from events | `agents`, `tasks`, `workers`, `connections`, `settings`, `policy`, `sharedfiles` | `events`, each other |
-| The feature framework | `features` | the models |
+| The extension framework, named `features` today | `features` | the models |
 | The log and the read model | `store`, `current`, `rules`, `httpapi` | the models, `features` |
 | What runs | `coordinator`, `turns`, `watchdog`, `archive`, `machines`, `desk` | all of the above |
-| A domain's or a feature's surface | `hooks`, `workerlink`, `workerservice`, `waitlist`, `settingsfile`, `webpush`, `ideas`, `schedules` | all of the above |
+| A domain's or an extension's surface | `hooks`, `workerlink`, `workerservice`, `waitlist`, `settingsfile`, `webpush`, `ideas`, `schedules` | all of the above |
 | The surfaces | `web`, `mcp` | everything |
 
   Today exactly one line of Go code breaks these layers:
   `coordinator/followups.go` calls `ideas.Visionaries`, a runtime package
-  naming a feature. `docs/design/extensions.md` already plans to replace it
-  with a `features.Coordinator` hook. (Tests import upward freely, as Go's
+  naming an extension. `docs/design/extensions.md` already plans to replace
+  it with a `features.Coordinator` hook (`extensions.Coordinator` in the
+  target). (Tests import upward freely, as Go's
   external test packages may.)
 - `tasks`, `current` and `coordinator` are tightly bound, but as a chain, not
   a cycle: `coordinator` imports `current`, `current` imports `tasks`. Each
@@ -119,7 +125,7 @@ internal/
                       check 3 (rules), and how every handler answers (httpapi)
   domain/             one folder per spec area; its root package is the model,
                       its subpackages are its routes, tools and background work
-  features/           the feature framework (the package), and each feature (a subfolder)
+  extensions/         the extension framework (the package), and each extension (a subfolder)
   runtime/            what runs: the coordinator loop, turns, the watchdog, machines, the desk
   web/                agentry serve's HTTP side: sign-in, the page, mounting every route
   mcp/                agentry mcp: the protocol, notices, mounting every tool
@@ -129,7 +135,7 @@ ui/src/
   components/         shared atoms, molecules, organisms, templates: no domain
   shell/              the frame every page sits in: sidebar, top bar, Ctrl K, toasts
   domains/<area>/     each domain's pages, panels, hooks and types
-  features/<name>/    each feature's UI, listed by features/index.ts
+  extensions/<name>/  each extension's UI, listed by extensions/index.ts
   api/ live/ lib/     the HTTP client, the live event stream, helpers with no domain
 spec/  docs/  deploy/  packaging files go to tools/; the rest of the root is as today
 ```
@@ -149,7 +155,7 @@ domain/
   settings/        the model; settingsfile/
   sharedfiles/     the model (Disk, Hub)
   notifications/   webpush/
-features/   (the framework)  ideas/  schedules/; later githost/  email/ (proposals)
+extensions/ (the framework)  ideas/  schedules/; later githost/  email/ (proposals)
 runtime/    coordinator  turns  watchdog  archive  machines  desk
 web/        (one package; later only sign-in, the page, mounting)
 mcp/        (one package; later only the protocol, notices, mounting)
@@ -158,23 +164,25 @@ testkit/    storetest  deeptest
 
 Depth is at most four below the module: `internal/domain/workers/workerlink`.
 Package names don't change, so `workers.Roster` and `workerlink.Server` read
-as today; only import paths do.
+as today; only import paths do. The one exception is the framework, whose
+package `features` becomes `extensions` (section 7, step 8).
 
 ### Where routes and tools go
 
 A domain's HTTP routes and MCP tools go in one subpackage named after it:
 `domain/tasks/tasksapi`, `domain/workers/workersapi`. It returns the same
-types a feature does, `[]features.Route` and `[]features.Tool`, so `web` and
-`mcp` mount a domain the way they mount a feature: one way, not two. A
-domain's api package takes the dependencies it needs (the store, the fleet,
-the loop) in its own struct; a feature gets only `features.Core`, because a
-feature never holds the store.
+types an extension does, `[]extensions.Route` and `[]extensions.Tool`, so
+`web` and `mcp` mount a domain the way they mount an extension: one way, not
+two. A domain's api package takes the dependencies it needs (the store, the
+fleet, the loop) in its own struct; an extension gets only `extensions.Core`,
+because an extension never holds the store.
 
 What stays in `web` after that: sign-in and tokens (`signin.go`), the
 embedded page and install scripts (`page.go`, `scripts.go`), addresses,
 and the few routes that span every domain: `/api/events`, `/api/waiting`,
-`/api/config`, `/api/features`. What stays in `mcp`: the protocol, the
-server instructions, notices and the waiting list it words.
+`/api/config`, `/api/features` (its name stays: decision 5). What stays
+in `mcp`: the protocol, the server instructions, notices and the waiting
+list it words.
 
 ## 3. The dependency rules
 
@@ -185,12 +193,12 @@ table says so, and anything in a lower layer.
 |---|---|---|---|
 | 1 | `platform/*` | other `platform` packages | anything else of Agentry's |
 | 2 | `core/events` | `platform` | anything else of Agentry's |
-| 3 | `domain/<area>` (the root: the model) | `core/events`, `platform`, other domains' roots | the rest of `core`, any subpackage, `features` |
-| 4 | `features` (the framework) | domain roots, `core/events`, `platform` | the rest of `core`, any feature |
-| 5 | `core/httpapi` | `features`, domain roots, `core/events`, `platform` | `store`, `current`, `rules`, and everything above |
-| 5 | `core/{store,current,rules}` | each other, `features`, domain roots | `httpapi`, runtime, subpackages, features' folders |
-| 6 | `runtime/*` | each other, `core`, `features`, domain roots | subpackages, features' folders |
-| 7 | `domain/<area>/<sub>` and `features/<name>` | everything below, and their own folder's other subpackages | another domain's subpackages, another feature |
+| 3 | `domain/<area>` (the root: the model) | `core/events`, `platform`, other domains' roots | the rest of `core`, any subpackage, `extensions` |
+| 4 | `extensions` (the framework) | domain roots, `core/events`, `platform` | the rest of `core`, any extension |
+| 5 | `core/httpapi` | `extensions`, domain roots, `core/events`, `platform` | `store`, `current`, `rules`, and everything above |
+| 5 | `core/{store,current,rules}` | each other, `extensions`, domain roots | `httpapi`, runtime, subpackages, extensions' folders |
+| 6 | `runtime/*` | each other, `core`, `extensions`, domain roots | subpackages, extensions' folders |
+| 7 | `domain/<area>/<sub>` and `extensions/<name>` | everything below, and their own folder's other subpackages | another domain's subpackages, another extension |
 | 8 | `web`, `mcp` | everything below | each other |
 | 9 | `cmd/*`, `tools/*` | everything | |
 | – | `testkit/*` | anything | being imported by code that isn't a test |
@@ -200,12 +208,12 @@ In words:
 - A model knows only what its events mean. It never reads the log or the
   read model.
 - The log and the read model know every model, so that they can build state,
-  but no feature by name and nothing that runs.
+  but no extension by name and nothing that runs.
 - `httpapi`, how every handler answers, stays the leaf it is today: it never
-  imports the store or the read model, so `web` and every feature's routes
+  imports the store or the read model, so `web` and every extension's routes
   can use it without a cycle.
 - What runs reads the state and writes through the store. It never reaches
-  into a domain's routes or a feature.
+  into a domain's routes or an extension.
 - Surfaces sit on top. A domain's surface may use the loop, the fleet and the
   store; another domain's surface it may not, so two domains talk through
   the state, not each other's handlers.
@@ -255,12 +263,12 @@ migration step in section 7 that moves it.
 | `internal/policy` | `internal/domain/policy` | decides one tool call | 7 |
 | `internal/hooks` | `internal/domain/policy/hooks` | the server side of `agentry hook`, the gate | 7 |
 | `internal/settings` | `internal/domain/settings` | your settings from the settings stream | 7 |
-| `internal/settingsfile` | `internal/domain/settings/settingsfile` | features.toml: features' settings and secrets | 7 |
+| `internal/settingsfile` | `internal/domain/settings/settingsfile` | features.toml: extensions' settings and secrets | 7 |
 | `internal/sharedfiles` | `internal/domain/sharedfiles` | a task's shared files | 7 |
 | `internal/webpush` | `internal/domain/notifications/webpush` | Web Push keys and subscriptions | 7 |
-| `internal/features` | `internal/features` (stays) | the feature framework | – |
-| `internal/ideas` | `internal/features/ideas` | the Ideas feature | 8 |
-| `internal/schedules` | `internal/features/schedules` | the Schedules feature | 8 |
+| `internal/features` | `internal/extensions` | the extension framework, renamed with its package | 8 |
+| `internal/ideas` | `internal/extensions/ideas` | the Ideas extension | 8 |
+| `internal/schedules` | `internal/extensions/schedules` | the Schedules extension | 8 |
 | `internal/coordinator` | `internal/runtime/coordinator` | the loop | 9 |
 | `internal/turns` | `internal/runtime/turns` | starts and stops turns | 9 |
 | `internal/watchdog` | `internal/runtime/watchdog` | catches agents that go quiet | 9 |
@@ -278,9 +286,14 @@ migration step in section 7 that moves it.
 | `cmd/agentry-desktop` | `cmd/agentry-desktop` (stays) | the desktop app; its imports of `client`, `engines`, `launch` and `procs` change in step 5 | – |
 
 Packages the proposals in `spec/proposals/` will add: `githost` and
-`email` are features (each has a `feature_test.go`), so
-`internal/features/githost` and `internal/features/email`. `egress`, the
+`email` are extensions (each cites a `feature_test.go` to write), so
+`internal/extensions/githost` and `internal/extensions/email`. `egress`, the
 network gate, is part of policy: `internal/domain/policy/egress`.
+
+**Names users see stay.** The framework's rename is inside the code only.
+The settings file `features.toml`, the `GET /api/features` endpoint and its
+JSON keep their names on purpose: users and existing installs see them, and
+renaming them would be a behaviour change (decision 5).
 
 `cmd/agentry` stays one package. Its 21 files are subcommands, and each
 holds steps its tests call directly, so it is not just wiring. The rule for
@@ -308,17 +321,18 @@ today's paths; the moves then rewrite them like any other path.
 | `worktrees-and-branches` | `platform/worktrees`, `platform/workspace` |
 | `sign-in` | `web` |
 | `claude-code-tools` | `mcp`, `domain/connections` |
-| `ideas` | `features/ideas` |
+| `ideas` | `extensions/ideas` |
 
 A spec area doesn't have to be a domain: sessions and worktrees know no
 domain, so their code is platform. The map goes from spec areas to code,
-not the other way. `features/schedules` has no spec area yet; section 6
+not the other way. `extensions/schedules` has no spec area yet; section 6
 says how the check treats it.
 
 ### The UI
 
 `ui/src` is 31k lines in atomic tiers (`components/atoms` to `templates`),
-`pages/`, `lib/`, `api/`, `live/` and `features/ideas`. The UI mirrors the
+`pages/`, `lib/`, `api/`, `live/` and `features/ideas` (the Ideas
+extension). The UI mirrors the
 Go domains in folder names only; it does not copy Go's layers. A
 `ui/src/domains/<area>` folder exists only where Go has `domain/<area>`;
 a page about something that isn't a domain goes where its Go code goes.
@@ -340,12 +354,13 @@ a page about something that isn't a domain goes where its Go code goes.
 | `lib/*.ts` about one domain (`teams.ts`, `templates.ts`, `epics.ts`, `plan.ts`, `push.ts`, `shared.ts`, `profiles.ts`, ...) | that domain's folder |
 | `lib/*.ts` with no domain (`cn`, `time`, `rows`, `stored`, `drag`, `theme`, `monaco`, ...) | stay |
 | `api/`, `live/` | stay |
-| `features/` | stays: the registry and each feature |
+| `features/` | `extensions/`: the registry and each extension |
 
-The UI is named `domains/`, not `features/`, because `ui/src/features`
-already means what `internal/features` means: something a team or a
-setting turns on. One rule is checked, by ESLint's `no-restricted-imports`:
-`components/` imports neither `domains/` nor `features/`.
+The UI's spec areas go in `domains/`, and its extensions in `extensions/`,
+as Go has `internal/domain` and `internal/extensions`. `ui/src/extensions`
+means what `internal/extensions` means: something a team or a setting turns
+on. One rule is checked, by ESLint's `no-restricted-imports`: `components/`
+imports neither `domains/` nor `extensions/`.
 
 ## 5. The repo root
 
@@ -426,11 +441,12 @@ accepted.
 **An import test,** `tools/importrules/rules_test.go`, run by
 `go test ./...`. It replaces `internal/features/imports_test.go` and
 `internal/httpapi/imports_test.go`, so there is one check, not three. It
-keeps the point of their limits, that `features` and `httpapi` never import
+keeps the point of their limits, that the extension framework and `httpapi`
+never import
 `store`, `current` or `rules`, though not their exact lists: today each may
 import only agents, tasks, workers, connections, settings, client and
 events, and the new rows allow every domain root (so also `policy` and
-`sharedfiles`), `core/events` and `platform` (and `httpapi` also `features`).
+`sharedfiles`), `core/events` and `platform` (and `httpapi` also `extensions`).
 Nothing they may reach imports the store, so no cycle can come back.
 
 ```go
@@ -441,7 +457,7 @@ func layerOf(path string) layer // "internal/domain/workers" -> domainRoot
 func allowed(from, to string) bool
 
 // known are the edges that break the rules today; one may be removed, never added.
-var known = []edge{{"internal/runtime/coordinator", "internal/features/ideas"}}
+var known = []edge{{"internal/runtime/coordinator", "internal/extensions/ideas"}}
 
 func TestEveryImportPointsDown(t *testing.T) {
 	// go list -json ./... ; for each package, its Imports (not TestImports):
@@ -451,7 +467,7 @@ func TestEveryImportPointsDown(t *testing.T) {
 
 func TestEveryPackageHasALayer(t *testing.T) {
 	// a new folder under internal/ outside the eight groups fails, with
-	// "put it under platform, core, domain, features, runtime or testkit".
+	// "put it under platform, core, domain, extensions, runtime or testkit".
 }
 
 func TestTestkitIsOnlyForTests(t *testing.T) {
@@ -468,11 +484,11 @@ even if the moves wait.
 lines, from the table in section 4, so all 16 feature files have one. In the
 same step `spec/check` starts reading them and fails on a path that doesn't
 exist, so a move that forgets the spec is caught. Step 11 adds the second
-part: it fails when a package under `domain/` or `features/` is named by no
+part: it fails when a package under `domain/` or `extensions/` is named by no
 feature file's Sources, since a package nobody specified is either dead or
 missing its spec. A package with no feature file yet goes on a list in
 `spec/README.md`, "Code with no spec yet", which may only shrink, like the
-import test's known edges. It starts with one entry, `features/schedules`,
+import test's known edges. It starts with one entry, `extensions/schedules`,
 and empties when someone writes `schedules.feature`.
 
 **`spec/constraints.md` section 1** stays right through every move:
@@ -503,12 +519,12 @@ Every step but step 10 changes no behaviour, builds, passes `make test` and
 | 5 | `platform` (15 packages, and the desktop app's four imports) | move |
 | 6 | `core` | move |
 | 7 | `domain`, one area per commit: agents, tasks, workers, connections, policy, settings, sharedfiles, notifications | move |
-| 8 | `features/ideas`, `features/schedules` | move |
+| 8 | `extensions`, renamed from `features`; `extensions/ideas`, `extensions/schedules` | move, and the framework's rename |
 | 9 | `runtime` | move |
 | 10 | The root: stop committing the built page (history kept), with a "not built" page in its place; CI, Docker and `make test` build the UI; the Mac build copies the page in, with the built-from check (section 5); `brag-output/` ignored; `docker-stack.dev.yml` to `deploy/` | **behaviour change**, agreed by the user; needs a scenario |
-| 11 | The import test reads layers from paths; `spec/check` fails on a `domain/` or `features/` package no Sources names; `spec/constraints.md` section 1 grouped by folder | test and spec |
-| 12 | One task per domain: its routes out of `web` and its tools out of `mcp` into `domain/<area>/<area>api`, mounted as features' are | refactor |
-| 13 | `coordinator` stops naming `ideas` (`features.Coordinator`), and the import test's known list is empty | refactor |
+| 11 | The import test reads layers from paths; `spec/check` fails on a `domain/` or `extensions/` package no Sources names; `spec/constraints.md` section 1 grouped by folder | test and spec |
+| 12 | One task per domain: its routes out of `web` and its tools out of `mcp` into `domain/<area>/<area>api`, mounted as extensions' are | refactor |
+| 13 | `coordinator` stops naming `ideas` (`extensions.Coordinator`), and the import test's known list is empty | refactor |
 | 14 | The UI: `shell/`, then one `domains/<area>/` per task | move |
 
 Steps 4 to 9 are made by one script, `tools/relayout`, from the table in
@@ -560,6 +576,15 @@ section 4. For each package in the step it:
    The allow-list names files, not lines, so an edit to one of them doesn't
    stop the script; a new file with a hit does.
 
+Step 8 also renames the framework's package, which a path rewrite can't do
+alone. In the same commit, `gopls rename` turns `features.Feature` into
+`extensions.Extension`, `installedFeatures()` in `cmd/agentry` into
+`installedExtensions()`, and the other names that say feature for the
+framework; `features.Route`, `features.Tool`, `features.Core` and
+`features.Coordinator` need only the new qualifier, `extensions.`. It leaves
+`features.toml`, `/api/features` and its JSON as they are (section 4), so
+the step still changes no behaviour.
+
 Old design docs under `docs/design/` keep the paths they were written with;
 they record what was true then.
 
@@ -593,11 +618,12 @@ task that edits a moved package or adds an import of one.
 | Alternative | Why not |
 |---|---|
 | The proposal as written: each domain one package with its model, routes and tools, and a `core` that knows no domain | `current`, `rules` and `store` import the models, and routes need `current` and `store`, so one package per domain would be an import cycle for tasks, agents, workers, connections and settings. Kept its intent: one folder per domain, with the model as its root. |
-| Make `core` truly domain-free: every domain registers its state slice through `features`, as ideas does | The right direction for some domains later (`docs/design/extensions.md`), but it rewrites how the store, the rules and the read model hold tasks and agents. That is a behaviour risk, not a move. This layout doesn't block it. |
+| Make `core` truly domain-free: every domain registers its state slice through `extensions`, as ideas does | The right direction for some domains later (`docs/design/extensions.md`), but it rewrites how the store, the rules and the read model hold tasks and agents. That is a behaviour risk, not a move. This layout doesn't block it. |
 | By layer: `models/`, `services/`, `handlers/` | That is today's problem with folder names on it: one change to workers still touches four folders. |
 | Leave `internal/` flat and only add the import test | Cheapest, and the test is step 2 of the plan anyway. But 46 names in one list don't tell a reader where to look, and the rules would be a table nobody sees in the tree. |
 | Handlers stay in `web`, one file per domain | Already true, and `web` still imports 23 packages and decides how each domain is served. It's where the repo is until step 12, not the target. |
-| `core/features` beside `features/ideas` | Two things named features. The framework as the parent folder of its features says what it is, and matches the UI. |
+| `core/features` beside `features/ideas` | Two things named features. The framework as the parent folder of its extensions says what it is, and matches the UI. |
+| Keep the name `features` for the framework | "Feature" already means a spec `.feature` file, and any capability in everyday words. The user chose extensions (decision 5). |
 | One Go module per domain | Agentry is one binary. More modules mean `replace` lines, like the desktop app's, and versioning between them for no gain. |
 | Deeper nesting, such as `domain/workers/link/server` | Package names that only make sense with their path (`link`, `server`, `api`) clash when imported together. `workerlink` and `workersapi` read alone. |
 | `machines` in `platform` | It imports `agents`, `workers`, `sessions` and `worktrees`: it is what runs agents on a machine, so `runtime`. |
@@ -622,8 +648,8 @@ table holds the reviewer's challenges and how each was settled.
 | # | The proposal | This design | Why |
 |---|---|---|---|
 | 1 | `domain/` packages each own model, routes and tools | a domain is a folder: model at its root, routes and tools in subpackages | the cycle in section 8, row 1 |
-| 2 | `core/` holds `events, store, current, rules, features, httpapi, schema`, and knows no domain | `core` holds `events, store, current, rules, httpapi`; it sits above the models, and only `events` sits below them | `current`, `rules` and `store` import the models; `features` imports them too |
-| 3 | `features` (the framework) in `core/`, and `features/ideas, schedules` | `internal/features` is the framework, with each feature in a subfolder | one name, one meaning; the UI matches |
+| 2 | `core/` holds `events, store, current, rules, features, httpapi, schema`, and knows no domain | `core` holds `events, store, current, rules, httpapi`; it sits above the models, and only `events` sits below them | `current`, `rules` and `store` import the models; the extension framework imports them too |
+| 3 | `features` (the framework) in `core/`, and `features/ideas, schedules` | `internal/extensions` is the framework, with each extension in a subfolder | one name, one meaning; the UI matches; named extensions by decision 5 |
 | 4 | `schema` in `core` | `platform/schema` | it imports nothing of Agentry's |
 | 5 | `machines` in `platform` | `runtime/machines` | it imports domain models |
 | 6 | `sessions` in `domain`, `terminal` in `runtime` | both in `platform` | neither knows a domain |
@@ -634,7 +660,7 @@ table holds the reviewer's challenges and how each was settled.
 | 11 | `settings` | `domain/settings` with `settingsfile/` under it | `settingsfile` was not placed in the proposal |
 | 12 | `testkit: storetest, deeptest` | agreed, and test-only by rule | `sessionstest` and `taskstest` stay beside their packages, as Go does |
 | 13 | not placed: `waitlist`, `client`, `pinned`, `launch`, `workspace`, `hookcall`, `speccheck`, `packaging`, `mcp` | see section 4 | |
-| 14 | `ui/src/features/<domain>` | `ui/src/domains/<area>`, and `ui/src/features` stays for features | `features` already means something in the UI |
+| 14 | `ui/src/features/<domain>` | `ui/src/domains/<area>`, and `ui/src/extensions` (today's `ui/src/features`) for extensions | `features` already means something in the UI |
 | 15 | `cmd/` thin: flags and wiring only | `cmd/agentry` keeps each subcommand's steps | its tests call those steps directly; moving them is a refactor per command, when one grows |
 
 The reviewer's challenges:
@@ -659,3 +685,11 @@ The reviewer's challenges:
    checkout, and git-ignore `brag-output/`.
 4. **When to move:** one group per step, each landed between tasks
    (section 7, "Not getting in the way of open tasks").
+5. **The framework's name:** the plug-in framework is named extensions, not
+   features: `internal/extensions`, `ui/src/extensions` and
+   `extensions.Extension`. "Feature" collides with the spec's `.feature`
+   files and with the everyday word for any capability, and extensions
+   matches `docs/design/extensions.md`. The settings file `features.toml`,
+   the `GET /api/features` endpoint and its JSON are deliberately not
+   renamed: users and existing installs see them, and renaming them would be
+   a behaviour change.

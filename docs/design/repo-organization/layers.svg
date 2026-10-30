@@ -11,24 +11,24 @@
 <text x="40" y="159" font-size="13" fill="#333">the surfaces: sign-in, the page, mounting</text>
 <text x="820" y="150" font-size="13" fill="#333" text-anchor="end">everything below; not each other</text>
 <rect x="24" y="180" width="812" height="52" fill="#eef2f7" stroke="#8a96a8" stroke-width="1"/>
-<text x="40" y="202" font-size="15" font-weight="bold" fill="#111">domain/&lt;area&gt;/&lt;sub&gt;, features/&lt;name&gt;</text>
-<text x="40" y="221" font-size="13" fill="#333">a domain's routes, tools and jobs; each feature</text>
+<text x="40" y="202" font-size="15" font-weight="bold" fill="#111">domain/&lt;area&gt;/&lt;sub&gt;, extensions/&lt;name&gt;</text>
+<text x="40" y="221" font-size="13" fill="#333">a domain's routes, tools and jobs; each extension</text>
 <text x="820" y="212" font-size="13" fill="#333" text-anchor="end">everything below; own folder only</text>
 <rect x="24" y="242" width="812" height="52" fill="#eef2f7" stroke="#8a96a8" stroke-width="1"/>
 <text x="40" y="264" font-size="15" font-weight="bold" fill="#111">runtime/*</text>
 <text x="40" y="283" font-size="13" fill="#333">coordinator, turns, watchdog, archive, machines, desk</text>
-<text x="820" y="274" font-size="13" fill="#333" text-anchor="end">core, features, domain roots, platform</text>
+<text x="820" y="274" font-size="13" fill="#333" text-anchor="end">core, extensions, domain roots, platform</text>
 <rect x="24" y="304" width="812" height="52" fill="#e6efe6" stroke="#8a96a8" stroke-width="1"/>
 <text x="40" y="326" font-size="15" font-weight="bold" fill="#111">core: store, current, rules</text>
 <text x="40" y="345" font-size="13" fill="#333">the log, the read model, check 3</text>
-<text x="820" y="336" font-size="13" fill="#333" text-anchor="end">each other, features, domain roots, platform</text>
+<text x="820" y="336" font-size="13" fill="#333" text-anchor="end">each other, extensions, domain roots, platform</text>
 <rect x="24" y="366" width="812" height="52" fill="#e6efe6" stroke="#8a96a8" stroke-width="1"/>
 <text x="40" y="388" font-size="15" font-weight="bold" fill="#111">core/httpapi</text>
 <text x="40" y="407" font-size="13" fill="#333">how every handler answers; a leaf</text>
-<text x="820" y="398" font-size="13" fill="#333" text-anchor="end">features, domain roots, core/events, platform</text>
+<text x="820" y="398" font-size="13" fill="#333" text-anchor="end">extensions, domain roots, core/events, platform</text>
 <rect x="24" y="428" width="812" height="52" fill="#eef2f7" stroke="#8a96a8" stroke-width="1"/>
-<text x="40" y="450" font-size="15" font-weight="bold" fill="#111">features</text>
-<text x="40" y="469" font-size="13" fill="#333">the feature framework</text>
+<text x="40" y="450" font-size="15" font-weight="bold" fill="#111">extensions</text>
+<text x="40" y="469" font-size="13" fill="#333">the extension framework</text>
 <text x="820" y="460" font-size="13" fill="#333" text-anchor="end">domain roots, core/events, platform</text>
 <rect x="24" y="490" width="812" height="52" fill="#eef2f7" stroke="#8a96a8" stroke-width="1"/>
 <text x="40" y="512" font-size="15" font-weight="bold" fill="#111">domain/&lt;area&gt;</text>
