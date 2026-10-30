@@ -180,16 +180,22 @@ type Route struct {
 	Handler http.HandlerFunc
 }
 
-// Auth says who may call a Route: UI, Desk or Signed(verify). The zero Auth
-// is UI. It holds a func, so it can't be compared: ask DeskToo and Verify.
+// Auth says who may call a Route: UI, Desk, Worker or Signed(verify). The
+// zero Auth is UI. It holds a func, so it can't be compared: ask DeskToo,
+// ForWorkers and Verify.
 type Auth struct {
 	deskToo bool
+	worker  bool
 	verify  func(r *http.Request, body []byte) error
 }
 
 var (
 	UI   = Auth{}              // the page, and Claude Code connections, which carry the UI token
 	Desk = Auth{deskToo: true} // those, and the desk with its own token
+	// Worker is a joined worker with its credential, and no token: the
+	// handler reads which worker with WorkerOf. Only a domain's route may
+	// take it; web refuses it from an extension.
+	Worker = Auth{worker: true}
 )
 
 // Signed is for a webhook: a request whose body verify accepts, checked
@@ -206,8 +212,26 @@ func Signed(verify func(r *http.Request, body []byte) error) Auth {
 // DeskToo is whether the desk's token opens the route too: Desk.
 func (a Auth) DeskToo() bool { return a.deskToo }
 
-// Verify is a Signed route's check of a request and its body, nil for UI and Desk.
+// ForWorkers is whether the route takes a worker's credential, and nothing else: Worker.
+func (a Auth) ForWorkers() bool { return a.worker }
+
+// Verify is a Signed route's check of a request and its body, nil for UI, Desk and Worker.
 func (a Auth) Verify() func(r *http.Request, body []byte) error { return a.verify }
+
+type workerKey struct{}
+
+// WithWorker is r with worker in its context, as the Worker wrapper hands
+// it on once the worker's credential is checked.
+func WithWorker(r *http.Request, worker workers.Worker) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), workerKey{}, worker))
+}
+
+// WorkerOf is the worker a Worker route's request came from; the zero
+// Worker in any other route.
+func WorkerOf(r *http.Request) workers.Worker {
+	worker, _ := r.Context().Value(workerKey{}).(workers.Worker)
+	return worker
+}
 
 // Section is one more part of a coordinator's brief.
 type Section struct{ Heading, Text string }

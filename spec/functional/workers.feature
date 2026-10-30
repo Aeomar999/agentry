@@ -351,8 +351,9 @@ Feature: Workers
     Given a worker the user removed on the Workers page
     When it dials the link with its old credential
     Then it is refused with status 401: yes
-    # not under test, checked by hand: the refusal says the worker isn't joined (internal/web/workers_api.go line 84), and its open link is dropped at once (internal/domain/workers/workersapi/workersapi.go line 179)
-    # internal/web/workers_api.go requireWorker: the link, the git hub, the bundle, the update, leaving and the blobs all need the credential
+    # not under test, checked by hand: its open link is dropped at once (internal/domain/workers/workersapi/workersapi.go line 203)
+    # internal/web/mount.go requireWorker, the wrapper of extensions.Worker: the link, the git hub, the bundle, the update, leaving and the blobs all need the credential, and the refusal says the worker isn't joined (line 50)
+    # internal/domain/workers/workersapi/link_test.go TestAWorkersRoutesTakeOnlyItsCredential, TestWithNoHubAWorkersRoutesAreNotThere
     # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   # ---- Where a turn runs -----------------------------------------------------

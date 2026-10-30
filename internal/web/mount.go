@@ -3,7 +3,9 @@ package web
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
+	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 )
 
@@ -19,16 +21,37 @@ func (s *Server) mount(owner string, routes []extensions.Route, mux *http.ServeM
 }
 
 // wrapperOf is the wrapper auth names: signed for extensions.Signed,
-// requireUIOrDesk for extensions.Desk, and requireUI for extensions.UI. None is
-// requireRealUIToken, which hands out the token.
+// requireUIOrDesk for extensions.Desk, requireWorker for extensions.Worker,
+// and requireUI for extensions.UI. None is requireRealUIToken, which hands
+// out the token.
 func (s *Server) wrapperOf(auth extensions.Auth) func(http.HandlerFunc) http.Handler {
 	switch {
 	case auth.Verify() != nil:
 		return func(next http.HandlerFunc) http.Handler { return signed(auth.Verify(), next) }
 	case auth.DeskToo():
 		return s.requireUIOrDesk
+	case auth.ForWorkers():
+		return s.requireWorker
 	}
 	return s.requireUI
+}
+
+// requireWorker lets in a worker that shows its credential, and tells the
+// handler which worker it is, through extensions.WorkerOf.
+func (s *Server) requireWorker(next http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		roster, err := s.workers()
+		if err != nil {
+			httpapi.Failed(w, err)
+			return
+		}
+		worker, ok := roster.WithCredential(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+		if !ok {
+			http.Error(w, "this worker isn't joined; join it again from the Workers page", http.StatusUnauthorized)
+			return
+		}
+		next(w, extensions.WithWorker(r, worker))
+	})
 }
 
 // mountRoute registers one of owner's routes. A pattern that clashes with

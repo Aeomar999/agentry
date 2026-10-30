@@ -96,7 +96,7 @@ Feature: Compatibility
     When the install script asks for /worker/agentry with a working code and the server's own os and arch
     Then the answer is 200 with the server's own binary
     And with an unknown code the install script itself is refused with 401
-    # not under test, checked by hand: a used or expired code is refused alike, and the build too needs a code that works (internal/web/workers_api.go lines 116 and 126)
+    # not under test, checked by hand: a used or expired code is refused alike, and the build too needs a code that works (internal/web/workers_api.go lines 84 and 94)
     # README.md, Add machines; internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @COMPAT-09 @manual

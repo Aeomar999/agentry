@@ -1,7 +1,8 @@
 // Package workersapi is the Workers page's HTTP API: the machines, besides
 // this one, that agents run on, one of them in detail, a join code and the
-// command that uses it, and taking a worker off. Web mounts its Routes as it
-// mounts an extension's.
+// command that uses it, and taking a worker off. It is also what a joined
+// worker calls with its credential: its link, a task's repo, updating
+// itself and leaving. Web mounts its Routes as it mounts an extension's.
 package workersapi
 
 import (
@@ -15,21 +16,25 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 )
 
-// State is what the routes read: every task, for the machine its work is on.
+// State is what the routes read: every task, for the machine its work is
+// on, and one, for its repo.
 type State interface {
 	Tasks() []*tasks.Task
+	Task(id string) (*tasks.Task, error)
 }
 
 // API holds what the workers' routes need: the log to write join codes and
 // removals to and read the workers' history from, the state whose tasks are
 // on each machine, the workers and the agents as web reads them, this
 // machine, a machine's details read from it, the way to cut a removed
-// worker's link, and web's install commands for the address the request
-// came in on.
+// worker's link, web's install commands for the address the request came
+// in on, and for a joined worker the hub's link and streams and web's
+// agentry download.
 type API struct {
 	Log             extensions.Proposer
 	Events          extensions.EventLog
@@ -40,16 +45,35 @@ type API struct {
 	About           func(ctx context.Context, name string) (machines.About, error) // nil when there is no fleet
 	Disconnect      func(name string)                                              // nil when no worker can connect
 	InstallCommands func(r *http.Request, path, code string) map[string]any
+
+	// The hub's ends of a worker's link: all nil when no worker can connect,
+	// and then no route a worker calls is mounted.
+	Connect     func(w http.ResponseWriter, r *http.Request, worker workers.Worker)
+	Stream      func(w http.ResponseWriter, r *http.Request, worker workers.Worker, id string)
+	ServeBinary http.HandlerFunc // agentry for ?os= and ?arch=, with its hash as its ETag
 }
 
-// Routes are the workers' endpoints, for the Workers page.
+// Routes are the workers' endpoints, for the Workers page, and the ones a
+// joined worker calls when it can connect.
 func (a API) Routes() []extensions.Route {
-	return []extensions.Route{
+	routes := []extensions.Route{
 		{Pattern: "GET /api/workers", Auth: extensions.UI, Handler: a.listWorkers},
 		{Pattern: "POST /api/workers/invite", Auth: extensions.UI, Handler: a.invite},
 		{Pattern: "GET /api/workers/{name}", Auth: extensions.UI, Handler: a.showWorker},
 		{Pattern: "DELETE /api/workers/{name}", Auth: extensions.UI, Handler: a.removeWorker},
 	}
+	if a.Connect == nil {
+		return routes
+	}
+	return append(routes,
+		extensions.Route{Pattern: "GET " + workerlink.ConnectPath, Auth: extensions.Worker, Handler: a.connect},
+		extensions.Route{Pattern: "GET " + workerlink.StreamPath + "{id}", Auth: extensions.Worker, Handler: a.stream},
+		extensions.Route{Pattern: "GET " + workerlink.GitPath + "{task}/", Auth: extensions.Worker, Handler: a.gitFetch},
+		extensions.Route{Pattern: "POST " + workerlink.GitPath + "{task}/git-upload-pack", Auth: extensions.Worker, Handler: a.gitFetch},
+		extensions.Route{Pattern: "POST " + workerlink.GitPath + "{task}/bundle", Auth: extensions.Worker, Handler: a.receiveBundle},
+		extensions.Route{Pattern: "GET " + workerlink.UpdatePath, Auth: extensions.Worker, Handler: a.update},
+		extensions.Route{Pattern: "POST " + workerlink.LeavePath, Auth: extensions.Worker, Handler: a.leave},
+	)
 }
 
 // Workers: the machines, besides this one, that agents run on. You make a

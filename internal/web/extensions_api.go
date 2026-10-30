@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
@@ -20,12 +21,20 @@ func (s *Server) listFeatures(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// routesOf are f's routes, made with the Core it may use; none when it has none.
+// routesOf are f's routes, made with the Core it may use; none when it has
+// none. A route whose Auth only a domain may take panics, naming f, as a
+// clash does: every extension's routes come through here, and no domain's.
 func (s *Server) routesOf(f extensions.Extension) []extensions.Route {
 	if f.Routes == nil {
 		return nil
 	}
-	return f.Routes(s.coreOf(f))
+	routes := f.Routes(s.coreOf(f))
+	for _, route := range routes {
+		if route.Auth.ForWorkers() {
+			panic(fmt.Sprintf("the %s extension's route %q can't be mounted: only a domain's route may take a worker's credential", f.Name, route.Pattern))
+		}
+	}
+	return routes
 }
 
 // coreOf is what f's routes may use: its checked proposer, never the store,

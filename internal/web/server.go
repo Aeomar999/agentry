@@ -115,25 +115,17 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("GET /api/tasks/{task}/terminal", s.requireUI(s.terminal.ServeHTTP))
 	}
 	if s.config.Workers != nil {
-		// A machine joining: with its code, then with the credential it got.
-		// These stay here, not in workersapi, as no extensions.Auth is open
-		// or takes a worker's credential.
+		// A machine joining with its code: these stay here, not in
+		// workersapi, as no extensions.Auth is open.
 		mux.HandleFunc("GET /worker/install.sh", s.installScript)
 		mux.HandleFunc("GET /worker/install.ps1", s.installWindowsScript)
 		mux.HandleFunc("GET /worker/agentry", s.downloadBinary)
 		mux.HandleFunc("POST /api/worker/join", s.join)
 		worker := func(pattern string, handler func(http.ResponseWriter, *http.Request, workers.Worker)) {
-			mux.Handle(pattern, s.requireWorker(handler))
+			mux.Handle(pattern, s.requireWorker(func(w http.ResponseWriter, r *http.Request) { handler(w, r, extensions.WorkerOf(r)) }))
 		}
-		worker("GET "+workerlink.ConnectPath, s.connectWorker)
-		worker("GET "+workerlink.StreamPath+"{id}", s.workerStream)
-		worker("GET "+workerlink.GitPath+"{task}/", s.gitFetch)
-		worker("POST "+workerlink.GitPath+"{task}/git-upload-pack", s.gitFetch)
-		worker("POST "+workerlink.GitPath+"{task}/bundle", s.receiveBundle)
-		worker("GET "+workerlink.UpdatePath, s.updateBinary)
-		worker("POST "+workerlink.LeavePath, s.leave)
-		// The shared files a worker fetches and sends: these stay here, not
-		// in sharedfilesapi, as no extensions.Auth takes a worker's credential.
+		// The shared files a worker fetches and sends, with its credential:
+		// these stay here until they move to sharedfilesapi.
 		worker("HEAD "+sharedfiles.BlobsPath+"/{hash}", s.blobFor)
 		worker("GET "+sharedfiles.BlobsPath+"/{hash}", s.blobFor)
 		worker("POST "+sharedfiles.BlobsPath, s.blobFrom)

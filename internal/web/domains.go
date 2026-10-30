@@ -17,8 +17,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 )
 
-func (s *Server) task(id string) (*tasks.Task, error) { return s.state.Task(id) }
-
 func (s *Server) roster() (agents.Roster, error) {
 	return s.state.Roster(), s.state.Broken(events.AgentsStream)
 }
@@ -69,7 +67,8 @@ func (s *Server) version() string {
 	return s.config.Local.Version
 }
 
-// workersAPI is the Workers page's routes as web mounts them.
+// workersAPI is the Workers page's routes as web mounts them, and those a
+// joined worker calls when the server has a hub for workers.
 func (s *Server) workersAPI() workersapi.API {
 	api := workersapi.API{Log: s.store, Events: s.store, State: s.state, Workers: s.workers, Roster: s.roster,
 		Local: s.config.Local, InstallCommands: s.installCommands}
@@ -80,6 +79,7 @@ func (s *Server) workersAPI() workersapi.API {
 	}
 	if s.config.Workers != nil {
 		api.Disconnect = s.config.Workers.Disconnect
+		api.Connect, api.Stream, api.ServeBinary = s.config.Workers.Connect, s.config.Workers.Stream, s.serveBinary
 	}
 	return api
 }

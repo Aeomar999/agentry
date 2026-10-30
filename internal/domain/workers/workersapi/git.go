@@ -1,4 +1,4 @@
-package web
+package workersapi
 
 import (
 	"io"
@@ -11,8 +11,8 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
-	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
 )
 
@@ -23,8 +23,8 @@ import (
 
 // gitFetch serves git's fetch over HTTP for the task's repo, with git's own
 // http-backend, which never runs a push here.
-func (s *Server) gitFetch(w http.ResponseWriter, r *http.Request, _ workers.Worker) {
-	task, ok := s.hubTask(w, r)
+func (a API) gitFetch(w http.ResponseWriter, r *http.Request) {
+	task, ok := a.hubTask(w, r)
 	if !ok {
 		return
 	}
@@ -53,8 +53,9 @@ func (s *Server) gitFetch(w http.ResponseWriter, r *http.Request, _ workers.Work
 
 // receiveBundle sets the task's branch in the hub to the worker's, once the
 // work leaves it. Only the worker the work is on may.
-func (s *Server) receiveBundle(w http.ResponseWriter, r *http.Request, worker workers.Worker) {
-	task, ok := s.hubTask(w, r)
+func (a API) receiveBundle(w http.ResponseWriter, r *http.Request) {
+	worker := extensions.WorkerOf(r)
+	task, ok := a.hubTask(w, r)
 	if !ok {
 		return
 	}
@@ -81,8 +82,8 @@ func (s *Server) receiveBundle(w http.ResponseWriter, r *http.Request, worker wo
 	httpapi.Reply(w, map[string]string{"branch": task.Worktree.Branch})
 }
 
-func (s *Server) hubTask(w http.ResponseWriter, r *http.Request) (*tasks.Task, bool) {
-	task, err := s.task(r.PathValue("task"))
+func (a API) hubTask(w http.ResponseWriter, r *http.Request) (*tasks.Task, bool) {
+	task, err := a.State.Task(r.PathValue("task"))
 	if err != nil || task == nil || task.Worktree == nil {
 		http.Error(w, "no such task, or it has no work yet", http.StatusNotFound)
 		return nil, false

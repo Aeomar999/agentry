@@ -70,38 +70,6 @@ func freeName(roster workers.Roster, name string) string {
 	return candidate
 }
 
-// requireWorker lets in a worker that shows its credential, and tells the
-// handler which worker it is.
-func (s *Server) requireWorker(next func(http.ResponseWriter, *http.Request, workers.Worker)) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		roster, err := s.workers()
-		if err != nil {
-			httpapi.Failed(w, err)
-			return
-		}
-		worker, ok := roster.WithCredential(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
-		if !ok {
-			http.Error(w, "this worker isn't joined; join it again from the Workers page", http.StatusUnauthorized)
-			return
-		}
-		next(w, r, worker)
-	})
-}
-
-// leave takes the worker off at its own request, as on the page.
-func (s *Server) leave(w http.ResponseWriter, r *http.Request, worker workers.Worker) {
-	httpapi.Propose(w, s.store, workers.Left(worker.Name))
-	s.config.Workers.Disconnect(worker.Name) // a no-op if it was refused: the credential still works
-}
-
-func (s *Server) connectWorker(w http.ResponseWriter, r *http.Request, worker workers.Worker) {
-	s.config.Workers.Connect(w, r, worker)
-}
-
-func (s *Server) workerStream(w http.ResponseWriter, r *http.Request, worker workers.Worker) {
-	s.config.Workers.Stream(w, r, worker, r.PathValue("id"))
-}
-
 //go:embed install.sh
 var installTemplate string
 
@@ -127,12 +95,6 @@ func (s *Server) downloadBinary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "that join code is unknown, used or expired", http.StatusUnauthorized)
 		return
 	}
-	s.serveBinary(w, r)
-}
-
-// updateBinary is the same, for a worker updating itself: it sends the hash
-// of the agentry it has as If-None-Match, and gets 304 if it is current.
-func (s *Server) updateBinary(w http.ResponseWriter, r *http.Request, _ workers.Worker) {
 	s.serveBinary(w, r)
 }
 
